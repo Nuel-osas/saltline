@@ -58425,7 +58425,8 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       <div class="m-title-main">
         <div class="m-eyebrow"><span class="m-tag">B4</span><span>Port Authority Breach Unit</span><span class="m-dim">Saltline Terminal \xB7 05:42</span></div>
         <h1 class="m-word">SALTLINE</h1>
-        <p class="m-premise">The port\u2019s security net has gone feral. Cut its three uplinks. Reach the boat.</p>
+        <!-- story: the premise is docs/STORY.md's (Copy across the game) -->
+        <p class="m-premise">The port\u2019s machine kept the only ledger. Then it locked the gates. Cut its uplinks, haul out the town\u2019s cargo, reach the boat.</p>
         <div class="m-actions">
           <button class="btn primary" data-act="deploy">Deploy</button>
           <button class="btn" data-act="settings">Settings</button>
@@ -58722,15 +58723,16 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       titleFov: 50,
     },
     jC = ["NORTH", "NORTH-EAST", "EAST", "SOUTH-EAST", "SOUTH", "SOUTH-WEST", "WEST", "NORTH-WEST"],
+    // story: Control's lines are docs/STORY.md's (Radio, Control), at the same moments as before
     _l = {
       intro:
-        "Breacher, this is Control. The Harbormaster holds the berth. Cut its three uplinks \u2014 yard, shed, quay.",
+        "Breacher, Control. The Harbormaster holds the berth. Cut its three uplinks, yard, shed, quay, and bring back what you can carry. The town is counting on the boat.",
       contact: "It has seen you. Gulls fly, Hounds walk. Put them down.",
       cut: [
-        "One relay dark. It felt that \u2014 machines inbound.",
+        "One uplink dark. It felt that. Machines inbound.",
         "Two dark. It is throwing everything it has left at you.",
       ],
-      all: "All three dark. The boat is holding at the quay ladder, south end. Run.",
+      all: "All three dark. It's blind for now. The boat holds at the quay ladder, south end. Run.",
       low: "You are hit hard. Get behind steel and breathe.",
       done: "Breacher is aboard. Saltline is dark. Good work.",
     };
@@ -58920,6 +58922,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         o.setMarkers(P));
     }
     function U({ skipIntro: P = !1, quick: V = !1, keepRetries: Y = !1 } = {}) {
+      if (!P && !V && a(i.ext, "beforeRun", () => U({ keepRetries: Y }))) return; // ext: the briefing plays first
       if (
         (Y || (c.retries = 0),
         l.show("none"),
@@ -59060,14 +59063,15 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
     function ie() {
       let P = (s.playerStart && s.playerStart.pos) || n.pos;
       for (let V of ["gull", "hound"])
-        for (let Y = 0; Y < Yi.patrol[V]; Y++)
+        for (let Y = 0; Y < Yi.patrol[V] + (i.ext?.waveBonus?.[V] | 0); Y++) // ext: the Harbormaster's extra drones
           K(V, Q(V, { minDist: 32, from: P, preferHidden: !0 }), { state: "patrol" });
     }
     function F(P) {
       let V = Yi.waves[Math.min(P, Yi.waves.length - 1)],
+        xb = i.ext?.waveBonus || {}, // ext: the Harbormaster's extra drones
         Y = [];
-      for (let oe = 0; oe < V.gull; oe++) Y.push("gull");
-      for (let oe = 0; oe < V.hound; oe++) Y.splice(Math.min(Y.length, 1 + oe * 2), 0, "hound");
+      for (let oe = 0; oe < V.gull + (xb.gull | 0); oe++) Y.push("gull");
+      for (let oe = 0; oe < V.hound + (xb.hound | 0); oe++) Y.splice(Math.min(Y.length, 1 + oe * 2), 0, "hound");
       let L = 0,
         Z = 0;
       (Y.forEach((oe, fe) => {
@@ -59085,7 +59089,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       for (let Y = 0; Y < c.queue.length; Y++) {
         let L = c.queue[Y];
         if (c.time < L.at) continue;
-        if (V >= Yi.maxAlive) {
+        if (V >= Yi.maxAlive + (i.ext?.waveBonus?.alive | 0)) { // ext: room for the extra drones
           L.at = c.time + 1;
           continue;
         }
