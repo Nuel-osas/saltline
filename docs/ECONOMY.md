@@ -152,7 +152,7 @@ Every state change emits a NEP-297 event: the standard `nep245` `mt_mint`, `mt_b
   - On first play the game makes an ed25519 key in the browser (`localStorage["saltline.wallet.v1"]`). The account is
     the matching implicit account (64 hex characters).
   - "Claim your dock pass" sends `{ accountId, callsign }` to `/api/faucet`. The faucet server holds the faucet
-    account's key and sends 0.3 testnet NEAR, which creates the implicit account. It then calls `register`.
+    account's key and sends 0.1 testnet NEAR, which creates the implicit account (a session burns about 0.005 NEAR of gas). It then calls `register`.
   - The faucet fails closed and rate-limits by account and by IP.
   - Every later call is signed in the browser with no prompt.
   - Settings has "Back up wallet", which exports the key.
