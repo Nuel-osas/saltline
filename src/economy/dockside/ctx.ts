@@ -4,6 +4,7 @@
 import { h, text } from "./dom";
 import { AMBIGUOUS } from "./format";
 import type { Amounts, BrokerView, Chain, Economy, GearId, Leaderboard, LedgerEvent, Listing, Profile, TxResult, Wallet } from "../types";
+import type { Chime } from "./sound";
 
 export type Read<T> = { s: "loading" } | { s: "ok"; v: T } | { s: "unknown"; error: string };
 export const okv = <T>(r: Read<T>): T | null => (r.s === "ok" ? r.v : null);
@@ -31,6 +32,8 @@ export interface Ctx {
   act<T extends TxResult>(slot: Slot, run: ActSpec<T>): Promise<T | null>;
   /** The game's UI sounds, if the game is there. */
   sound(kind: "click" | "hover"): void;
+  /** A trade's own sound (sound.ts): "cash" for a sale, "soft" for a purchase or an investment. */
+  chime(kind: Chime): void;
   /** Throttled flap tick. */
   flapTick(): void;
   /** Repaint everything from the current reads. */
@@ -42,6 +45,8 @@ export interface ActSpec<T extends TxResult> {
   call: () => Promise<T>;
   done: (r: T) => string;
   refresh: ReadKey[];
+  /** Played once the chain confirms it (never on a refusal, and never while it's unknown). */
+  chime?: Chime;
 }
 
 export type SlotState = "idle" | "pending" | "ok" | "error" | "unknown";
@@ -87,7 +92,7 @@ export function createSlot(className = ""): Slot {
   return slot;
 }
 
-export async function runAct<T extends TxResult>(ctx: Pick<Ctx, "chain" | "refresh">, slot: Slot, spec: ActSpec<T>): Promise<T | null> {
+export async function runAct<T extends TxResult>(ctx: Pick<Ctx, "chain" | "refresh"> & Partial<Pick<Ctx, "chime">>, slot: Slot, spec: ActSpec<T>): Promise<T | null> {
   if (slot.state === "pending") return null;
   slot.set("pending", spec.pending);
   let r: T;
@@ -101,8 +106,10 @@ export async function runAct<T extends TxResult>(ctx: Pick<Ctx, "chain" | "refre
   // The chain client marks a call that may have landed but couldn't be confirmed as `pending` (main's TxResult):
   // that is the same ambiguous case as a rejection, so it shows as unknown, never as failed.
   const unconfirmed = !!r && !r.ok && (r as TxResult & { pending?: boolean }).pending === true;
-  if (r && r.ok) slot.set("ok", spec.done(r), r.txHash ? ctx.chain.txUrl(r.txHash) : null);
-  else if (unconfirmed) slot.set("unknown", AMBIGUOUS, r.txHash ? ctx.chain.txUrl(r.txHash) : null);
+  if (r && r.ok) {
+    slot.set("ok", spec.done(r), r.txHash ? ctx.chain.txUrl(r.txHash) : null);
+    if (spec.chime) ctx.chime?.(spec.chime);
+  } else if (unconfirmed) slot.set("unknown", AMBIGUOUS, r.txHash ? ctx.chain.txUrl(r.txHash) : null);
   else slot.set("error", (r && r.error) || "The dock refused that.");
   await ctx.refresh(...spec.refresh);
   return r;

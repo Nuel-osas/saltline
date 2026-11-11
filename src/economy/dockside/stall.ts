@@ -173,6 +173,7 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
       call: () => ctx.chain.sell(id, c, n),
       done: (r) => `Sold ${n} ${c} · +${r.paid != null ? fmt(r.paid) : UNKNOWN} scrip`,
       refresh: ["brokers", "balances", "recent"],
+      chime: "cash",
     });
   }
   function buy(g: GearId) {
@@ -181,6 +182,7 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
       call: () => ctx.chain.buy(id, g, 1),
       done: (r) => `Bought 1 ${g} · −${r.cost != null ? fmt(r.cost) : UNKNOWN} scrip`,
       refresh: ["brokers", "balances", "recent"],
+      chime: "soft",
     });
   }
 
@@ -218,6 +220,7 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
         call: () => ctx.chain.invest(id, n),
         done: () => `Invested ${n}${reopening ? ` · ${meta.name} reopens` : ""}`,
         refresh: ["brokers", "balances", "recent", "leaderboard"],
+        chime: "soft",
       }).then((r) => {
         if (r?.ok && invOpen) setInv(false);
       });

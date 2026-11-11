@@ -250,6 +250,26 @@ describe("wrecks: the 70/30 split", () => {
     expect((await chain.balances("gull.mock")).copper ?? 0).toBe(owner);
   });
 
+  it("recoverWreck: another crew hauls your wreck out by the same rules, and the ledger names you", async () => {
+    const { chain, me } = await setup();
+    const m = (await chain.startRun([])).manifest!;
+    const opened = fit(m).slice(0, 1);
+    const id = (await chain.die(m.runId, opened, [], 5)).wreckId!;
+    const left = (await chain.wrecks()).find((w) => w.id === id)!;
+    const before = await chain.balances(me);
+    expect(chain.recoverWreck(id)).toBe(true);
+    expect((await chain.wrecks()).some((w) => w.id === id)).toBe(false);
+    const after = await chain.balances(me);
+    for (const i of left.items) {
+      const owner = i.amount - Math.floor((i.amount * 70 + 50) / 100);
+      expect((after[i.tokenId] ?? 0) - (before[i.tokenId] ?? 0)).toBe(owner);
+    }
+    const line = (await chain.recent(5)).find((e) => e.kind === "extract")!;
+    expect(line.account).not.toBe(me);
+    expect(line.text).toContain("recovered ROOK's wreck");
+    expect(chain.recoverWreck(id)).toBe(false); // it's gone
+  });
+
   it("counts a wreck's whole weight against the carry limit", async () => {
     const heavy: WreckView = { ...wreck, id: 78, items: [{ tokenId: "fuel", amount: 4 }] };
     const { chain, clock } = await setup((s) => {

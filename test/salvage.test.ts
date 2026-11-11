@@ -308,6 +308,32 @@ describe("the run never waits on the chain", () => {
     expect(G.hud.messages[0]).toMatch(/No manifest/);
     expect(document.querySelector(".sv-cargo.on")).toBeNull();
   });
+
+  it("plays one run without a pass as the baseline, says so once it's on, and the next run asks the chain again", async () => {
+    const { G, economy, s } = setup();
+    live = s;
+    const radio = vi.spyOn(G.hud, "radio");
+    economy.passless = true; // the Dockside's "Play without a pass"
+    G.events.emit("run:start", {});
+    await flush();
+    expect(economy.chain.calls.filter((c) => c.method === "startRun")).toHaveLength(0); // the contract would only refuse it
+    expect(economy.passless).toBe(false);
+    expect(s.state.status).toBe("off");
+    expect(G.hud.messages).toEqual([]); // not the "No manifest" notice
+    s.update(0.016);
+    expect(radio).not.toHaveBeenCalled(); // the HUD is down in the intro
+    G.game.state = "playing";
+    s.update(0.016);
+    expect(radio).toHaveBeenCalledTimes(1);
+    expect((radio.mock.calls[0] as unknown[])[0]).toMatch(/No dock pass on file/);
+    s.update(0.016);
+    expect(radio).toHaveBeenCalledTimes(1);
+
+    G.events.emit("run:start", {});
+    await flush();
+    expect(economy.chain.calls.filter((c) => c.method === "startRun")).toHaveLength(1);
+    expect(s.state.status).toBe("live");
+  });
 });
 
 describe("gear", () => {

@@ -103,6 +103,8 @@ export function createSalvage(G: Game, economy: Economy): Salvage {
   let interactedAt = -1;
   let markT = 0;
   let cargoT = 0;
+  /** A radio line held until the run is on (the HUD is down during the intro). */
+  let say: string | null = null;
 
   // ---- gear: the reset reads health and rounds; the cutter is read live, so it follows the current run ----
   function syncGear() {
@@ -131,6 +133,7 @@ export function createSalvage(G: Game, economy: Economy): Salvage {
 
   // ---- run lifecycle ----
   function startRun() {
+    say = null;
     world.clear();
     hud.setLost(null);
     hud.setDebrief(null);
@@ -142,6 +145,14 @@ export function createSalvage(G: Game, economy: Economy): Salvage {
     ext.speedScale = 1;
     syncGear();
     refreshCargo();
+    // "Play without a pass" (the Dockside's deploy gate): this one run is the baseline. No start_run is sent, since
+    // the contract would only refuse it, and Control says why once the run is on.
+    if (economy.passless) {
+      economy.passless = false;
+      say = "No dock pass on file, Breacher. The yard's cargo stays sealed this run. Sign on at the Dockside.";
+      noManifest(token, "played without a pass", undefined, false);
+      return;
+    }
     let p: Promise<any>;
     try {
       p = Promise.resolve(economy.chain.startRun([...run.gear]));
@@ -179,7 +190,7 @@ export function createSalvage(G: Game, economy: Economy): Salvage {
     refreshCargo();
   }
 
-  function noManifest(token: number, why: string, detail?: unknown) {
+  function noManifest(token: number, why: string, detail?: unknown, notice = true) {
     if (!run || run.token !== token) return;
     const gear = run.gear;
     run.status = "off";
@@ -188,7 +199,7 @@ export function createSalvage(G: Game, economy: Economy): Salvage {
     if (!run.ended) {
       revokeGear(gear);
       syncGear();
-      call(G.hud, "message", "No manifest — salvage closed this run", 3);
+      if (notice) call(G.hud, "message", "No manifest — salvage closed this run", 3);
     }
     refreshCargo();
     console.info(`[salvage] no manifest (${why}); baseline run`, detail ?? "");
@@ -494,6 +505,10 @@ export function createSalvage(G: Game, economy: Economy): Salvage {
     update(dt: number) {
       if (G.game?.state === "paused") return;
       guard("update", () => {
+        if (say && G.game?.state === "playing") {
+          call(G.hud, "radio", say, 5);
+          say = null;
+        }
         syncGear();
         world.update(dt);
         // The relay loop stopped calling us (a relay took the slot, or the run ended): let go of the seal.

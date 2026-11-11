@@ -154,6 +154,10 @@ Every state change emits a NEP-297 event: the standard `nep245` `mt_mint`, `mt_b
   - "Claim your dock pass" sends `{ accountId, callsign }` to `/api/faucet`. The faucet server holds the faucet
     account's key and sends 0.1 testnet NEAR, which creates the implicit account (a session burns about 0.005 NEAR of gas). It then calls `register`.
   - The faucet fails closed and rate-limits by account and by IP.
+  - The first deploy asks for the pass. Until the wallet is known to hold one, the game's Deploy, Restart, Retry and
+    Redeploy buttons (and Enter on the title) open the Dockside's pass card (`dockside/gate.ts`), and a claim carries
+    on into the run the player asked for. "Play without a pass" plays that one run as the baseline
+    (`economy.passless`, read by the salvage module), and a pass check that can't reach the chain deploys as before.
   - Every later call is signed in the browser with no prompt.
   - Settings has "Back up wallet", which exports the key.
 - **Privy (email or Google):** added when a Privy App ID is supplied.
@@ -195,6 +199,8 @@ src/economy/              the game side, in TypeScript
   salvage/                in-run: manifest, sealed containers, weight, wrecks, HUD, debrief rows
     spots.ts              the 16 salvage spots, generated from the level by scripts/gen-spots.mjs
   dockside/               between runs: stalls, tooltips, ticker, leaderboard, invest, listings, fast-forward chart
+    gate.ts               the first deploy asks for a dock pass
+    away.ts               "while you were away": what changed since the last look (snapshot in saltline.seen.v1)
 src/game.js               the baseline game; only small, marked extension points are added (see below)
 ```
 

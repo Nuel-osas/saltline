@@ -504,6 +504,12 @@ export interface MockChain extends DetailedChain {
   brokerStance(broker: BrokerId, stance: number, memo: string): Promise<CallResult>;
   /** Other players selling, hauling, dying and investing, plus the broker policy, over `seconds` of play. */
   ambient(seconds: number): void;
+  /**
+   * One of the other players runs the yard and makes the boat with this wreck, by the same rules as ambient play
+   * (the wreck has to be on offer in their manifest). False when nobody could. For tests and the browser checks,
+   * where ambient play alone may never get to a particular wreck.
+   */
+  recoverWreck(wreckId: number): boolean;
   /** Wipes the saved mock and starts again from the seed. */
   reset(): void;
   /** A copy of the whole state, for tests and the debug console. */
@@ -1158,6 +1164,25 @@ export function createMockChain(seed = 1, opts: MockOptions = {}): MockChain {
     if (changed) save();
   }
 
+  function recoverWreck(wreckId: number): boolean {
+    const at = now();
+    const w = S.wrecks.find((x) => x.id === wreckId);
+    if (!w) return false;
+    for (const a of npcs()) {
+      if (a.accountId === w.owner || (a.lastRunAt !== null && at - a.lastRunAt < 12 * 60_000)) continue;
+      const ok = attemptNpc(() => {
+        const m = doStartRun(a.accountId, [], at - 5 * 60_000);
+        if (!m.wrecks.some((x) => x.id === wreckId)) refuse("E_NOT_IN_MANIFEST", "Not on offer to this crew.");
+        doExtract(a.accountId, m.runId, [], [wreckId], at);
+      });
+      if (ok) {
+        save();
+        return true;
+      }
+    }
+    return false;
+  }
+
   const me = () => S.me;
 
   if (fresh) {
@@ -1185,6 +1210,7 @@ export function createMockChain(seed = 1, opts: MockOptions = {}): MockChain {
     },
     advice: (id) => policy(broker(id), now()),
     ambient,
+    recoverWreck,
 
     async profile(accountId) {
       const a = S.accounts[accountId];
