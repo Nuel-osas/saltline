@@ -2,6 +2,7 @@ import { generateKey } from "near-kit";
 import { describe, expect, it } from "vitest";
 import vercel from "../api/faucet";
 import type { Executed } from "../src/economy/chain";
+import { GAS_DEFAULT, GAS_RUN } from "../src/economy/chain";
 import { FUND_YOCTO, type FaucetChain, type FaucetEnv, handleFaucet, newLimits, redact } from "../server/faucet";
 
 const KEY = generateKey().secretKey;
@@ -148,12 +149,12 @@ describe("faucet: fail closed", () => {
 });
 
 describe("faucet: the claim", () => {
-  it("registers, then sends 0.3 NEAR in yocto to the new implicit account", async () => {
+  it("registers, then sends 0.1 NEAR in yocto to the new implicit account", async () => {
     const h = harness();
     const r = await h.post({ accountId: GUEST, callsign: "rook" });
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ ok: true, accountId: GUEST, callsign: "ROOK", txHashes: ["REG", "FUND"] });
-    expect(FUND_YOCTO).toBe(300_000_000_000_000_000_000_000n);
+    expect(FUND_YOCTO).toBe(100_000_000_000_000_000_000_000n);
     expect(h.calls.slice(2)).toEqual([`register ${GUEST} ROOK`, `fund ${GUEST} ${FUND_YOCTO}`]);
   });
 
@@ -232,5 +233,16 @@ describe("api/faucet.ts (the Vercel function)", () => {
   it("exports a fetch handler that answers through the faucet", async () => {
     const res = await vercel.fetch(new Request("http://localhost/api/faucet", { method: "GET" }));
     expect(res.status).toBe(405);
+  });
+});
+
+describe("the dock pass grant and the client's prepaid gas", () => {
+  it("covers the biggest call's prepaid gas three times over at NEAR's pessimistic price", () => {
+    // NEAR reserves prepaid gas at a pessimistic price, about 10× testnet's 10^8 yocto per gas. On 11 Nov 2026 a
+    // 100 Tgas start_run needed 0.1009 NEAR up front and a 0.1 NEAR pass was refused with NotEnoughBalance.
+    const pessimisticYoctoPerGas = 10n ** 9n;
+    const reserve = (tgas: number) => BigInt(tgas) * 10n ** 12n * pessimisticYoctoPerGas;
+    expect(reserve(GAS_RUN) * 3n).toBeLessThanOrEqual(FUND_YOCTO);
+    expect(reserve(GAS_DEFAULT) * 3n).toBeLessThanOrEqual(FUND_YOCTO);
   });
 });

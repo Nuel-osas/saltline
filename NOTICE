@@ -1,0 +1,13 @@
+Saltline
+Copyright 2026 Nuel-osas
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes third-party software and fonts under their own licenses:
+
+- three.js r180 (https://threejs.org), MIT License, Copyright © 2010-2025 three.js authors.
+  It is bundled inside src/game.js.
+- Big Shoulders Display, IBM Plex Mono and Barlow Condensed, SIL Open Font License 1.1.
+  The fonts are in src/fonts/, and their license is in src/fonts/OFL.txt.
+- near-kit and its dependencies (MIT, ISC, BlueOak-1.0.0), from npm. They are bundled into the
+  production build.

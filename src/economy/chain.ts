@@ -548,8 +548,13 @@ export interface TestnetChain extends DetailedChain, AccountLookup {
   queued(): number;
 }
 
-const GAS_RUN = 100;
-const GAS_DEFAULT = 50;
+// Prepaid gas, in Tgas. NEAR reserves prepaid gas at a pessimistic price (about 10× the base price), so a guest
+// account must hold roughly 0.001 NEAR per Tgas prepaid before it may send a call, even though unused gas comes
+// back. On testnet, every game call burned about 2.5 Tgas in its function receipt (start_run 2.51, sell 2.47), so
+// 30 and 20 leave 8–12× headroom while reserving 0.03 and 0.02 NEAR. At 100 Tgas, the reservation (0.1009 NEAR)
+// was more than a whole dock pass, and the first start_run was refused with NotEnoughBalance.
+export const GAS_RUN = 30;
+export const GAS_DEFAULT = 20;
 const BASE58_HASH = /^[1-9A-HJ-NP-Za-km-z]{32,64}$/;
 
 const whole = (n: unknown) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0;

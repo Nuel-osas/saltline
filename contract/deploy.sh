@@ -18,7 +18,7 @@ set -euo pipefail
 CONTRACT_ID="${CONTRACT_ID:-saltline.testnet}"
 NETWORK="${NETWORK:-testnet}"
 RPC="${RPC:-https://rpc.testnet.near.org}"
-FAUCET_NEAR="${FAUCET_NEAR:-12}"   # the faucet pays 0.3 NEAR per new player
+FAUCET_NEAR="${FAUCET_NEAR:-12}"   # the faucet pays 0.1 NEAR per new player
 BROKER_NEAR="${BROKER_NEAR:-1.5}"  # brokers only pay gas for their own calls
 HERE="$(cd "$(dirname "$0")" && pwd)"
 

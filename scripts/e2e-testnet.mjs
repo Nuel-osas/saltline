@@ -5,7 +5,7 @@
 //   npm run dev -- --port 5293        (with .env: VITE_CONTRACT_ID, FAUCET_ACCOUNT_ID, FAUCET_PRIVATE_KEY)
 //   node scripts/e2e-testnet.mjs [http://127.0.0.1:5293] [--shots DIR]
 //
-// It spends testnet NEAR: the faucet funds one new account (0.3 NEAR) per run.
+// It spends testnet NEAR: the faucet funds one new account (0.1 NEAR) per run.
 import { chromium } from "/Users/emmanuelosadebe/pier-pressure/node_modules/playwright-core/index.mjs";
 
 const base = process.argv.find((a) => a.startsWith("http")) || "http://127.0.0.1:5293";
