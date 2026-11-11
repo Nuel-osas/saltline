@@ -148,12 +148,12 @@ describe("faucet: fail closed", () => {
 });
 
 describe("faucet: the claim", () => {
-  it("registers, then sends 0.3 NEAR in yocto to the new implicit account", async () => {
+  it("registers, then sends 0.1 NEAR in yocto to the new implicit account", async () => {
     const h = harness();
     const r = await h.post({ accountId: GUEST, callsign: "rook" });
     expect(r.status).toBe(200);
     expect(r.body).toEqual({ ok: true, accountId: GUEST, callsign: "ROOK", txHashes: ["REG", "FUND"] });
-    expect(FUND_YOCTO).toBe(300_000_000_000_000_000_000_000n);
+    expect(FUND_YOCTO).toBe(100_000_000_000_000_000_000_000n);
     expect(h.calls.slice(2)).toEqual([`register ${GUEST} ROOK`, `fund ${GUEST} ${FUND_YOCTO}`]);
   });
 

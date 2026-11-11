@@ -1,5 +1,5 @@
 // The dock-pass faucet (docs/ECONOMY.md → Wallets and accounts). POST { accountId, callsign }: the faucet account
-// registers the callsign on the game contract and sends a new guest account 0.3 testnet NEAR, which creates it.
+// registers the callsign on the game contract and sends a new guest account 0.1 testnet NEAR, which creates it.
 //
 // A pure handler, `(request, env, deps) => Response`, so it can be tested; api/faucet.ts (Vercel) and the dev
 // middleware in vite.config.js both call it.
@@ -18,8 +18,10 @@ import { type Executed, decodeProfile, executeTx, isTransient, nearKitPort } fro
 import { TESTNET_RPC_URLS } from "../src/economy/config.js";
 import { isAccountId, isImplicitAccountId, normalizeCallsign } from "../src/economy/wallet.js";
 
-/** 0.3 NEAR in yoctoNEAR (10^24 per NEAR), kept as an integer end to end. */
-export const FUND_YOCTO = 3n * 10n ** 23n;
+/** 0.1 NEAR in yoctoNEAR (10^24 per NEAR), kept as an integer end to end. A whole session (a run, its extract and a
+ * handful of trades) burns about 0.005 NEAR of gas, so 0.1 lasts a player many sessions, and the faucet's 12 NEAR
+ * covers about 120 players instead of 40. */
+export const FUND_YOCTO = 1n * 10n ** 23n;
 
 export type FaucetEnv = Record<string, string | undefined>;
 
