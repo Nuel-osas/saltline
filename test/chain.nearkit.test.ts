@@ -139,6 +139,21 @@ describe("chain.ts on real near-kit", () => {
     expect(views.map((r) => r.url)).toEqual(RPCS);
   });
 
+  it("rejects town with METHOD_NOT_FOUND on a contract without it, from the reply testnet sends today", async () => {
+    // Recorded 11 Nov 2026: `town` on saltline.testnet through test.rpc.fastnear.com and rpc.testnet.near.org.
+    const notThere = rpc({
+      block_hash: "G3RKRFV5jQqyuzZ6Cx96LPjyJvBt8WwYubH6UMK9yNZ",
+      block_height: 277245246,
+      error: "wasm execution failed with error: MethodResolveError(MethodNotFound)",
+      logs: [],
+    });
+    const requests = stubFetch([], { town: notThere });
+    const { chain } = makeChain();
+    await expect(chain.town()).rejects.toMatchObject({ code: "METHOD_NOT_FOUND", message: "town: the contract has no town view yet" });
+    // one ask, no retries: it isn't going to appear on the next RPC
+    expect(requests.filter((r) => r.method === "query")).toHaveLength(1);
+  });
+
   it("re-sends the identical signed bytes after a 503, then maps the contract's panic", async () => {
     const requests = stubFetch([
       () => new Response("busy", { status: 503 }),
