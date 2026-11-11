@@ -1,5 +1,5 @@
 // The story in the game (docs/STORY.md): the opening briefing, Control's lines that follow the town's arc, the
-// Harbormaster's channel from Act III, and its extra drones.
+// Harbormaster's channel from Act III, its extra drones, and the town's lights across the water.
 //
 // It reads the town through economy.chain.town() (optional: a chain without it is Act I) and never waits on it: every
 // read has a short timeout, a failed read is unknown, and unknown plays as Act I with no line that needs a number.
@@ -9,6 +9,7 @@ import type { Economy } from "../types";
 import { createBriefing, type Briefing } from "./briefing";
 import { HARBORMASTER } from "./copy";
 import { coresSold24h, harbormasterAwake, runStartLines, type Line } from "./lines";
+import { createTownLights, lightsOf, type TownLights } from "./lights";
 import { defaultStore, loadMemory, saveMemory } from "./memory";
 import { createChannel, type Channel } from "./radio";
 import { bonusOf, createTownReader, type TownRead, type TownReader } from "./town";
@@ -19,7 +20,7 @@ type Game = any;
 
 /** How old a town read may be at a run's start, and how long a fresh one may take. */
 const RUN_READ = { maxAge: 15_000, timeout: 2_500 };
-/** Between runs and on the title, the next run's patrol follows the town at this pace (ms). */
+/** Between runs and on the title, the far shore and the next run's patrol follow the town at this pace (ms). */
 const IDLE_POLL = 60_000;
 /** Run-start lines that arrive later than this after the run started are dropped, not said out of place. */
 const LATE_MS = 20_000;
@@ -27,6 +28,7 @@ const RECENT_LIMIT = 64;
 
 export interface Story {
   readonly briefing: Briefing;
+  readonly lights: TownLights | null;
   readonly town: TownReader;
   readonly channel: Channel;
   /** For tests and screenshots: the read this run plays on. */
@@ -50,6 +52,17 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     } catch (e) {
       if (!warned.has(where)) (warned.add(where), console.warn(`[story] ${where} failed; the game plays on`, e));
       return undefined;
+    }
+  }
+
+  // ---- the town across the water ----
+  const lights = guard("lights", () => createTownLights(G)) ?? null;
+  let lightsSet = false;
+  function apply(read: TownRead) {
+    const s = lightsOf(read);
+    if (s && lights) {
+      lights.set(s, !lightsSet); // the first state of a visit is already on; later changes switch on one by one
+      lightsSet = true;
     }
   }
 
@@ -128,6 +141,7 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     const read = await town.read(RUN_READ);
     if (t !== token) return;
     runRead = read;
+    apply(read);
     setBonus(read); // the waves of this run; the patrol already took the last known bonus at the reset
     let cores24h: number | null = null;
     if (harbormasterAwake(read)) {
@@ -188,6 +202,7 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
       (r) => {
         const st = G.game?.state;
         if (st === "playing" || st === "intro" || st === "paused") return; // a run took over; its own read rules
+        apply(r);
         setBonus(r);
       },
       () => {},
@@ -197,6 +212,7 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
 
   return {
     briefing,
+    lights,
     town,
     channel,
     get run() {
@@ -205,6 +221,7 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     update(dt: number) {
       guard("update", () => {
         if (G.game?.state === "paused") return;
+        lights?.update(dt);
         if (!replayBtn?.isConnected) injectButton();
         const st = G.game?.state;
         if ((st === "title" || st === "complete" || st === "dead") && !document.hidden && (idleT -= dt) <= 0) idleRead();
@@ -216,6 +233,7 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
       ext.waveBonus = { ...NO_BONUS };
       briefing.dispose();
       channel.dispose();
+      lights?.dispose();
       replayBtn?.parentElement?.remove();
       app?.classList.remove("st-briefing");
     },
