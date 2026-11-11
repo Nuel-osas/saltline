@@ -35,6 +35,7 @@ what goes over the wire. Change both sides and this file together.
 | `recent` | `{ limit }` | `[{ kind, at, account, callsign?, text }]`, newest first, up to 64 kept. There's no tx hash, because a contract can't read its own; the ticker links to the account's explorer page |
 | `leaderboard` | – | `{ net_worth: [Row], best_haul: [Row], investors: [Row] }`; Row = `{ account_id, callsign, value: U128 }`, top 10 each |
 | `simulate` | `{ hours: u32 ≤ 168, traders: u32 ≤ 30, seed: u64 }` | `[{ hour, brokers: { "<broker>": { open, scrip: U128, bids: { "<cargo>": U128 }, stock: { "<cargo>": U128 } } } }]`: `hours + 1` points, with hour 0 being now. Each point is taken before that hour's broker exports. 168 × 30 burns about 103 Tgas |
+| `town` | – | `{ act: 1\|2\|3, delivered: { "<cargo>": U128 }, districts: [{ id, token_id, need: U128, have: U128, lit, lit_at? }], client: { need: U128, have: U128, revealed, revealed_at? }, harbormaster: { strength: u32, recent_cores: U128, bonus_drones: u32 } }`. See docs/STORY.md: deliveries are player sales to brokers, counted from the story upgrade |
 | `advice` | `{ broker }` | `{ action: "none" or "export" or "stance", token_id?, amount: U128?, stance: u32?, memo }` (the default policy, used by the agent runner) |
 
 - **Quote:** `{ token_id, price: U128, reason }`.
