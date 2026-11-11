@@ -232,10 +232,10 @@ describe("calls: wire format, errors and retries", () => {
     const { chain, specs } = setup({ txs: [new ScriptTx([ok({ paid: "141" })]), new ScriptTx([ok({ run_id: 3, started_at: 9, containers: [], wrecks: [] })])] });
     const r = await chain.sell("moss", "copper", 3);
     expect(r).toEqual({ ok: true, txHash: HASH, paid: 141 });
-    expect(specs[0]).toMatchObject({ kind: "call", contractId: "saltline.testnet", method: "sell", args: { broker: "moss", token_id: "copper", amount: "3" }, gasTgas: 50, signerId: KEY.accountId });
+    expect(specs[0]).toMatchObject({ kind: "call", contractId: "saltline.testnet", method: "sell", args: { broker: "moss", token_id: "copper", amount: "3" }, gasTgas: 20, signerId: KEY.accountId });
     const run = await chain.startRun(["plate"]);
     expect(run.manifest).toEqual({ runId: 3, startedAt: 9, containers: [], wrecks: [] });
-    expect(specs[1]).toMatchObject({ method: "start_run", args: { gear: ["plate"] }, gasTgas: 100 });
+    expect(specs[1]).toMatchObject({ method: "start_run", args: { gear: ["plate"] }, gasTgas: 30 });
   });
 
   it("returns `E_CODE: message` panics as { ok: false, error: message } and never retries them", async () => {
