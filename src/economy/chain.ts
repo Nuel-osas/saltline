@@ -390,7 +390,9 @@ export function nearKitPort(opts: { rpcUrls: readonly string[]; waitUntil?: TxEx
   const pick = (attempt: number) => nears[attempt % nears.length];
   return {
     async view(contractId, method, args, attempt) {
-      const r = await pick(attempt).view(contractId, method, args);
+      // Views read at "optimistic" finality, the same point calls wait for (EXECUTED_OPTIMISTIC). near-kit's default,
+      // "final", runs about two blocks behind, so a haul just extracted wasn't in the hold yet when the Dockside read it.
+      const r = await pick(attempt).view(contractId, method, args, { finality: "optimistic" });
       if (r === undefined) throw new WireError(`${method}: the contract returned nothing`);
       return r;
     },
