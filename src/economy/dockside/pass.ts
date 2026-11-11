@@ -23,7 +23,26 @@ export function barcode(s: string, bars = 34): number[] {
   return out;
 }
 
-export function createPass(opts: { chain: Chain; wallet: Wallet; onDone: () => void; onSound?: () => void }): PassCard {
+export interface PassOptions {
+  chain: Chain;
+  wallet: Wallet;
+  onDone: () => void;
+  onSound?: () => void;
+  /** The line under the heading (default: the Dockside's own). */
+  lede?: string;
+  /** The claim button's label (default "Claim dock pass"). */
+  claimLabel?: string;
+  /** Said after the pass is issued, before onDone (e.g. "Deploying…"). */
+  doneNote?: string;
+  /** A warning shown in the status line before anything is claimed (e.g. the pass status is unknown). */
+  notice?: string;
+  /** A way on without a pass: a small link under the form. */
+  skip?: { label: string; note: string; onSkip: () => void };
+}
+
+export const PASS_LEDE = "Brokers only deal with pass holders. Pick the name that goes on your pass, your wrecks and the board.";
+
+export function createPass(opts: PassOptions): PassCard {
   const { chain, wallet } = opts;
   const input = h("input", {
     class: "dk-cs-in",
@@ -37,7 +56,7 @@ export function createPass(opts: { chain: Chain; wallet: Wallet; onDone: () => v
   });
   const count = h("span", { class: "dk-cs-count" }, `0/${CALLSIGN_MAX}`);
   const hint = h("p", { class: "dk-cs-hint", id: "dk-cs-hint" }, "3 to 16 characters: letters, numbers, space, - . _");
-  const claim = h("button", { class: "btn primary dk-claim", type: "submit" }, "Claim dock pass");
+  const claim = h("button", { class: "btn primary dk-claim", type: "submit" }, opts.claimLabel ?? "Claim dock pass");
   const status = h("p", { class: "dk-pass-status", role: "status", "aria-live": "polite", "data-state": "idle" });
   const shownName = h("b", { class: "dk-pc-name" }, "CALLSIGN");
   const bars = h("span", { class: "dk-pc-bars", "aria-hidden": "true" });
@@ -92,18 +111,34 @@ export function createPass(opts: { chain: Chain; wallet: Wallet; onDone: () => v
     ),
   );
 
+  let busy = false;
+  const skip = opts.skip
+    ? h(
+        "button",
+        {
+          class: "dk-skip",
+          type: "button",
+          onclick: () => {
+            if (!busy) opts.skip!.onSkip();
+          },
+        },
+        h("span", null, opts.skip.label),
+        h("i", null, opts.skip.note),
+      )
+    : null;
+
   const el = h(
     "section",
-    { class: "dk-pass", role: "dialog", "aria-modal": "true", "aria-labelledby": "dk-pass-h" },
+    { class: "dk-pass", role: "dialog", "aria-modal": "true", "aria-labelledby": "dk-pass-h", "data-mode": opts.skip ? "deploy" : null },
     h("div", { class: "m-k" }, "Saltline Port Authority · Berth 4"),
     h("h2", { class: "dk-pass-h", id: "dk-pass-h" }, "Sign on"),
-    h("p", { class: "dk-pass-lede" }, "Brokers only deal with pass holders. Pick the name that goes on your pass, your wrecks and the board."),
+    h("p", { class: "dk-pass-lede" }, opts.lede ?? PASS_LEDE),
     card,
     form,
+    skip,
     what,
   );
 
-  let busy = false;
   const paint = () => {
     const c = checkCallsign(input.value);
     text(shownName, c.callsign || "CALLSIGN");
@@ -143,6 +178,7 @@ export function createPass(opts: { chain: Chain; wallet: Wallet; onDone: () => v
     busy = true;
     el.dataset.state = "pending";
     claim.disabled = true;
+    if (skip) skip.disabled = true;
     input.readOnly = true;
     status.dataset.state = "pending";
     text(status, "Settling… issuing your pass");
@@ -152,9 +188,10 @@ export function createPass(opts: { chain: Chain; wallet: Wallet; onDone: () => v
     } catch {
       r = null;
     }
+    const then = opts.doneNote ? ` ${opts.doneNote}` : "";
     if (r && r.ok) {
       status.dataset.state = "ok";
-      text(status, `Pass issued to ${c.callsign}. ${RULES.starterScrip} scrip on it.`);
+      text(status, `Pass issued to ${c.callsign}. ${RULES.starterScrip} scrip on it.${then}`);
       el.dataset.state = "done";
       setTimeout(opts.onDone, 1300);
       return;
@@ -169,7 +206,7 @@ export function createPass(opts: { chain: Chain; wallet: Wallet; onDone: () => v
       }
       if (reg) {
         status.dataset.state = "ok";
-        text(status, "Your pass is on the books.");
+        text(status, `Your pass is on the books.${then}`);
         el.dataset.state = "done";
         setTimeout(opts.onDone, 900);
         return;
@@ -183,10 +220,15 @@ export function createPass(opts: { chain: Chain; wallet: Wallet; onDone: () => v
     busy = false;
     el.dataset.state = "";
     claim.disabled = false;
+    if (skip) skip.disabled = false;
     input.readOnly = false;
   });
 
   paint();
+  if (opts.notice) {
+    status.dataset.state = "unknown";
+    text(status, opts.notice);
+  }
   return {
     el,
     focus() {

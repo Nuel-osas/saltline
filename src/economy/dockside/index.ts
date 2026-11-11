@@ -11,6 +11,7 @@ import { createEntries, type Origin } from "./entry";
 import { okv, runAct, type Ctx, type EconomyWithGear, type ReadKey, type Reads } from "./ctx";
 import { fill, h, reducedMotion } from "./dom";
 import { fmt, UNKNOWN } from "./format";
+import { createDeployGate, type DeployAct, type DeployGate, type DeployGateOptions, type DeployRequest } from "./gate";
 import { createHold } from "./hold";
 import { createMarket } from "./market";
 import { createPad, focusables, moveFocus, type Dir } from "./pad";
@@ -22,7 +23,7 @@ import { createWeek } from "./week";
 
 export interface GameLike {
   events?: { on(name: string, fn: (e: never) => void): unknown; emit(name: string, e?: unknown): void };
-  game?: { state?: string; menus?: { root?: HTMLElement; screen?: string } };
+  game?: { state?: string; menus?: { root?: HTMLElement; screen?: string; panelOpen?: boolean } };
 }
 
 export type { Origin };
@@ -36,12 +37,23 @@ const TABS: { id: Tab; label: string }[] = [
 /** The card button Deploy presses, so a run starts exactly as the game starts it. */
 const DEPLOY_ACT: Record<Origin, string> = { title: "deploy", dead: "retry", complete: "redeploy" };
 const ORIGINS: Origin[] = ["title", "dead", "complete"];
+/** Where a held deploy can open the pass card from: the three cards, and the pause card's Restart. */
+const DEPLOY_FROM: string[] = [...ORIGINS, "paused"];
+const DEPLOY_LEDE = "Sign on before you go over the fence. Your pass carries your cargo, your wrecks and your name on the board.";
+const CLAIM_LABEL: Record<DeployAct, string> = {
+  deploy: "Claim pass and deploy",
+  redeploy: "Claim pass and redeploy",
+  retry: "Claim pass and retry",
+  restart: "Claim pass and restart",
+};
 
 const POLL: Record<ReadKey, number> = { brokers: 4000, recent: 4000, balances: 8000, profile: 60000, listings: 10000, leaderboard: 12000 };
 
 export interface DocksideOptions {
   /** Where the overlay mounts (default #ui, else body). */
   host?: HTMLElement;
+  /** The deploy gate's timings (tests shorten them). */
+  gate?: Pick<DeployGateOptions, "quietMs" | "askMs">;
 }
 
 export interface Dockside {
@@ -55,6 +67,8 @@ export interface Dockside {
   refresh(...keys: ReadKey[]): Promise<void>;
   /** The fast-forward panel (for the screenshot script). */
   readonly week: ReturnType<typeof createWeek>;
+  /** Holds the game's deploy buttons until the wallet has a dock pass (gate.ts). */
+  readonly deployGate: DeployGate;
 }
 
 export function createDockside(G: GameLike, economy: EconomyWithGear, opts: DocksideOptions = {}): Dockside {
@@ -80,8 +94,10 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
   let registered: boolean | null = null;
   let isOpen = false;
   let gate: Dockside["gate"] = "closed";
-  let origin: Origin = "title";
+  let origin: Origin | "paused" = "title";
   let tab: Tab = "stalls";
+  /** The game's deploy press this visit is holding, when the Dockside opened on its pass card for it. */
+  let deployReq: DeployRequest | null = null;
 
   // ---- the shared context ----
   const inflight: Partial<Record<ReadKey, Promise<void>>> = {};
@@ -228,13 +244,14 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     }
     if (!isOpen) return;
     registered = reg;
+    deployGate.learn(reg);
     if (reg === true) return enter();
     if (reg === false) {
       const pass = createPass({
         chain,
         wallet,
         onDone: () => {
-          registered = true;
+          signedOn();
           if (isOpen) enter();
         },
         onSound: () => emit("ui:click"),
@@ -276,6 +293,73 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     focusFirst();
   }
 
+  /** A pass was issued here: everything that asks "registered?" hears yes, and the title's board stops asking. */
+  function signedOn() {
+    registered = true;
+    deployGate.learn(true);
+    entries.update(true);
+  }
+
+  // ---- the deploy gate: the game's deploy buttons, held until there's a pass (gate.ts) ----
+  const deployGate = createDeployGate({
+    menus: () => G.game?.menus?.root,
+    state: () => G.game?.state,
+    account: () => wallet.accountId(),
+    registered: () => wallet.registered(),
+    panelOpen: () => !!G.game?.menus?.panelOpen,
+    free: () => !isOpen,
+    passless: () => void (eco.passless = true),
+    quietMs: opts.gate?.quietMs,
+    askMs: opts.gate?.askMs,
+    ui: {
+      show(req) {
+        if (!isOpen) {
+          if (!DEPLOY_FROM.includes(req.from)) return;
+          deployReq = req;
+          show(req.from as Origin | "paused");
+        } else if (deployReq !== req) return; // open for something else: the gate leaves presses alone then
+        if (req.status === "checking") setGate("checking");
+        else passFor(req);
+      },
+      hide() {
+        if (!isOpen || !deployReq) return;
+        deployReq = null; // the gate carries on itself; closing mustn't drop its press
+        close();
+      },
+    },
+  });
+
+  /** The pass card for a held deploy: claim and carry on into that run, or play this one without salvage. */
+  function passFor(req: DeployRequest) {
+    const carryOn = (passless: boolean) => {
+      if (deployReq !== req) return; // backed out while the stamp landed
+      deployReq = null;
+      close();
+      deployGate.proceed(req, { passless });
+    };
+    const unsure = req.status === "unknown";
+    const pass = createPass({
+      chain,
+      wallet,
+      lede: DEPLOY_LEDE,
+      claimLabel: CLAIM_LABEL[req.act],
+      doneNote: "Over the fence…",
+      notice: unsure ? `Your pass status is ${UNKNOWN}: the dock office is slow to answer. If you already hold a pass, deploy anyway.` : undefined,
+      onSound: () => emit("ui:click"),
+      onDone: () => {
+        signedOn();
+        carryOn(false);
+      },
+      // Unknown: they may hold a pass already, so the way on is the normal run (salvage if the pass is on file).
+      skip: unsure
+        ? { label: "Deploy anyway", note: "salvage if your pass is on file", onSkip: () => carryOn(false) }
+        : { label: "Play without a pass", note: "no salvage this run", onSkip: () => carryOn(true) },
+    });
+    gateEl.replaceChildren(pass.el);
+    setGate("pass");
+    setTimeout(() => pass.focus(), 60);
+  }
+
   // ---- open / close / deploy ----
   let poll: ReturnType<typeof setInterval> | null = null;
   const pad = createPad({
@@ -290,6 +374,12 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     const state = G.game?.state ?? "title";
     const o = from ?? (ORIGINS.includes(state as Origin) ? (state as Origin) : null);
     if (!o || (G.game?.state && !ORIGINS.includes(G.game.state as Origin))) return; // never mid-run
+    show(o);
+    await checkGate();
+  }
+
+  /** The overlay comes up over the card it was opened from. */
+  function show(o: Origin | "paused") {
     origin = o;
     isOpen = true;
     root.hidden = false;
@@ -303,12 +393,14 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     poll = setInterval(tickPoll, 1000);
     ticker.start();
     pad.start();
-    await checkGate();
   }
 
   function close() {
     if (!isOpen) return;
     isOpen = false;
+    // Backing out of the pass card drops the held press: the game stays on its card.
+    if (deployReq) deployGate.cancel(deployReq);
+    deployReq = null;
     tooltip.hide();
     week.hide();
     ticker.stop();
@@ -323,7 +415,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     gate = "closed";
     root.dataset.gate = "closed";
     emit("dock:close", { from: origin });
-    const back = entries.buttons.get(origin);
+    const back = origin === "paused" ? null : entries.buttons.get(origin);
     if (back)
       try {
         back.focus({ preventScroll: true });
@@ -335,7 +427,8 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
   function deploy() {
     const o = origin;
     close();
-    const btn = G.game?.menus?.root?.querySelector<HTMLButtonElement>(`[data-s="${o}"] [data-act="${DEPLOY_ACT[o]}"]`);
+    const act = o === "paused" ? "restart" : DEPLOY_ACT[o];
+    const btn = G.game?.menus?.root?.querySelector<HTMLButtonElement>(`[data-s="${o}"] [data-act="${act}"]`);
     btn?.click();
   }
 
@@ -439,6 +532,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     entries.inject();
     try {
       if (registered !== true) registered = await wallet.registered();
+      deployGate.learn(registered);
     } catch {
       registered = null;
     }
@@ -462,6 +556,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     tab: setTab,
     refresh: ctx.refresh,
     week,
+    deployGate,
   };
 }
 

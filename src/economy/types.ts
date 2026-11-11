@@ -220,4 +220,9 @@ export interface Economy {
    * G.ext.gear), sends it to startRun, and empties the list once the chain confirms the run burned it.
    */
   equipped?: GearId[];
+  /**
+   * Set by the Dockside's deploy gate when a player without a dock pass picks "Play without a pass". The salvage
+   * module reads it at the next run start, clears it, and plays that one run as the baseline, saying so.
+   */
+  passless?: boolean;
 }

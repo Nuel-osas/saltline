@@ -408,6 +408,20 @@ a.dk-tk-i:hover { color: var(--bone); } a.dk-tk-i:hover .dk-tk-t { text-decorati
 .dk-pass-status { min-height: 17px; margin-top: 10px !important; font: 400 11px/1.4 var(--f-mono); color: var(--steel); }
 .dk-pass-status[data-state="pending"] { color: var(--signal); } .dk-pass-status[data-state="ok"] { color: var(--bone); }
 .dk-pass-status[data-state="error"] { color: var(--alarm); } .dk-pass-status[data-state="unknown"] { color: var(--dk-warn); }
+/* the way on without a pass (the deploy gate): a quiet link under the claim, never the loud choice */
+.dk-skip { display: flex; align-items: baseline; justify-content: center; gap: 10px; width: 100%; margin-top: 2px; padding: 6px 0 4px; background: none; border: 0; border-radius: 0; color: var(--bone-dim); cursor: pointer; }
+.dk-skip span { font: 600 12px/1 var(--f-label); letter-spacing: .22em; text-transform: uppercase; border-bottom: 1px solid rgba(232, 228, 218, .3); padding-bottom: 3px; }
+.dk-skip i { font: 400 10.5px/1 var(--f-mono); font-style: normal; color: var(--steel); }
+.dk-skip:hover:not(:disabled) span { color: var(--bone); border-bottom-color: var(--bone); }
+.dk-skip:disabled { opacity: .3; cursor: default; }
+/* on its way into a run the card is a step, not a destination: tighter, so it fits a 720p screen whole */
+.dk .dk-pass[data-mode="deploy"] { padding: 20px 24px 14px; }
+.dk-pass[data-mode="deploy"] .dk-pass-h { font-size: clamp(38px, 8vw, 46px); margin: 8px 0 8px !important; }
+.dk-pass[data-mode="deploy"] .dk-pc { margin: 12px 4px 12px; }
+.dk-pass[data-mode="deploy"] .dk-cs-in { height: 46px; }
+.dk-pass[data-mode="deploy"] .dk-pass-gift { margin: 8px 0 10px; }
+.dk-pass[data-mode="deploy"] .dk-pass-status { margin-top: 8px !important; }
+.dk-pass[data-mode="deploy"] .dk-what { margin-top: 6px; padding-top: 8px; }
 .dk-what { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font: 400 11px/1.55 var(--f-mono); color: var(--steel); }
 .dk-what summary { cursor: pointer; list-style: none; font: 600 11px/1 var(--f-label); letter-spacing: .24em; text-transform: uppercase; color: var(--bone-dim); }
 .dk-what summary::-webkit-details-marker { display: none; }

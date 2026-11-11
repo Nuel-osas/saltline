@@ -47,7 +47,10 @@ const row = (root: ParentNode, b: BrokerId, tok: string) => q(root, `.dk-stall[d
 const priceOf = (root: ParentNode, b: BrokerId, tok: string) => q(row(root, b, tok), ".dk-flap").dataset.value;
 
 afterEach(() => {
-  for (const d of docks) d.close();
+  for (const d of docks) {
+    d.close();
+    d.deployGate.dispose();
+  }
   docks = [];
   document.body.replaceChildren();
 });
