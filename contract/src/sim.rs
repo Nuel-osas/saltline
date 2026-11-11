@@ -1,6 +1,6 @@
 //! `simulate`: the fast-forward. It copies the three brokers into memory and plays simulated traders against them,
 //! hour by hour, with the same `pricing.rs` rules and the default `policy.rs`. It returns one point per hour (hour 0
-//! is the market now) with each broker's open state, scrip, bids and stock.
+//! is the market now) with each broker's open state, scrip, bids and stock, and the town's act.
 //!
 //! - It is a view: free, needs no wallet, and changes nothing. The same state and seed always give the same week.
 //! - Its budget: 168 hours × 30 traders fits a view call's gas limit. Measured numbers are in contract/README.md.
@@ -18,6 +18,8 @@
 //! - Point `h` is the market at the end of hour h's trading. A broker flooded and shut during the hour shows as
 //!   shut, even if its exports reopen it at the top of the next hour.
 //! - Dividends leave the broker as they would on chain, but the model doesn't pay them to the simulated traders.
+//! - Every unit a trader sells is a delivery to a copy of the town (`town.rs`), so each point also says which act
+//!   the town would be in.
 
 use std::collections::BTreeMap;
 
@@ -28,6 +30,7 @@ use crate::items::*;
 use crate::policy::{self, Desk, Move};
 use crate::pricing;
 use crate::runs::{Rng, roll_container};
+use crate::town::Town;
 use crate::{Saltline, SaltlineExt, err, fail, now_ms};
 
 pub const MAX_SIM_HOURS: u32 = 168;
@@ -60,6 +63,8 @@ pub struct SimBrokers {
 #[near(serializers = [json])]
 pub struct SimPoint {
     pub hour: u32,
+    /// The town's act at this point (1–3), counting the simulated traders' sales as deliveries.
+    pub act: u8,
     pub brokers: SimBrokers,
 }
 
@@ -90,7 +95,7 @@ fn review(d: &mut Desk) {
     }
 }
 
-fn point(hour: u32, m: &[SimDesk; BROKER_COUNT]) -> SimPoint {
+fn point(hour: u32, m: &[SimDesk; BROKER_COUNT], town: &Town) -> SimPoint {
     let one = |b: usize| {
         let d = &m[b].desk;
         SimBroker {
@@ -104,15 +109,22 @@ fn point(hour: u32, m: &[SimDesk; BROKER_COUNT]) -> SimPoint {
             stock: BROKERS[b].buys.iter().map(|&t| (ITEMS[t].id.to_string(), U128(d.stock[t]))).collect(),
         }
     };
-    SimPoint { hour, brokers: SimBrokers { moss: one(MOSS), ines: one(INES), qm: one(QM) } }
+    SimPoint { hour, act: town.act(), brokers: SimBrokers { moss: one(MOSS), ines: one(INES), qm: one(QM) } }
 }
 
-/// Play `hours` hours of `traders` traders against the market `m`, starting at `start` (ms).
-pub fn run(mut m: [SimDesk; BROKER_COUNT], hours: u32, traders: u32, seed: u64, start: u64) -> Vec<SimPoint> {
+/// Play `hours` hours of `traders` traders against the market `m` and the town `town`, starting at `start` (ms).
+pub fn run(
+    mut m: [SimDesk; BROKER_COUNT],
+    mut town: Town,
+    hours: u32,
+    traders: u32,
+    seed: u64,
+    start: u64,
+) -> Vec<SimPoint> {
     let mut rng = Rng::new(seed ^ 0x5A17_11E5_0000_0000);
     let mut crew: Vec<Trader> = (0..traders).map(|_| Trader { scrip: STARTER_SCRIP, hold: [0; TOKEN_COUNT] }).collect();
     let mut out = Vec::with_capacity(hours as usize + 1);
-    out.push(point(0, &m));
+    out.push(point(0, &m, &town));
 
     for hour in 1..=hours {
         let now = start.saturating_add((hour as u64 - 1) * HOUR_MS);
@@ -184,6 +196,7 @@ pub fn run(mut m: [SimDesk; BROKER_COUNT], hours: u32, traders: u32, seed: u64, 
                     tr.scrip += bid;
                     sold += 1;
                     review(d);
+                    town.deliver(b, t, 1, now);
                 }
             }
 
@@ -215,7 +228,7 @@ pub fn run(mut m: [SimDesk; BROKER_COUNT], hours: u32, traders: u32, seed: u64, 
             }
         }
 
-        out.push(point(hour, &m));
+        out.push(point(hour, &m, &town));
     }
     out
 }
@@ -239,6 +252,6 @@ impl Saltline {
                 total_shares: br.total_shares,
             }
         });
-        run(m, hours, traders, seed, now_ms())
+        run(m, Town::load(), hours, traders, seed, now_ms())
     }
 }

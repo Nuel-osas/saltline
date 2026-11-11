@@ -34,7 +34,7 @@ what goes over the wire. Change both sides and this file together.
 | `listings` | – | `[{ id, seller, callsign, token_id, amount: U128, price: U128, at }]` |
 | `recent` | `{ limit }` | `[{ kind, at, account, callsign?, text }]`, newest first, up to 64 kept. There's no tx hash, because a contract can't read its own; the ticker links to the account's explorer page |
 | `leaderboard` | – | `{ net_worth: [Row], best_haul: [Row], investors: [Row] }`; Row = `{ account_id, callsign, value: U128 }`, top 10 each |
-| `simulate` | `{ hours: u32 ≤ 168, traders: u32 ≤ 30, seed: u64 }` | `[{ hour, brokers: { "<broker>": { open, scrip: U128, bids: { "<cargo>": U128 }, stock: { "<cargo>": U128 } } } }]`: `hours + 1` points, with hour 0 being now. Each point is taken before that hour's broker exports. 168 × 30 burns about 103 Tgas |
+| `simulate` | `{ hours: u32 ≤ 168, traders: u32 ≤ 30, seed: u64 }` | `[{ hour, brokers: { "<broker>": { open, scrip: U128, bids: { "<cargo>": U128 }, stock: { "<cargo>": U128 } } } }]`: `hours + 1` points, with hour 0 being now. Each point is taken before that hour's broker exports and carries the town's `act` (1–3). 168 × 30 burns about 110 Tgas |
 | `town` | – | `{ act: 1\|2\|3, delivered: { "<cargo>": U128 }, districts: [{ id, token_id, need: U128, have: U128, lit, lit_at? }], client: { need: U128, have: U128, revealed, revealed_at? }, harbormaster: { strength: u32, recent_cores: U128, bonus_drones: u32 } }`. See docs/STORY.md: deliveries are player sales to brokers, counted from the story upgrade |
 | `advice` | `{ broker }` | `{ action: "none" or "export" or "stance", token_id?, amount: U128?, stance: u32?, memo }` (the default policy, used by the agent runner) |
 
@@ -63,6 +63,8 @@ what goes over the wire. Change both sides and this file together.
 ### Notes from the implementation
 
 - Optional fields are sent as `null`, not left out.
+- `recent` has two more kinds since the story upgrade: `district` (a district relit) and `act` (Act II or the reveal).
+  `town().delivered` lists all five cargo, zeros included.
 - Dividends show up in `balances` and `mt_balance_of` straight away. They are minted at the holder's next call.
 - An unknown broker or token id gets the nearest code: `E_NOT_BROKER`, or `E_DOESNT_BUY` / `E_DOESNT_SELL`.
 - Not implemented: NEP-245 `mt_transfer_call` and approvals.
