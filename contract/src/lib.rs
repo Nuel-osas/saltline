@@ -28,6 +28,8 @@ pub mod pricing;
 pub mod runs;
 pub mod sim;
 
+#[cfg(test)]
+mod tests;
 
 use items::*;
 
