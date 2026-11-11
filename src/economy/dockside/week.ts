@@ -218,7 +218,7 @@ export function drawWeek(g: CanvasRenderingContext2D, m: WeekModel, t: number, W
       g.fillStyle = "rgba(232,228,218,.06)";
       g.fillRect(x0, Math.round(y), x1 - x0, 1);
       g.fillStyle = "rgba(141,154,163,.55)";
-      g.fillText(String(Math.round(v)), x0 + 6, y - 7);
+      g.fillText(String(Math.round(v)), x0 + 6, k === 0 ? y - 7 : y + 8);
     }
 
     // shuttered bands, revealed up to the playhead
@@ -231,14 +231,19 @@ export function drawWeek(g: CanvasRenderingContext2D, m: WeekModel, t: number, W
       const z = X(band.to);
       g.fillStyle = `rgba(${ALARM}, .1)`;
       g.fillRect(a, py0 - 4, z - a, py1 - py0 + 8);
+      g.save();
+      g.beginPath();
+      g.rect(a, py0 - 4, z - a, py1 - py0 + 8);
+      g.clip();
       g.strokeStyle = `rgba(${ALARM}, .22)`;
       g.lineWidth = 1;
       g.beginPath();
-      for (let s = a - (py1 - py0); s < z; s += 7) {
+      for (let s = a - (py1 - py0) - 8; s < z; s += 7) {
         g.moveTo(s, py1 + 4);
         g.lineTo(s + (py1 - py0) + 8, py0 - 4);
       }
       g.stroke();
+      g.restore();
       g.fillStyle = `rgba(${ALARM}, .9)`;
       g.fillRect(a, py0 - 4, z - a, 2);
     }
