@@ -147,6 +147,27 @@ export interface SimPoint {
   brokers: Record<BrokerId, SimBroker>;
 }
 
+/** The town's shared arc on the open ledger (docs/STORY.md). */
+export interface District {
+  id: "clinic" | "generators";
+  tokenId: CargoId;
+  need: number;
+  have: number;
+  lit: boolean;
+  litAt: number | null;
+}
+
+export interface TownView {
+  act: 1 | 2 | 3;
+  /** All-time units of each cargo sold to brokers by players (counted from the story upgrade). */
+  delivered: Amounts<CargoId>;
+  districts: District[];
+  /** The Quartermaster's client: revealed once the lights are back and 8 cores have been sold to him in total. */
+  client: { need: number; have: number; revealed: boolean; revealedAt: number | null };
+  /** 0–100. Zero before the reveal. Each wave gets `bonusDrones` extra drones. */
+  harbormaster: { strength: number; recentCores: number; bonusDrones: number };
+}
+
 export interface TxResult {
   ok: boolean;
   txHash?: string;
@@ -177,6 +198,8 @@ export interface Chain {
   simulate(hours: number, traders: number, seed: number): Promise<SimPoint[]>;
   /** A run's manifest, or null when there is no such run. */
   manifest(runId: number): Promise<Manifest | null>;
+  /** The town's arc (docs/STORY.md). Optional until every implementation has it; callers treat absence as Act I. */
+  town?(): Promise<TownView>;
 
   // Calls: signed by the current wallet in the background, no prompts.
   startRun(gear: GearId[]): Promise<TxResult & { manifest?: Manifest }>;
