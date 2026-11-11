@@ -18,7 +18,9 @@ name: brokers
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Odd minutes: GitHub delays or drops schedules at the top of the hour under load, and re-saving this file
+    # re-registers the schedule (the first */15 schedule never fired in its first three hours).
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
       dry_run:
