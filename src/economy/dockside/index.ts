@@ -10,7 +10,7 @@ import { addWrecks, awayLines, createAwayCard, loadSeen, noteNews, saveSeen, see
 import { createBoard } from "./board";
 import { createEntries, type Origin } from "./entry";
 import { okv, runAct, type Ctx, type EconomyWithGear, type ReadKey, type Reads } from "./ctx";
-import { fill, h, reducedMotion } from "./dom";
+import { fill, h, reducedMotion, text } from "./dom";
 import { fmt, UNKNOWN } from "./format";
 import { createDeployGate, type DeployAct, type DeployGate, type DeployGateOptions, type DeployRequest } from "./gate";
 import { createHold } from "./hold";
@@ -21,6 +21,7 @@ import { gameChimes, type Chimes } from "./sound";
 import { createStall } from "./stall";
 import { createTicker } from "./ticker";
 import { createTooltip } from "./tooltip";
+import { ACTS, createTown } from "./town";
 import { createWeek } from "./week";
 
 export interface GameLike {
@@ -29,12 +30,13 @@ export interface GameLike {
 }
 
 export type { Origin };
-export type Tab = "stalls" | "market" | "board" | "week";
+export type Tab = "stalls" | "market" | "board" | "week" | "town";
 const TABS: { id: Tab; label: string }[] = [
   { id: "stalls", label: "Stalls" },
   { id: "market", label: "Market" },
   { id: "board", label: "Board" },
   { id: "week", label: "The week" },
+  { id: "town", label: "Town" },
 ];
 /** The card button Deploy presses, so a run starts exactly as the game starts it. */
 const DEPLOY_ACT: Record<Origin, string> = { title: "deploy", dead: "retry", complete: "redeploy" };
@@ -49,7 +51,9 @@ const CLAIM_LABEL: Record<DeployAct, string> = {
   restart: "Claim pass and restart",
 };
 
-const POLL: Record<ReadKey, number> = { brokers: 4000, recent: 4000, balances: 8000, profile: 60000, listings: 10000, leaderboard: 12000 };
+const POLL: Record<ReadKey, number> = { brokers: 4000, recent: 4000, balances: 8000, profile: 60000, listings: 10000, leaderboard: 12000, town: 8000 };
+/** A town that can't be read (or a contract without one yet) is asked again less often. */
+const TOWN_RETRY = 30000;
 
 export interface DocksideOptions {
   /** Where the overlay mounts (default #ui, else body). */
@@ -88,6 +92,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     listings: { s: "loading" },
     recent: { s: "loading" },
     leaderboard: { s: "loading" },
+    town: { s: "loading" },
   };
   const emit = (n: string, e: unknown = {}) => {
     try {
@@ -125,6 +130,8 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     listings: () => chain.listings(),
     recent: () => chain.recent(20),
     leaderboard: () => chain.leaderboard(),
+    // Optional on the Chain: a client without it reads as unknown, the same as a failed read.
+    town: () => (chain.town ? chain.town() : Promise.reject(new Error("town: this chain has no town view"))),
   };
   /** `own`: the read follows the player's own action, so it counts as seen even if they've closed the Dockside since. */
   function load(key: ReadKey, fresh = false, own = false): Promise<void> {
@@ -140,7 +147,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
       )
       .finally(() => {
         delete inflight[key];
-        due[key] = Date.now() + POLL[key];
+        due[key] = Date.now() + (key === "town" && reads.town.s === "unknown" ? TOWN_RETRY : POLL[key]);
         paint(key);
       });
     inflight[key] = p;
@@ -174,7 +181,14 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     "nav",
     { class: "dk-tabs", role: "tablist", "aria-label": "Dockside" },
     ...TABS.map((t, i) =>
-      h("button", { class: "dk-tab", role: "tab", type: "button", "data-tab": t.id, "aria-selected": String(t.id === tab), onclick: () => setTab(t.id) }, h("kbd", null, String(i + 1)), t.label),
+      h(
+        "button",
+        { class: "dk-tab", role: "tab", type: "button", "data-tab": t.id, "aria-selected": String(t.id === tab), onclick: () => setTab(t.id) },
+        h("kbd", null, String(i + 1)),
+        t.label,
+        // The Town tab carries the town's act, so a change shows from any tab.
+        t.id === "town" ? h("span", { class: "dk-tab-act", hidden: true }) : null,
+      ),
     ),
   );
   const meT = h("span", { class: "dk-me" });
@@ -200,12 +214,14 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
   const board = createBoard(ctx);
   const week = createWeek(ctx);
   const ticker = createTicker(ctx);
+  const town = createTown(ctx);
   const tooltip = createTooltip(root);
   const panes: Record<Tab, HTMLElement> = {
     stalls: h("div", { class: "dk-pane", "data-pane": "stalls", role: "tabpanel" }, h("div", { class: "dk-stalls" }, ...stalls.map((s) => s.el))),
     market: h("div", { class: "dk-pane", "data-pane": "market", role: "tabpanel", hidden: true }, market.el),
     board: h("div", { class: "dk-pane", "data-pane": "board", role: "tabpanel", hidden: true }, board.el),
     week: h("div", { class: "dk-pane", "data-pane": "week", role: "tabpanel", hidden: true }, week.el),
+    town: h("div", { class: "dk-pane", "data-pane": "town", role: "tabpanel", hidden: true }, town.el),
   };
   const main = h("main", { class: "dk-main" }, ...Object.values(panes), h("aside", { class: "dk-side" }, hold.el));
   const gateEl = h("div", { class: "dk-gate" });
@@ -225,6 +241,20 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     if (!key || key === "listings") market.update();
     if (!key || key === "leaderboard") board.update();
     if (!key || key === "recent") ticker.update();
+    if (!key || key === "town") {
+      town.update();
+      if (key) for (const s of stalls) s.update(); // the Quartermaster's stall changes at the reveal
+      paintAct();
+    }
+  }
+  const actChip = tabsEl.querySelector<HTMLElement>(".dk-tab-act")!;
+  function paintAct() {
+    const t = okv(reads.town);
+    actChip.hidden = !t;
+    if (t) {
+      text(actChip, ACTS[t.act - 1].numeral);
+      actChip.dataset.act = String(t.act);
+    }
   }
   function paintMe() {
     const b = okv(reads.balances);
@@ -301,7 +331,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
   function enter() {
     setGate("in");
     gateEl.replaceChildren();
-    const keys: ReadKey[] = ["brokers", "balances", "profile", "recent"];
+    const keys: ReadKey[] = ["brokers", "balances", "profile", "recent", "town"];
     if (tab === "market") keys.push("listings");
     if (tab === "board") keys.push("leaderboard");
     for (const k of keys) void load(k, true);
@@ -566,7 +596,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
       if ((due.recent ?? 0) <= now) void load("recent");
       return;
     }
-    const need: ReadKey[] = ["brokers", "recent", "balances", "profile"];
+    const need: ReadKey[] = ["brokers", "recent", "balances", "profile", "town"];
     if (tab === "market") need.push("listings");
     if (tab === "board") need.push("leaderboard");
     for (const k of need) if ((due[k] ?? 0) <= now) void load(k);
@@ -608,7 +638,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     }
     if (e.code === "Tab") return trap(e);
     if (typing || t?.classList.contains("dk-scrub") || t?.tagName === "CANVAS") return;
-    if (gate === "in" && /^Digit[1-4]$/.test(e.code)) {
+    if (gate === "in" && /^Digit[1-5]$/.test(e.code)) {
       setTab(TABS[+e.code.slice(5) - 1].id);
       e.preventDefault();
       return;

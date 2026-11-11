@@ -172,7 +172,8 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
       pending: `Settling… ${n} ${c} to ${meta.name}`,
       call: () => ctx.chain.sell(id, c, n),
       done: (r) => `Sold ${n} ${c} · +${r.paid != null ? fmt(r.paid) : UNKNOWN} scrip`,
-      refresh: ["brokers", "balances", "recent"],
+      // a sale is a delivery: it moves the town
+      refresh: ["brokers", "balances", "recent", "town"],
       chime: "cash",
     });
   }

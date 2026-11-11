@@ -3,7 +3,7 @@
 // never shown as zero). A rejected call is ambiguous (it may still land), so it shows as unknown, never as failed.
 import { h, text } from "./dom";
 import { AMBIGUOUS } from "./format";
-import type { Amounts, BrokerView, Chain, Economy, GearId, Leaderboard, LedgerEvent, Listing, Profile, TxResult, Wallet } from "../types";
+import type { Amounts, BrokerView, Chain, Economy, GearId, Leaderboard, LedgerEvent, Listing, Profile, TownView, TxResult, Wallet } from "../types";
 import type { Chime } from "./sound";
 
 export type Read<T> = { s: "loading" } | { s: "ok"; v: T } | { s: "unknown"; error: string };
@@ -16,6 +16,8 @@ export interface Reads {
   listings: Read<Listing[]>;
   recent: Read<LedgerEvent[]>;
   leaderboard: Read<Leaderboard>;
+  /** The town's arc (docs/STORY.md). Unknown when the chain has no town view yet, as well as when the read fails. */
+  town: Read<TownView>;
 }
 export type ReadKey = keyof Reads;
 

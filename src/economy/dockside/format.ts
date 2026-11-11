@@ -28,6 +28,14 @@ export function ago(at: number, now = Date.now()): string {
   return `${Math.round(hr / 24)} d`;
 }
 
+/** A moment on the ledger, in the player's own time: "11 Nov · 14:20". */
+export function stamp(at: number): string {
+  const d = new Date(at);
+  const day = d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return `${day} · ${time}`;
+}
+
 /** Implicit accounts are 64 hex characters; show the ends. Named accounts show whole up to 24 characters. */
 export const shortAccount = (id: string) => (id.length > 24 ? `${id.slice(0, 6)}…${id.slice(-6)}` : id);
 
