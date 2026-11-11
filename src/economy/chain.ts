@@ -33,6 +33,7 @@ import type {
   SimBroker,
   SimPoint,
   TokenId,
+  TownView,
   TxResult,
   WreckView,
 } from "./types";
@@ -112,6 +113,23 @@ export function isTransient(e: unknown): boolean {
   const code = errCode(e);
   if (code === "INVALID_NONCE" || executedFailure(e)) return false;
   return (e as { retryable?: unknown }).retryable === true;
+}
+
+/** The code a view rejects with when the deployed contract doesn't have that method yet (an older build). */
+export const METHOD_NOT_FOUND = "METHOD_NOT_FOUND";
+
+/**
+ * The contract has no such method. nearcore answers a view of it with `wasm execution failed with error:
+ * MethodResolveError(MethodNotFound)` (seen on 11 Nov 2026 from both testnet RPCs, viewing `town` on
+ * saltline.testnet before the story upgrade); near-kit carries that text in a FunctionCallError's panic, or in a
+ * ContractExecutionError's details on nodes that send it as a structured error. This is not the RPC's own "method
+ * not found" (-32601), which is about the JSON-RPC method.
+ */
+export function isMethodNotFound(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const o = e as { panic?: unknown; message?: unknown; details?: unknown };
+  const texts = [o.panic, o.message, o.details === undefined ? "" : JSON.stringify(o.details)];
+  return texts.some((t) => typeof t === "string" && /\bMethodNotFound\b/.test(t));
 }
 
 function panicOf(e: unknown): { code: string; message: string } | null {
@@ -195,6 +213,8 @@ const KINDS = new Set<string>([
   "export",
   "stance",
   "listing",
+  "district",
+  "act",
 ]);
 
 function token(v: unknown, field: string): TokenId {
@@ -350,6 +370,51 @@ export function decodeSim(raw: unknown): SimPoint[] {
     }
     return { hour: int(o.hour, `${f}.hour`), brokers };
   });
+}
+
+const DISTRICT_IDS = new Set<string>(["clinic", "generators"]);
+
+/**
+ * The town's arc (docs/STORY.md, docs/CONTRACT_API.md → `town`). A district this client doesn't know is skipped,
+ * like an unknown token, so a newer contract doesn't blank the town. A strength over 100 or more than 4 bonus
+ * drones is refused rather than shown: the game would field them.
+ */
+export function decodeTown(raw: unknown): TownView {
+  const o = obj(raw, "town");
+  const act = int(o.act, "town.act");
+  if (act !== 1 && act !== 2 && act !== 3) throw new WireError(`town.act: expected 1, 2 or 3, got ${act}`);
+  const districts: TownView["districts"] = [];
+  list(o.districts, "town.districts", (x, f) => {
+    const d = obj(x, f);
+    const id = str(d.id, `${f}.id`);
+    if (!DISTRICT_IDS.has(id)) return;
+    districts.push({
+      id: id as TownView["districts"][number]["id"],
+      tokenId: cargo(d.token_id, `${f}.token_id`),
+      need: u128(d.need, `${f}.need`),
+      have: u128(d.have, `${f}.have`),
+      lit: bool(d.lit, `${f}.lit`),
+      litAt: optional(d.lit_at, (v) => int(v, `${f}.lit_at`)),
+    });
+  });
+  const c = obj(o.client, "town.client");
+  const hm = obj(o.harbormaster, "town.harbormaster");
+  const strength = int(hm.strength, "town.harbormaster.strength");
+  if (strength > 100) throw new WireError(`town.harbormaster.strength: ${strength} is over 100`);
+  const bonusDrones = int(hm.bonus_drones, "town.harbormaster.bonus_drones");
+  if (bonusDrones > 4) throw new WireError(`town.harbormaster.bonus_drones: ${bonusDrones} is over 4`);
+  return {
+    act,
+    delivered: amounts<CargoId>(o.delivered, "town.delivered", CARGOS),
+    districts,
+    client: {
+      need: u128(c.need, "town.client.need"),
+      have: u128(c.have, "town.client.have"),
+      revealed: bool(c.revealed, "town.client.revealed"),
+      revealedAt: optional(c.revealed_at, (v) => int(v, "town.client.revealed_at")),
+    },
+    harbormaster: { strength, recentCores: u128(hm.recent_cores, "town.harbormaster.recent_cores"), bonusDrones },
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -544,6 +609,8 @@ export interface TestnetChainOptions {
 export interface TestnetChain extends DetailedChain, AccountLookup {
   readonly network: "testnet";
   manifest(runId: number): Promise<Manifest | null>;
+  /** Rejects with code METHOD_NOT_FOUND while the deployed contract predates the story upgrade. */
+  town(): Promise<TownView>;
   /** Calls queued or in flight. */
   queued(): number;
 }
@@ -577,6 +644,13 @@ export function createTestnetChain(opts: TestnetChainOptions): TestnetChain {
         if (isTransient(e) && attempt < retries) {
           await sleep(backoff * 2 ** attempt);
           continue;
+        }
+        if (isMethodNotFound(e)) {
+          // An older contract: a plain rejection the caller can recognise. Never retried, never a default.
+          const err = new Error(`${what}: the contract has no ${what} view yet`) as Error & { code?: string; cause?: unknown };
+          err.code = METHOD_NOT_FOUND;
+          err.cause = e;
+          throw err;
         }
         const p = panicOf(e);
         const err = new Error(p ? p.message : `${what}: ${friendly(e)}`) as Error & { code?: string; cause?: unknown };
@@ -643,6 +717,7 @@ export function createTestnetChain(opts: TestnetChainOptions): TestnetChain {
     leaderboard: () => view("leaderboard", {}, decodeLeaderboard),
     simulate: (hours, traders, seed) => view("simulate", { hours, traders, seed }, decodeSim),
     manifest: (runId) => view("manifest", { run_id: runId }, decodeManifest),
+    town: () => view("town", {}, decodeTown),
     accountExists: (accountId) => withRetry((a) => port.accountExists(accountId, a), "account"),
 
     async startRun(gear: GearId[]) {

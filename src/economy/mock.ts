@@ -24,6 +24,7 @@ import type {
   SimBroker,
   SimPoint,
   TokenId,
+  TownView,
   Wallet,
   WreckView,
 } from "./types";
@@ -58,6 +59,70 @@ const HOUR = 3_600_000;
 const FINDER_PCT = Math.round(RULES.finderShare * 100);
 /** Simulated and ambient players won't sell below this share of base. */
 const HOLD_OUT = 0.4;
+
+// ---------------------------------------------------------------------------------------------------------------
+// The town's arc (docs/STORY.md → The arc, shared by every player; The dilemma)
+
+export type DistrictId = "clinic" | "generators";
+
+/** The districts that relight, in order, and the deliveries each needs. */
+export const DISTRICTS: readonly { id: DistrictId; tokenId: CargoId; need: number }[] = [
+  { id: "clinic", tokenId: "meds", need: 15 },
+  { id: "generators", tokenId: "fuel", need: 10 },
+];
+
+export const STORY = {
+  /** Relay cores sold to the Quartermaster in total (before Act II too) for the reveal, once Act II has begun. */
+  clientNeed: 8,
+  /** Cores fed to the Harbormaster halve every 12 hours. */
+  halfLifeMs: 12 * HOUR,
+  /** strength = min(100, recent_cores × 10); a drone a wave for every 25. */
+  strengthPerCore: 10,
+  maxStrength: 100,
+  strengthPerDrone: 25,
+} as const;
+
+/** The ledger's lines for the arc, word for word as the contract writes them (story/contract). */
+export const TOWN_LINES = {
+  clinic: "The clinic's lights are back on.",
+  generators: "The generators are running. Lights on the water.",
+  act2: "The town across the water is lit again.",
+  reveal: "The Quartermaster's client is the Harbormaster.",
+} as const;
+
+// 2^(−k/16) × 1,000,000 for k = 0..=16: contract/src/pricing.rs's table.
+const HALVING_PPM = [
+  1_000_000, 957_603, 917_004, 878_126, 840_896, 805_245, 771_105, 738_413, 707_107, 677_128, 648_420, 620_929, 594_604, 569_394,
+  545_254, 522_137, 500_000,
+];
+
+/**
+ * recent × 2^(−elapsed / halfLife), integers only, the way contract/src/pricing.rs's decay_recent does it: whole
+ * half-lives halve (rounding down), and the part of a half-life left over reads a 16-step table, interpolated.
+ */
+export function decayMilli(milli: number, elapsedMs: number, halfLifeMs: number): number {
+  if (!(milli > 0)) return 0;
+  const e = Math.max(0, Math.floor(elapsedMs));
+  const halvings = Math.floor(e / halfLifeMs);
+  if (halvings >= 52) return 0;
+  const whole = Math.floor(milli / 2 ** halvings);
+  const rest = e % halfLifeMs;
+  const step = Math.floor((rest * 16) / halfLifeMs);
+  const into = (rest * 16) % halfLifeMs;
+  const a = HALVING_PPM[step];
+  const b = HALVING_PPM[step + 1];
+  const ppm = a - Math.floor(((a - b) * into) / halfLifeMs);
+  return Math.floor((whole * ppm) / 1_000_000);
+}
+
+/** The Harbormaster's strength from its decayed recent cores (thousandths): min(100, recent_cores × 10). */
+export const strengthOf = (recentMilli: number) => Math.min(STORY.maxStrength, Math.floor((recentMilli * STORY.strengthPerCore) / 1000));
+
+/** `?act=1|2|3` on the page URL: the town state the offline mock is put in for screenshots and demos. */
+export function mockActParam(search: string): 1 | 2 | 3 | null {
+  const v = new URLSearchParams(search).get("act");
+  return v === "1" || v === "2" || v === "3" ? (Number(v) as 1 | 2 | 3) : null;
+}
 
 // ---------------------------------------------------------------------------------------------------------------
 // Words
@@ -212,9 +277,27 @@ interface RunState {
   closed: boolean;
 }
 
+/** The town's arc, counted from when this state first had one (the mock's "story upgrade"). */
+export interface TownState {
+  /** Units of each cargo players sold to brokers. Brokers' exports don't count. */
+  delivered: Amounts<CargoId>;
+  /** When each district relit. */
+  litAt: Partial<Record<DistrictId, number>>;
+  /** Relay cores sold to the Quartermaster, in total. */
+  qmCores: number;
+  revealedAt: number | null;
+  /** Cores sold to the Quartermaster since the reveal, in thousandths, decayed to `at`. */
+  hm: { milli: number; at: number };
+}
+
+const freshTown = (at: number): TownState => ({ delivered: {}, litAt: {}, qmCores: 0, revealedAt: null, hm: { milli: 0, at } });
+const bothLit = (t: TownState) => DISTRICTS.every((d) => t.litAt[d.id] !== undefined);
+
 export interface MockState {
   v: 1;
   seed: number;
+  /** Missing in states saved before the story; added on load. */
+  town: TownState;
   /** The PRNG's state (mulberry32), so ambient play replays exactly from a saved state. */
   rng: number;
   me: string;
@@ -326,6 +409,7 @@ function freshState(seed: number, now: number): MockState {
   return {
     v: 1,
     seed,
+    town: freshTown(now),
     rng: r.rng,
     me,
     accounts,
@@ -498,6 +582,13 @@ export interface MockChain extends DetailedChain {
   /** The faucet's call: creates the profile and mints the starter scrip. */
   register(accountId: string, callsign: string): Promise<CallResult & { profile?: Profile }>;
   manifest(runId: number): Promise<Manifest | null>;
+  /** The town's arc (docs/STORY.md), as the contract's `town` view returns it. */
+  town(): Promise<TownView>;
+  /**
+   * Puts the town at the start of an act, with the act's demo numbers (what `?act=` does at load): Act I part-way to
+   * the lights, Act II just lit, Act III just revealed with the Harbormaster at 62. Ledger lines to match.
+   */
+  forceAct(act: 1 | 2 | 3): void;
   advice(broker: BrokerId): Advice;
   /** Calls made as the broker's own account (the agent runner's, on chain). */
   brokerExport(broker: BrokerId, tokenId: CargoId, amount: number, memo: string): Promise<CallResult & { earned?: number; dividend?: number }>;
@@ -522,6 +613,8 @@ export interface MockOptions {
   now?: () => number;
   /** Seconds of ambient play to run when the state is brand new, so the Dockside isn't empty. */
   warmupSeconds?: number;
+  /** Put the town at this act on every load (the `?act=` switch; see forceAct). */
+  act?: 1 | 2 | 3 | null;
 }
 
 function defaultStorage(): Storage | null {
@@ -551,6 +644,8 @@ export function createMockChain(seed = 1, opts: MockOptions = {}): MockChain {
   let state = load();
   const fresh = !state;
   if (!state) state = freshState(seed, now());
+  // A state saved before the story gets its town now: deliveries count from here, as on chain from the upgrade.
+  if (!state.town || typeof state.town !== "object") state.town = freshTown(now());
   let S: MockState = state;
 
   function save() {
@@ -777,9 +872,98 @@ export function createMockChain(seed = 1, opts: MockOptions = {}): MockChain {
     const paid = brokerTakes(b, c, n);
     debit(a, c, n);
     credit(actor, "scrip", paid);
-    log("sale", actor, `${a.callsign} sold ${units(c, n)} to ${b.name} for ${paid}.`);
+    const feeds = feedsHarbormaster(id, c);
+    log("sale", actor, `${a.callsign} sold ${units(c, n)} to ${b.name} for ${paid}.${feeds ? ` ${n === 1 ? "It goes" : "They go"} home to the Harbormaster.` : ""}`);
+    deliver(id, c, n, now());
     closeCheck(b);
     return { paid };
+  }
+
+  // --- the town's arc: every player's sales to the brokers move it (docs/STORY.md)
+
+  /** A core sold to the Quartermaster once his client is known goes to rebuild the Harbormaster. */
+  const feedsHarbormaster = (id: BrokerId, c: CargoId) => id === "qm" && c === "core" && S.town.revealedAt !== null;
+
+  function deliver(id: BrokerId, c: CargoId, n: number, at: number) {
+    const T = S.town;
+    T.delivered[c] = (T.delivered[c] ?? 0) + n;
+    if (id === "qm" && c === "core") {
+      // Mock's reading: strength counts the cores sold once the client is known, so the sale that reveals him
+      // doesn't feed it (the reveal itself starts the Harbormaster at 0).
+      if (feedsHarbormaster(id, c)) T.hm = { milli: decayMilli(T.hm.milli, at - T.hm.at, STORY.halfLifeMs) + n * 1000, at };
+      T.qmCores += n;
+    }
+    const wasLit = bothLit(T);
+    for (const d of DISTRICTS) {
+      if (T.litAt[d.id] === undefined && (T.delivered[d.tokenId] ?? 0) >= d.need) {
+        T.litAt[d.id] = at;
+        log("district", MOCK_CONTRACT, TOWN_LINES[d.id]);
+      }
+    }
+    if (!wasLit && bothLit(T)) log("act", MOCK_CONTRACT, TOWN_LINES.act2);
+    // Act III: the lights are on and 8 cores have gone to him in total (cores sold before Act II count).
+    if (T.revealedAt === null && bothLit(T) && T.qmCores >= STORY.clientNeed) {
+      T.revealedAt = at;
+      T.hm = { milli: 0, at };
+      log("act", MOCK_CONTRACT, TOWN_LINES.reveal);
+    }
+  }
+
+  function townView(at: number): TownView {
+    const T = S.town;
+    const revealed = T.revealedAt !== null;
+    const recentCores = revealed ? decayMilli(T.hm.milli, at - T.hm.at, STORY.halfLifeMs) : 0;
+    // Before Act III the strength is 0 and the Harbormaster is silent.
+    const strength = revealed ? strengthOf(recentCores) : 0;
+    // As the contract sends it: all five cargo, zeros included.
+    const delivered: Amounts<CargoId> = {};
+    for (const c of CARGO) delivered[c] = T.delivered[c] ?? 0;
+    return {
+      act: revealed ? 3 : bothLit(T) ? 2 : 1,
+      delivered,
+      districts: DISTRICTS.map((d) => ({
+        id: d.id,
+        tokenId: d.tokenId,
+        need: d.need,
+        have: T.delivered[d.tokenId] ?? 0,
+        lit: T.litAt[d.id] !== undefined,
+        litAt: T.litAt[d.id] ?? null,
+      })),
+      client: { need: STORY.clientNeed, have: T.qmCores, revealed, revealedAt: T.revealedAt },
+      harbormaster: { strength, recentCores, bonusDrones: Math.floor(strength / STORY.strengthPerDrone) },
+    };
+  }
+
+  /** forceAct's demo states. Times are before `at`, so the acts read as reached earlier today. */
+  function forceAct(act: 1 | 2 | 3, at: number) {
+    const MIN = 60_000;
+    const town: Record<1 | 2 | 3, TownState> = {
+      1: { delivered: { copper: 14, chips: 9, meds: 9, fuel: 4, core: 3 }, litAt: {}, qmCores: 3, revealedAt: null, hm: { milli: 0, at } },
+      2: {
+        delivered: { copper: 31, chips: 22, meds: 17, fuel: 11, core: 5 },
+        litAt: { clinic: at - 3 * HOUR, generators: at - 35 * MIN },
+        qmCores: 5,
+        revealedAt: null,
+        hm: { milli: 0, at },
+      },
+      3: {
+        delivered: { copper: 48, chips: 35, meds: 24, fuel: 16, core: 13 },
+        litAt: { clinic: at - 9 * HOUR, generators: at - 4 * HOUR },
+        qmCores: 13,
+        revealedAt: at - 50 * MIN,
+        // Five cores sold since the reveal, decayed: strength 62, two extra drones a wave.
+        hm: { milli: 6_200, at },
+      },
+    };
+    S.town = town[act];
+    const lines: LedgerEvent[] = [];
+    const line = (kind: LedgerKind, when: number | null | undefined, text: string) => when != null && lines.push({ kind, at: when, account: MOCK_CONTRACT, text });
+    line("district", S.town.litAt.clinic, TOWN_LINES.clinic);
+    line("district", S.town.litAt.generators, TOWN_LINES.generators);
+    line("act", S.town.litAt.generators, TOWN_LINES.act2);
+    line("act", S.town.revealedAt, TOWN_LINES.reveal);
+    // The ledger's other lines stay; the town's are replaced by the forced act's, in time order.
+    S.recent = [...lines.reverse(), ...S.recent.filter((e) => e.kind !== "district" && e.kind !== "act")].sort((x, y) => y.at - x.at).slice(0, MARKET.maxRecent);
   }
 
   function doBuy(actor: string, id: BrokerId, g: GearId, amount: number, at: number) {
@@ -1040,6 +1224,12 @@ export function createMockChain(seed = 1, opts: MockOptions = {}): MockChain {
     }
   };
 
+  /** What other players go out of their way for: a dark district's cargo, then (in Act II) the client's cores. */
+  function wantedCargo(): Set<CargoId> {
+    const dark = DISTRICTS.filter((d) => S.town.litAt[d.id] === undefined).map((d) => d.tokenId);
+    return new Set<CargoId>(dark.length ? dark : S.town.revealedAt === null ? ["core"] : []);
+  }
+
   function npcRun(a: AccountState, at: number, survive: boolean): boolean {
     if (a.lastRunAt !== null && at - a.lastRunAt < 12 * 60_000) return false;
     const gear = GEAR.filter((g) => bal(a, g) > 0);
@@ -1049,7 +1239,9 @@ export function createMockChain(seed = 1, opts: MockOptions = {}): MockChain {
       const opened: number[] = [];
       let weight = 0;
       const want = 1 + Math.floor(rand(S) * 4);
-      for (const c of shuffle(S, [...m.containers])) {
+      // Containers holding what the town wants are opened first.
+      const wanted = wantedCargo();
+      for (const c of shuffle(S, [...m.containers]).sort((x, y) => Number(wanted.has(y.tokenId)) - Number(wanted.has(x.tokenId)))) {
         const w = c.amount * ITEMS[c.tokenId].weight;
         if (opened.length < want && weight + w <= RULES.carryLimit) {
           opened.push(c.spot);
@@ -1072,13 +1264,24 @@ export function createMockChain(seed = 1, opts: MockOptions = {}): MockChain {
   function npcSell(a: AccountState, at: number): boolean {
     const held = CARGO.filter((c) => bal(a, c) > 0);
     if (!held.length) return npcRun(a, at, true);
-    const c = pickOne(S, held);
+    // The town's need pulls cargo to the dock: while a district is dark, other players mostly bring what it needs,
+    // and once the lights are on, the Quartermaster's unnamed client is buying cores hard.
+    const wanted = wantedCargo();
+    const needed = held.filter((c) => wanted.has(c));
+    let c = needed.length && rand(S) < 0.7 ? pickOne(S, needed) : pickOne(S, held);
+    // Once the client is known, half the time they won't sell him a core (the commons, played both ways).
+    if (c === "core" && S.town.revealedAt !== null && rand(S) < 0.5) {
+      const other = held.filter((x) => x !== "core");
+      if (!other.length) return false;
+      c = pickOne(S, other);
+    }
     const open = BROKER_IDS.filter((id) => BROKERS[id].buys.includes(c) && S.brokers[id].open);
     if (!open.length) return false;
     const best = open.sort((x, y) => bidPrice(c, S.brokers[y].stock[c] ?? 0, S.brokers[y].stance) - bidPrice(c, S.brokers[x].stock[c] ?? 0, S.brokers[x].stance))[0];
     // Other players hold out rather than sell for scraps.
     if (bidPrice(c, S.brokers[best].stock[c] ?? 0, S.brokers[best].stance) < ITEMS[c].base * HOLD_OUT) return false;
-    const n = 1 + Math.floor(rand(S) * Math.min(3, bal(a, c)));
+    // What a dark district needs goes in whole; anything else in ones, twos and threes.
+    const n = needed.includes(c) ? bal(a, c) : 1 + Math.floor(rand(S) * Math.min(3, bal(a, c)));
     return attemptNpc(() => doSell(a.accountId, best, c, n));
   }
 
@@ -1189,6 +1392,11 @@ export function createMockChain(seed = 1, opts: MockOptions = {}): MockChain {
     if (opts.warmupSeconds) ambient(opts.warmupSeconds);
     save();
   }
+  // The demo switch wins over whatever was saved, on every load that asks for it.
+  if (opts.act) {
+    forceAct(opts.act, now());
+    save();
+  }
 
   const reject = (e: unknown) => Promise.reject(e instanceof Error ? e : new Error(String(e)));
 
@@ -1211,6 +1419,13 @@ export function createMockChain(seed = 1, opts: MockOptions = {}): MockChain {
     advice: (id) => policy(broker(id), now()),
     ambient,
     recoverWreck,
+    forceAct(act) {
+      forceAct(act, now());
+      save();
+    },
+    async town() {
+      return townView(now());
+    },
 
     async profile(accountId) {
       const a = S.accounts[accountId];

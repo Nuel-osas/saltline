@@ -3,7 +3,7 @@
 // without an economy.
 import { createTestnetChain } from "./chain";
 import { type EconomyConfig, readConfig } from "./config";
-import { type MockChain, createMockChain, createMockWallet } from "./mock";
+import { type MockChain, createMockChain, createMockWallet, mockActParam } from "./mock";
 import { startSalvage } from "./salvage";
 import { startStory } from "./story";
 import type { Economy } from "./types";
@@ -27,7 +27,9 @@ const AMBIENT_TICK = 3;
 /** The chain and wallet for this config: the offline mock, or testnet with the guest wallet. */
 export function buildEconomy(cfg: EconomyConfig): { economy: Economy; mock: MockChain | null } {
   if (cfg.mode === "mock") {
-    const mock = createMockChain(cfg.mockSeed, { warmupSeconds: 240 });
+    // ?act=1|2|3 puts the offline town at that act for screenshots and demos (mock only; testnet ignores it).
+    const act = typeof location === "undefined" ? null : mockActParam(location.search);
+    const mock = createMockChain(cfg.mockSeed, { warmupSeconds: 240, act });
     return { economy: { chain: mock, wallet: createMockWallet(mock), manifest: null, carried: {} }, mock };
   }
   let wallet: GuestWallet | null = null;

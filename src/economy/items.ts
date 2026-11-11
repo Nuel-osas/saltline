@@ -18,10 +18,23 @@ export const ITEMS: Record<TokenId, ItemInfo> = {
 export const CARGO: CargoId[] = ["copper", "meds", "chips", "fuel", "core"];
 export const GEAR: GearId[] = ["plate", "mag", "cutter"];
 
-export const BROKERS: Record<BrokerId, { name: string; buys: CargoId[]; sells: GearId[]; blurb: string }> = {
-  moss: { name: "Moss", buys: ["copper", "chips"], sells: ["cutter"], blurb: "Scrap metal. Thinks in tonnes, hates waste." },
-  ines: { name: "Ines", buys: ["meds", "fuel"], sells: ["plate"], blurb: "Cold chain and fuel. Cautious, holds cash." },
-  qm: { name: "Quartermaster", buys: ["core", "fuel"], sells: ["mag"], blurb: "Buys relay cores for the client. Pays well, spends fast." },
+/** The brokers, with their blurbs from docs/STORY.md → Copy across the game. */
+export const BROKERS: Record<BrokerId, { name: string; buys: CargoId[]; sells: GearId[]; blurb: string; blurbRevealed?: string }> = {
+  moss: { name: "Moss", buys: ["copper", "chips"], sells: ["cutter"], blurb: "Rebuilding the sea wall from what you drag out. Thinks in tonnes, hates waste." },
+  ines: {
+    name: "Ines",
+    buys: ["meds", "fuel"],
+    sells: ["plate"],
+    blurb: "Runs the clinic's stores and keeps the generators turning. Spends the clinic's money like it's hers to lose.",
+  },
+  qm: {
+    name: "Quartermaster",
+    buys: ["core", "fuel"],
+    sells: ["mag"],
+    blurb: "Buys relay cores for a client he won't name. Pays better than anyone.",
+    // once the town's ledger has named his client (TownView.client.revealed)
+    blurbRevealed: "Buying for the Harbormaster. Still pays better than anyone.",
+  },
 };
 
 /** The run rules both sides enforce (the contract checks them; the game shows them). */

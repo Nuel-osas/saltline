@@ -7,6 +7,8 @@ import {
   type RawOutcome,
   createEventPoller,
   createTestnetChain,
+  isMethodNotFound,
+  METHOD_NOT_FOUND,
   parsePanic,
 } from "../src/economy/chain";
 import { TESTNET_EXPLORER_TX } from "../src/economy/config";
@@ -173,6 +175,110 @@ describe("views: wire mapping", () => {
     expect((await chain.leaderboard()).netWorth).toEqual([{ accountId: "rook.testnet", callsign: "ROOK", value: 900 }]);
     expect((await chain.simulate(1, 1, 1))[0].brokers.qm).toEqual({ open: true, scrip: 1500, bids: { copper: 60 }, stock: { copper: 12 } });
     expect(await chain.recent(10)).toEqual([{ kind: "sale", at: 5, account: "rook.testnet", callsign: "ROOK", text: "ROOK sold 3 coils to Moss for 141." }]);
+  });
+
+  it("maps the town from snake_case and U128 strings, skipping a district it doesn't know", async () => {
+    const wire = {
+      act: 3,
+      delivered: { meds: "17", fuel: "11", core: "12", copper: "40", unobtainium: "3" },
+      districts: [
+        { id: "clinic", token_id: "meds", need: "15", have: "17", lit: true, lit_at: 1700 },
+        { id: "generators", token_id: "fuel", need: "10", have: "11", lit: true, lit_at: 1800 },
+        { id: "cannery", token_id: "copper", need: "30", have: "40", lit: true, lit_at: 1900 },
+      ],
+      client: { need: "8", have: "12", revealed: true, revealed_at: 2000 },
+      harbormaster: { strength: 62, recent_cores: "6200", bonus_drones: 2 },
+    };
+    const { chain } = setup({ views: { town: () => wire } });
+    expect(await chain.town()).toEqual({
+      act: 3,
+      delivered: { meds: 17, fuel: 11, core: 12, copper: 40 },
+      districts: [
+        { id: "clinic", tokenId: "meds", need: 15, have: 17, lit: true, litAt: 1700 },
+        { id: "generators", tokenId: "fuel", need: 10, have: 11, lit: true, litAt: 1800 },
+      ],
+      client: { need: 8, have: 12, revealed: true, revealedAt: 2000 },
+      harbormaster: { strength: 62, recentCores: 6200, bonusDrones: 2 },
+    });
+    // Act I: optional times arrive as null
+    const dark = setup({
+      views: {
+        town: () => ({
+          ...wire,
+          act: 1,
+          districts: [{ id: "clinic", token_id: "meds", need: "15", have: "4", lit: false, lit_at: null }],
+          client: { need: "8", have: "2", revealed: false, revealed_at: null },
+          harbormaster: { strength: 0, recent_cores: "0", bonus_drones: 0 },
+        }),
+      },
+    });
+    const t = await dark.chain.town();
+    expect(t.districts).toEqual([{ id: "clinic", tokenId: "meds", need: 15, have: 4, lit: false, litAt: null }]);
+    expect(t.client).toEqual({ need: 8, have: 2, revealed: false, revealedAt: null });
+  });
+
+  it("rejects a town it can't read exactly, instead of showing an act or a strength it made up", async () => {
+    const good = {
+      act: 1,
+      delivered: {},
+      districts: [],
+      client: { need: "8", have: "0", revealed: false, revealed_at: null },
+      harbormaster: { strength: 0, recent_cores: "0", bonus_drones: 0 },
+    };
+    const bad: Record<string, unknown>[] = [
+      { act: 4 },
+      { act: "2" },
+      { client: { need: "8", have: 1.5, revealed: false } },
+      { harbormaster: { strength: 101, recent_cores: "0", bonus_drones: 0 } },
+      { harbormaster: { strength: 50, recent_cores: "0", bonus_drones: 9 } },
+      { districts: [{ id: "clinic", token_id: "meds", need: "15", have: "x", lit: false }] },
+      { districts: [{ id: "clinic", token_id: "plate", need: "15", have: "1", lit: false }] },
+    ];
+    for (const b of bad) {
+      const { chain } = setup({ views: { town: () => ({ ...good, ...b }) } });
+      await expect(chain.town()).rejects.toThrow(/^town: /);
+    }
+  });
+
+  it("rejects cleanly with METHOD_NOT_FOUND, without retrying, when the contract has no town view yet", async () => {
+    // The text testnet RPCs answer with today (11 Nov 2026) for `town` on saltline.testnet, as near-kit wraps it.
+    const missing = new FunctionCallError("saltline.testnet", "town", "wasm execution failed with error: MethodResolveError(MethodNotFound)");
+    const { chain, viewCalls } = setup({
+      views: {
+        town: () => {
+          throw missing;
+        },
+      },
+    });
+    const err = await chain.town().then(
+      () => null,
+      (e: Error & { code?: string; cause?: unknown }) => e,
+    );
+    expect(err).toBeInstanceOf(Error);
+    expect(err!.code).toBe(METHOD_NOT_FOUND);
+    expect(err!.message).toBe("town: the contract has no town view yet");
+    expect(err!.cause).toBe(missing);
+    expect(viewCalls).toHaveLength(1);
+    // A node that sends it as a structured CONTRACT_EXECUTION_ERROR is read the same way.
+    const structured = Object.assign(new Error("Contract execution failed: saltline.testnet.town"), {
+      code: "CONTRACT_EXECUTION_ERROR",
+      details: { vm_error: "MethodResolveError(MethodNotFound)" },
+    });
+    expect(isMethodNotFound(structured)).toBe(true);
+    expect(isMethodNotFound(new FunctionCallError("saltline.testnet", "sell", "Smart contract panicked: E_FUNDS: Not enough"))).toBe(false);
+    expect(isMethodNotFound(null)).toBe(false);
+  });
+
+  it("keeps the town's ledger lines: a district relit and the act moving on", async () => {
+    const { chain } = setup({
+      views: {
+        recent: () => [
+          { kind: "act", at: 9, account: "saltline.testnet", text: "The Quartermaster's client is the Harbormaster." },
+          { kind: "district", at: 8, account: "saltline.testnet", text: "The clinic's lights are back on." },
+        ],
+      },
+    });
+    expect((await chain.recent(10)).map((e) => e.kind)).toEqual(["act", "district"]);
   });
 
   it("retries a view through transient failures, then rejects rather than returning a default", async () => {

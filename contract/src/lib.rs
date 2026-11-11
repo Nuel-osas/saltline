@@ -8,6 +8,8 @@
 //! - `runs.rs`: start_run, extract, die, manifests and wrecks
 //! - `market.rs`: sell, buy, invest, listings, broker calls, the broker board and the leaderboard
 //! - `sim.rs`: simulate
+//! - `town.rs`: the town's arc (docs/STORY.md): deliveries, districts, acts and the Harbormaster, kept under its own
+//!   storage key so the root state's layout is unchanged
 //!
 //! Integers only: amounts are whole scrip in `u128`, times are block milliseconds in `u64`.
 
@@ -27,6 +29,7 @@ pub mod policy;
 pub mod pricing;
 pub mod runs;
 pub mod sim;
+pub mod town;
 
 #[cfg(test)]
 mod tests;

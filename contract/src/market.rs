@@ -200,6 +200,7 @@ impl Saltline {
     // -------------------------------------------------------------------------------------------------------------
 
     /// Sell cargo to a broker at its bid, priced unit by unit. Refused whole if the broker can't cover it.
+    /// Every unit sold is delivered to the town (`town.rs`).
     pub fn sell(&mut self, broker: String, token_id: String, amount: U128) -> Paid {
         let ix = self.caller_player();
         let b = Self::broker_from_id(&broker);
@@ -243,6 +244,8 @@ impl Saltline {
             text,
             near_sdk::serde_json::json!({ "broker": BROKERS[b].id, "token_id": ITEMS[t].id, "amount": U128(n), "paid": U128(paid) }),
         );
+        // A sale to a broker is a delivery to the town (town.rs); it may light a district or start an act.
+        self.deliver(ix, b, t, n);
         self.review_broker(b);
         Paid { paid: U128(paid) }
     }
