@@ -7,7 +7,7 @@
 /* ======================================================================  frame  */
 #app.dk-on .menu { opacity: 0; pointer-events: none !important; transition: opacity .25s ease; }
 .dk { --dk-cold: #9cc4d8; --dk-warn: #ffc977; --dk-slate: #0e1113; --dk-pad: max(var(--gl), 2.4vw); --dk-padr: max(var(--gr), 2.4vw);
-  position: absolute; inset: 0; z-index: 20; pointer-events: auto; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); color: var(--bone); font-family: var(--f-label);
+  position: absolute; inset: 0; z-index: 20; pointer-events: auto; overflow: clip; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); color: var(--bone); font-family: var(--f-label);
   opacity: 0; transition: opacity .26s ease; -webkit-user-select: none; user-select: none; }
 .dk[hidden], .dk [hidden] { display: none !important; }
 .dk.on { opacity: 1; }
