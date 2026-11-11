@@ -154,7 +154,8 @@ export function createFakeChain(opts: FakeOptions = {}): FakeChain {
     sold: {},
     shares: new Map(),
     memo,
-    closedAt: open ? 0 : now() - 40 * 60_000,
+    // Counted from page load, not from the seeded "40 min ago", so the player gets the first go at reopening.
+    closedAt: open ? 0 : now(),
   });
   const brokers: Record<BrokerId, BrokerState> = {
     moss: mkBroker("moss", true, 1240, 96, { copper: 22, chips: 7 }, "Too much copper in the shed. Shipped 18 coils at 35 and cut the stance."),
