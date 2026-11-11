@@ -6,7 +6,7 @@
 //   node scripts/e2e-testnet.mjs [http://127.0.0.1:5293] [--shots DIR]
 //
 // It spends testnet NEAR: the faucet funds one new account (0.1 NEAR) per run.
-import { chromium } from "/Users/emmanuelosadebe/pier-pressure/node_modules/playwright-core/index.mjs";
+import { launch } from "./browser.mjs";
 
 const base = process.argv.find((a) => a.startsWith("http")) || "http://127.0.0.1:5293";
 const shotsAt = process.argv.indexOf("--shots");
@@ -17,11 +17,7 @@ const check = (ok, what, detail = "") => {
   if (!ok) failed++;
 };
 
-const browser = await chromium.launch({
-  executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  headless: true,
-  args: ["--use-angle=metal", "--ignore-gpu-blocklist", "--enable-gpu"],
-});
+const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 const outside = new Set();
