@@ -1,11 +1,28 @@
 # Saltline
 
-> The port's security net has gone feral. Cut its three uplinks. Reach the boat. Bring back what you can carry.
+> The port's machine kept the only ledger. Then it locked the gates. Cut its uplinks, haul out the town's cargo,
+> reach the boat.
 
-Saltline is a first-person shooter in the browser with a player-driven economy on NEAR. You haul cargo out of a
-container terminal overrun by its own security drones and sell it at the dock. The three brokers who buy it are NPCs
-with their own NEAR accounts. Their prices come from what every player has sold, their reasons are on the price
-tag, and they can go broke.
+Saltline is a first-person shooter in the browser with a player-driven economy on NEAR.
+
+**The story.** For ten years an AI called the Harbormaster ran the port of Saltline and kept its only ledger: every
+crate, every wage, every price. Last winter it locked the gates, turned its drones on the town and froze the town's
+medicine, fuel and copper inside. You are a Breacher. At dawn you cut its uplinks, haul out what you can carry, and
+sell it at the dock, where the town keeps an **open ledger** that anyone can read and nobody can quietly change.
+That ledger is NEAR.
+
+The three brokers who buy your cargo are NPCs with their own NEAR accounts. Their prices come from what every player
+has sold, their reasons are on the price tag, and they can go broke.
+
+Every delivery also moves one story that all players share:
+1. **Lockdown.** The town is dark.
+2. **Lights on the Water.** Once enough meds and fuel are delivered, the clinic and the generators come back. The
+   town's lights come on across the water in every player's game.
+3. **The Client.** When enough relay cores reach the Quartermaster, his client turns out to be the Harbormaster
+   itself, buying back its own cores. From then on, cores still pay best, but every core sold rebuilds the
+   Harbormaster, and it fields more drones against **every** player. The commons dilemma is the endgame.
+
+The full story bible is in [`docs/STORY.md`](docs/STORY.md).
 
 - **Play:** https://saltline-lac.vercel.app (NEAR testnet; no wallet or install needed)
 - **Built for:** NEAR HACKATHON, November 2026, track 09 Games With Real Economies
@@ -17,15 +34,16 @@ tag, and they can go broke.
 | # | Do | See |
 | --- | --- | --- |
 | 1 | Open https://saltline-lac.vercel.app | The title screen. The small dock board at the top right shows the brokers' live prices, read from the contract. |
-| 2 | Press **DEPLOY** | A "Sign on" card. Type a callsign and press **Claim pass and deploy**. |
-| 3 | Wait a moment | The pass is stamped "150 scrip" and the run starts. There's no wallet popup and no seed phrase: the faucet created a NEAR testnet account for you and registered your callsign. |
+| 2 | Press **DEPLOY** | A "Sign on" card from the Dock Office. Type a callsign and press **Claim pass and deploy**. |
+| 3 | Wait a moment | The pass is stamped "150 scrip". There's no wallet popup and no seed phrase: the faucet created a NEAR testnet account for you and registered your callsign. Then the five-card briefing tells the story (Esc skips it; **BRIEFING** on the title replays it), and the run starts. |
 | 4 | Listen to the radio, then look at the bottom left and the compass | "Manifest's in. 8 sealed boxes…" Eight containers are marked, with a cargo readout (`CARGO 0/6`). |
 | 5 | Walk to a marked container and hold **E** | The seal is cut and the cargo is added (e.g. `MEDS ×1`). `PACE` drops: each unit of weight slows you by 6%. |
 | 6 | Cut relays A, B and C (hold **E** at each), then reach the boat | The debrief shows **Haul**, **Haul value** and a **Ledger** link to your `extract` transaction on nearblocks. The cargo is now NEP-245 tokens in your account. |
 | 7 | Press **DOCKSIDE** on the debrief | Three broker stalls. Hover a price to see the broker's reason, e.g. "Short: 9 coils against a target of 12. Paying over base." |
 | 8 | Press **SELL 1** on cargo you hold | The split-flap price rolls down, your scrip rolls up, and your sale appears on the ledger ticker at the bottom. Every other player's sales move the same prices. |
 | 9 | Open the **THE WEEK** tab | A simulated week of the market (the contract's free `simulate` view) plays in about a minute. Shaded bands are brokers that went broke and shut. |
-| 10 | Die with cargo once | The dead card says `Cargo lost: … left as a wreck`. Your wreck appears in other players' runs with your callsign on it. Whoever recovers it keeps 70%, and 30% comes back to you, which the Dockside reports under **While you were away**. |
+| 10 | Open the **TOWN** tab | The shared story on the open ledger: the act, the clinic's and generators' progress (`n/15 meds`, `n/10 fuel`), the client (`n/8 cores`), and the Harbormaster's strength meter. Sell meds or fuel and watch your delivery count. |
+| 11 | Die with cargo once | The dead card says `Cargo lost: … left as a wreck`. Your wreck appears in other players' runs with your callsign on it. Whoever recovers it keeps 70%, and 30% comes back to you, which the Dockside reports under **While you were away**. |
 
 Controls: WASD and the mouse (click to capture it), left mouse to fire, right mouse to aim, R to reload, E to use, Space
 to jump, Shift to sprint, C to crouch, Esc to pause. There are on-screen controls on touch screens.
@@ -34,18 +52,20 @@ to jump, Shift to sprint, C to crouch, Esc to pause. There are on-screen control
 
 ```sh
 npm ci
-npm run check              # typecheck, 231 tests (Vitest), production build
+npm run check              # typecheck, 300 tests (Vitest), production build
 npm run verify:testnet     # reads the live contract, no wallet needed: each broker's prices and reasons, its agent's last
                            # note, the ledger, the leaderboard, a simulated week, the faucet's balance
-cd contract && cargo test  # 35 contract tests (pricing, closing and reopening, runs, wrecks, market, limits, simulate)
+cd contract && cargo test  # 46 contract tests (pricing, closing and reopening, runs, wrecks, market, limits, simulate, the town)
 ```
 
 **Offline:** run `npm run dev`, then open http://127.0.0.1:5280/?mock=1. The whole economy runs in memory, with simulated
-players, so every screen works without the chain.
+players, so every screen works without the chain. Add `&act=2` or `&act=3` to see the town lit or the Harbormaster
+revealed, with its extra drones, without waiting for the shared arc.
 
 **Browser smoke test:** run `npm run dev -- --port 5290`, then `node scripts/smoke-salvage.mjs`. It makes 17 checks:
 manifest, seal, weight, wreck, extract, death, 60 fps, and the baseline unchanged with `?noeconomy=1`. It uses Chrome
-from `CHROME_PATH` or the usual install path.
+from `CHROME_PATH` or the usual install path. `node scripts/smoke-story.mjs` (dev server on 5295) checks the story in
+30 steps: the briefing, the radio, the Harbormaster's channel, extra drones at Act III, and the town's lights.
 
 ## On chain (NEAR testnet)
 
@@ -67,6 +87,7 @@ from `CHROME_PATH` or the usual install path.
 | The Quartermaster's agent changes its stance from GitHub Actions | [3ENE9itW…](https://testnet.nearblocks.io/txns/3ENE9itWsD5WcnQm2dcQXSkgUnHoVjSwQoeuZYveerMB) |
 | Moss ships surplus to the freighter (`broker_export`, signed by `moss`) | [ujKRZMmC…](https://testnet.nearblocks.io/txns/ujKRZMmCVBH96ycaFgCshxz5yQsWLRQub9MKFxWhvBJ) |
 | **Refused:** a player tries to ship Moss's stock and gets `E_NOT_BROKER` | [3vzTTpaF…](https://testnet.nearblocks.io/txns/3vzTTpaFFJ8MA9QnsLDA6SAD7DX57hzLP8KT7q9RdHMz) |
+| The story upgrade: the contract's code was redeployed with every existing view unchanged | [3Tr1JW4v…](https://testnet.nearblocks.io/txns/3Tr1JW4vZJ1c6ReHjGKWFN4MBY9AVZeBqUppDXw6fexo) |
 | `simulate` (168 h × 30 traders) as a transaction, to measure it: 102.9 Tgas | [F4VJyqJV…](https://testnet.nearblocks.io/txns/F4VJyqJV9vjxk5apksVjmFHaxqfZPFXAwp5RZ2abkRVF) |
 
 ## What NEAR does here that a game server couldn't
@@ -90,11 +111,12 @@ src/economy/           the economy layer, TypeScript, attached to the game's sha
   chain.ts, wallet.ts  NEAR client (near-kit): call queue, retries without double spends, guest wallet
   mock.ts              the same economy in memory, for offline play and tests
   salvage/             in the run: sealed containers, carried weight, wrecks, HUD, debrief rows
-  dockside/            between runs: dock pass, stalls, hold, ledger, player market, board, the week, away slip
-contract/              Rust (near-sdk 5.29.1): mt.rs (NEP-245), pricing.rs, policy.rs, runs.rs, market.rs, sim.rs
+  dockside/            between runs: dock pass, stalls, hold, ledger, player market, board, the week, the town, away slip
+  story/               the briefing, Control's and the Harbormaster's radio, waves scaled by its strength, the town's lights
+contract/              Rust (near-sdk 5.29.1): mt.rs (NEP-245), pricing.rs, policy.rs, runs.rs, market.rs, sim.rs, town.rs
 agents/                the broker agents: read the board, decide in character, sign their own moves
 server/faucet.ts       the dock pass faucet (api/faucet.ts on Vercel): validates, rate-limits, fails closed
-docs/                  ECONOMY.md (the design, written before the code) and CONTRACT_API.md (the wire format)
+docs/                  STORY.md (the story bible), ECONOMY.md (the design, written before the code), CONTRACT_API.md
 ```
 
 - **The loop:** every 30 seconds you fight and cut seals. A run takes about 5 minutes: cut three relays and reach the
@@ -125,6 +147,8 @@ deploying the contract, and `agents/README.md` covers running the brokers.
   registration per account and never funding an account that already exists.
 - **Not tested:** Safari, Firefox, touch devices, gamepads, and more than a handful of players at once (the contract
   caps profiles at 500).
+- **Vercel's checkpoint:** a burst of scripted requests can make Vercel show its security checkpoint (HTTP 403) for a
+  few minutes. If you see it, wait and reload, or run the game locally.
 
 ## Hackathon disclosure
 
@@ -136,8 +160,8 @@ deploying the contract, and `agents/README.md` covers running the brokers.
   [`pre-hackathon...main`](https://github.com/Nuel-osas/saltline/compare/pre-hackathon...main) was built from 11 Nov
   2026: the contract, the economy layer, the agents, the faucet, the docs and the tests. Each piece came in as its
   own pull request.
-  - The only changes to the baseline game are 7 extension points in `src/game.js`, each marked `// ext:` (+10/−3
-    lines).
+  - The only changes to the baseline game's code are in `src/game.js` (+22/−11 lines): extension points marked
+    `// ext:`, plus the new premise and radio strings marked `story:`.
   - With `?noeconomy=1`, the baseline plays exactly as before.
 - **AI-generated code.** The hackathon work was written with Claude Code (Anthropic), with several agents working in
   parallel branches under review. The pull requests record what each one did.
