@@ -36,6 +36,8 @@ export interface Profile {
   deaths: number;
   /** The best single run's cargo value at the bids when it was extracted. */
   bestHaul: number;
+  /** The run still open for this player, if any (lets a reload resume it). */
+  activeRun?: number | null;
 }
 
 /** A price with the reason the broker gives for it (shown in the Dockside tooltip). */
@@ -150,6 +152,11 @@ export interface TxResult {
   txHash?: string;
   /** Short, player-facing. */
   error?: string;
+  /** The contract's error code (`E_…`) when it refused the call. */
+  code?: string;
+  /** The transaction may have landed but couldn't be confirmed: show it as pending, never as failed, and don't
+   * resend it (the player might pay twice). */
+  pending?: boolean;
 }
 
 /** The game contract, as the client sees it. Implemented by chain.ts (testnet) and mock.ts (in memory). */
@@ -168,16 +175,22 @@ export interface Chain {
   recent(limit: number): Promise<LedgerEvent[]>;
   leaderboard(): Promise<Leaderboard>;
   simulate(hours: number, traders: number, seed: number): Promise<SimPoint[]>;
+  /** A run's manifest, or null when there is no such run. */
+  manifest(runId: number): Promise<Manifest | null>;
 
   // Calls: signed by the current wallet in the background, no prompts.
   startRun(gear: GearId[]): Promise<TxResult & { manifest?: Manifest }>;
-  extract(runId: number, opened: number[], wrecks: number[]): Promise<TxResult & { minted?: Amounts<CargoId> }>;
-  die(runId: number, opened: number[], wrecks: number[], spot: number): Promise<TxResult>;
+  extract(
+    runId: number,
+    opened: number[],
+    wrecks: number[],
+  ): Promise<TxResult & { minted?: Amounts<CargoId>; haulValue?: number }>;
+  die(runId: number, opened: number[], wrecks: number[], spot: number): Promise<TxResult & { wreckId?: number | null }>;
   sell(broker: BrokerId, tokenId: CargoId, amount: number): Promise<TxResult & { paid?: number }>;
   buy(broker: BrokerId, tokenId: GearId, amount: number): Promise<TxResult & { cost?: number }>;
-  invest(broker: BrokerId, amount: number): Promise<TxResult>;
+  invest(broker: BrokerId, amount: number): Promise<TxResult & { shares?: number; reopened?: boolean }>;
   list(tokenId: CargoId | GearId, amount: number, price: number): Promise<TxResult & { id?: number }>;
-  buyListing(id: number): Promise<TxResult>;
+  buyListing(id: number): Promise<TxResult & { paid?: number }>;
   cancelListing(id: number): Promise<TxResult>;
 }
 
@@ -202,4 +215,9 @@ export interface Economy {
   manifest: Manifest | null;
   /** Cargo carried in this run, by token. */
   carried: Amounts<CargoId>;
+  /**
+   * Gear equipped for the next run, set by the Dockside. The salvage module applies it at the run's reset (through
+   * G.ext.gear), sends it to startRun, and empties the list once the chain confirms the run burned it.
+   */
+  equipped?: GearId[];
 }
