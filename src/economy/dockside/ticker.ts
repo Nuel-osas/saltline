@@ -25,7 +25,6 @@ export function createTicker(ctx: Ctx) {
 
   let events: LedgerEvent[] = [];
   const seen = new Set<string>();
-  const fresh: LedgerEvent[] = [];
   let cursor = 0;
   let offset = 0;
   let paused = false;
@@ -58,8 +57,6 @@ export function createTicker(ctx: Ctx) {
   }
 
   function next(): HTMLElement | null {
-    const f = fresh.shift();
-    if (f) return item(f, true);
     if (!events.length) return null;
     const e = events[cursor % events.length];
     cursor = (cursor + 1) % events.length;
@@ -122,8 +119,12 @@ export function createTicker(ctx: Ctx) {
       cursor = 0;
       return;
     }
-    // Newest first, ahead of the loop.
-    fresh.push(...incoming);
+    // New lines jump the queue: slot them in just past the right edge, so they crawl into view within seconds
+    // instead of behind everything already laid out off-screen.
+    if (!incoming.length) return;
+    const vw = view.clientWidth;
+    const after = [...track.children].find((c) => (c as HTMLElement).offsetLeft + offset > vw) ?? null;
+    for (const e of incoming) track.insertBefore(item(e, true), after);
   }
 
   return {
