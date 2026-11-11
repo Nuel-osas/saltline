@@ -6,8 +6,11 @@ import { createSlot, okv, type Ctx } from "./ctx";
 import { h, popDelta, text, toggle } from "./dom";
 import { createFlap, type Flap } from "./flap";
 import { accountUrl, FLOAT_CLOSE, FLOAT_REOPEN, fmt, fmtOr, itemName, pct, UNKNOWN } from "./format";
+import { DILEMMA } from "./town";
 
 const FLOAT_SCALE = 2000;
+/** docs/STORY.md: selling a core after the reveal. */
+export const CORE_HOME = "That core goes home to the Harbormaster.";
 
 interface Row {
   tok: TokenId;
@@ -38,13 +41,17 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
   // ---- sign ----
   const lamp = h("span", { class: "dk-lamp", "data-state": "loading" }, h("i"), h("span", null, "…"));
   const acct = h("span", { class: "dk-acct" });
+  const blurb = h("p", { class: "dk-blurb" }, meta.blurb);
+  // Once the ledger names the Quartermaster's client, his stall says who he's buying for (docs/STORY.md, Act III).
+  const forHm = h("span", { class: "dk-hm-tag", hidden: true }, "Buying for the Harbormaster");
   const sign = h(
     "header",
     { class: "dk-sign" },
     h("i", { class: "dk-awning", "aria-hidden": "true" }),
+    forHm,
     h("div", { class: "dk-sign-row" }, h("span", { class: "dk-stallno" }, `Stall 0${index + 1}`), lamp),
     h("h3", { class: "dk-bname" }, meta.name),
-    h("p", { class: "dk-blurb" }, meta.blurb),
+    blurb,
   );
 
   // ---- price board ----
@@ -96,9 +103,14 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
       h("p", { class: "dk-shutter-n" }, "Investors take a share of every freighter dividend."),
     ),
   );
+  // A core sold to him after the reveal says where it's going while the sale settles and with its result: a strip
+  // across his price board, beside the bid that was pressed (the receipt line sits at the foot of the stall, which a
+  // 720p screen can cut off). A warning, not a modal.
+  const warn = h("p", { class: "dk-hm-warn", role: "status", hidden: true });
   const board = h(
     "div",
     { class: "dk-board" },
+    warn,
     h("div", { class: "dk-board-k" }, h("span", null, "Paying"), h("span", null, "per unit")),
     ...rows.filter((r) => r.kind === "bid").map((r) => r.el),
     h("div", { class: "dk-board-k" }, h("span", null, "Selling")),
@@ -165,9 +177,15 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
   };
   const busy = () => slot.state === "pending";
   slot.onChange = () => update();
+  /** The ledger has named the Quartermaster's client, and this is his stall. Unknown reads as not yet. */
+  const buyingForHm = () => id === "qm" && !!ctx.reads.town && okv(ctx.reads.town)?.client.revealed === true;
+  /** The warning for the sale on the receipt line now, if it was a core going home. */
+  let homeLine: string | null = null;
 
   function sell(c: CargoId, n: number) {
     if (n <= 0) return;
+    if (busy()) return;
+    homeLine = c === "core" && buyingForHm() ? (n === 1 ? CORE_HOME : `Those ${n} cores go home to the Harbormaster.`) : null;
     void ctx.act(slot, {
       pending: `Settling… ${n} ${c} to ${meta.name}`,
       call: () => ctx.chain.sell(id, c, n),
@@ -178,6 +196,8 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
     });
   }
   function buy(g: GearId) {
+    if (busy()) return;
+    homeLine = null;
     void ctx.act(slot, {
       pending: `Settling… buying ${g}`,
       call: () => ctx.chain.buy(id, g, 1),
@@ -216,6 +236,7 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
       const v = view();
       const reopening = v && !v.open && v.scrip + amount >= FLOAT_REOPEN;
       const n = amount;
+      if (!busy()) homeLine = null;
       void ctx.act(slot, {
         pending: `Settling… ${n} scrip into ${meta.name}`,
         call: () => ctx.chain.invest(id, n),
@@ -246,6 +267,17 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
     }
     shutter.setAttribute("aria-hidden", String(state !== "shut"));
     toggle(shutter, "down", state === "shut");
+
+    // the Quartermaster after the reveal
+    const hm = buyingForHm();
+    if (hm) el.dataset.client = "harbormaster";
+    else delete el.dataset.client;
+    forHm.hidden = !hm;
+    text(blurb, hm && meta.blurbRevealed ? meta.blurbRevealed : meta.blurb);
+    // shown while the core sale settles and with its result; gone after a refusal (the core didn't go)
+    const showHome = !!homeLine && (slot.state === "pending" || slot.state === "ok" || slot.state === "unknown");
+    warn.hidden = !showHome;
+    if (showHome) text(warn, homeLine!);
 
     const mine = held("scrip");
     for (const r of rows) {
@@ -318,13 +350,16 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
   }
 
   function paintTip(r: Row, v: BrokerView | null, reason: string | null, price: number | null) {
-    const k = `${v?.open}|${reason}|${price}|${r.was}|${v?.lastMemo}|${v?.stance}|${JSON.stringify(v?.stock)}`;
+    // After the reveal, his core bid carries the dilemma.
+    const dilemma = r.kind === "bid" && r.tok === "core" && buyingForHm();
+    const k = `${v?.open}|${reason}|${price}|${r.was}|${v?.lastMemo}|${v?.stance}|${JSON.stringify(v?.stock)}|${dilemma}`;
     if (r.tip.dataset.k === k) return;
     r.tip.dataset.k = k;
     const stock = r.kind === "bid" && v ? (v.stock[r.tok as CargoId] ?? 0) : null;
     r.tip.replaceChildren(
       h("div", { class: "dk-tip-k" }, `${meta.name} ${r.kind === "bid" ? "pays" : "asks"} · ${itemName(r.tok)}`),
       h("p", { class: "dk-tip-r" }, reason ? `“${reason}”` : `Reason ${UNKNOWN}: the stall couldn't be read.`),
+      ...(dilemma ? [h("p", { class: "dk-tip-hm" }, DILEMMA)] : []),
       h(
         "dl",
         { class: "dk-tip-m" },

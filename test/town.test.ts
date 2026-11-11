@@ -5,7 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDockside, type Dockside, type GameLike } from "../src/economy/dockside";
 import type { Ctx, Read } from "../src/economy/dockside/ctx";
 import { createFakeEconomy } from "../src/economy/dockside/fake";
+import { createPass } from "../src/economy/dockside/pass";
+import { CORE_HOME } from "../src/economy/dockside/stall";
 import { createTown, DILEMMA, REVEAL, UNREACHABLE } from "../src/economy/dockside/town";
+import { BROKERS } from "../src/economy/items";
 import { createMockChain, createMockWallet, MOCK_STORAGE_KEY, type MockChain } from "../src/economy/mock";
 import type { Economy, TownView } from "../src/economy/types";
 
@@ -237,6 +240,14 @@ describe("Town tab in the Dockside", () => {
     expect(q(root, ".dk-town").dataset.act).toBe("1"); // the generators are still dark
   });
 
+  it("doesn't touch the stalls on a chain without a town view", async () => {
+    const eco = createFakeEconomy({ registered: true, latency: 2 });
+    const { root } = await dockOn(eco.chain, eco.wallet);
+    await vi.waitFor(() => expect(q(root, '.dk-stall[data-broker="qm"]').dataset.open).toBe("open"));
+    expect(q(root, '.dk-stall[data-broker="qm"]').dataset.client).toBeUndefined();
+    expect(textOf(root, '.dk-stall[data-broker="qm"] .dk-blurb')).toBe(BROKERS.qm.blurb);
+  });
+
   it("shows unreachable on a chain without a town view, and the stalls carry on", async () => {
     const eco = createFakeEconomy({ registered: true, latency: 2 });
     const { dock, root } = await dockOn(eco.chain, eco.wallet);
@@ -262,5 +273,124 @@ describe("Town tab in the Dockside", () => {
     expect(q(root, ".dk-tw-body").hidden).toBe(true);
     expect(q(root, ".dk-town").dataset.act).toBe("0");
     expect(textOf(root, ".dk-tw-notice")).toContain(UNREACHABLE);
+  });
+});
+
+describe("The story's copy on the stalls and the pass", () => {
+  it("uses docs/STORY.md's broker blurbs", () => {
+    expect(BROKERS.moss.blurb).toBe("Rebuilding the sea wall from what you drag out. Thinks in tonnes, hates waste.");
+    expect(BROKERS.ines.blurb).toBe("Runs the clinic's stores and keeps the generators turning. Spends the clinic's money like it's hers to lose.");
+    expect(BROKERS.qm.blurb).toBe("Buys relay cores for a client he won't name. Pays better than anyone.");
+    expect(BROKERS.qm.blurbRevealed).toBe("Buying for the Harbormaster. Still pays better than anyone.");
+  });
+
+  it("issues the dock pass from the Dock Office, on the open ledger", () => {
+    const chain = createMockChain(5, { storage: null });
+    const pass = createPass({ chain, wallet: createMockWallet(chain), onDone: () => {} });
+    expect(textOf(pass.el, ".m-k")).toBe("Dock Office · Open Ledger");
+    expect(textOf(pass.el, ".dk-pc-ledger")).toBe("Written on the open ledger");
+    expect(textOf(pass.el, ".dk-pc-meta")).toMatch(/^Dock Office · issued /);
+    expect(pass.el.textContent).not.toContain("Port Authority");
+  });
+});
+
+/** A mock town at `act`, with WREN holding `hold`, through a reload of the saved state (as the browser would). */
+async function dockWithHold(act: 1 | 2 | 3, hold: Record<string, number>) {
+  localStorage.clear();
+  const first = createMockChain(5, { storage: localStorage, act });
+  await createMockWallet(first).claim("WREN");
+  const saved = JSON.parse(localStorage.getItem(MOCK_STORAGE_KEY)!);
+  Object.assign(saved.accounts[saved.me].balances, hold);
+  localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(saved));
+  const chain = createMockChain(5, { storage: localStorage });
+  return { chain, ...(await dockOn(chain, createMockWallet(chain))) };
+}
+const qm = (root: ParentNode) => q(root, '.dk-stall[data-broker="qm"]');
+const tipOf = (root: ParentNode, broker: string, tok: string) => {
+  const btn = q(root, `.dk-stall[data-broker="${broker}"] .dk-q[data-tok="${tok}"] .dk-price`);
+  return q(root, `[id="${btn.getAttribute("aria-describedby")}"]`).textContent ?? "";
+};
+
+describe("The Quartermaster after the reveal", () => {
+  it("before it: his own blurb, no tag, no dilemma on his core bid", async () => {
+    const { root } = await mockDock(2);
+    await vi.waitFor(() => expect(textOf(root, ".dk-tab-act")).toBe("II"));
+    await vi.waitFor(() => expect(qm(root).dataset.open).toBe("open"));
+    expect(qm(root).dataset.client).toBeUndefined();
+    expect(q(qm(root), ".dk-hm-tag").hidden).toBe(true);
+    expect(textOf(qm(root), ".dk-blurb")).toBe("Buys relay cores for a client he won't name. Pays better than anyone.");
+    expect(tipOf(root, "qm", "core")).not.toContain(DILEMMA);
+  });
+
+  it("after it: a red tag on his awning, his after-reveal blurb, and the dilemma behind his core bid only", async () => {
+    const { root } = await mockDock(3);
+    await vi.waitFor(() => expect(qm(root).dataset.client).toBe("harbormaster"));
+    const tag = q(qm(root), ".dk-hm-tag");
+    expect(tag.hidden).toBe(false);
+    expect(tag.textContent).toBe("Buying for the Harbormaster");
+    expect(textOf(qm(root), ".dk-blurb")).toBe("Buying for the Harbormaster. Still pays better than anyone.");
+    await vi.waitFor(() => expect(tipOf(root, "qm", "core")).toContain(DILEMMA));
+    expect(tipOf(root, "qm", "fuel")).not.toContain(DILEMMA);
+    // the other brokers are as they were
+    for (const b of ["moss", "ines"]) {
+      expect(q(root, `.dk-stall[data-broker="${b}"]`).dataset.client).toBeUndefined();
+      expect(q(root, `.dk-stall[data-broker="${b}"] .dk-hm-tag`).hidden).toBe(true);
+    }
+    expect(textOf(root, '.dk-stall[data-broker="moss"] .dk-blurb')).toBe(BROKERS.moss.blurb);
+  });
+
+  it("selling him a core says where it goes, while it settles and with the result; fuel says nothing", async () => {
+    const { root } = await dockWithHold(3, { core: 3, fuel: 1 });
+    await vi.waitFor(() => expect(qm(root).dataset.client).toBe("harbormaster"));
+    const warn = q(qm(root), ".dk-hm-warn");
+    const slot = q(qm(root), ".dk-slot");
+    expect(warn.hidden).toBe(true);
+    const sell1 = q<HTMLButtonElement>(qm(root), '.dk-q[data-tok="core"] [data-a="sell1"]');
+    await vi.waitFor(() => expect(sell1.disabled).toBe(false));
+    sell1.click();
+    // settling: the receipt says so, and the warning is already up
+    expect(slot.dataset.state).toBe("pending");
+    expect(warn.hidden).toBe(false);
+    expect(warn.textContent).toBe(CORE_HOME);
+    await vi.waitFor(() => expect(slot.dataset.state).toBe("ok"));
+    expect(slot.textContent).toContain("Sold 1 core");
+    expect(warn.hidden).toBe(false);
+    expect(warn.textContent).toBe("That core goes home to the Harbormaster.");
+    // not a modal: nothing else on the Dockside is blocked
+    expect(root.querySelector('[role="alertdialog"], [aria-modal="true"] [aria-modal="true"]')).toBeNull();
+
+    const all = q<HTMLButtonElement>(qm(root), '.dk-q[data-tok="core"] [data-a="sellall"]');
+    await vi.waitFor(() => expect(all.disabled).toBe(false));
+    all.click();
+    await vi.waitFor(() => expect(slot.textContent).toContain("Sold 2 core"));
+    expect(warn.textContent).toBe("Those 2 cores go home to the Harbormaster.");
+
+    const fuel = q<HTMLButtonElement>(qm(root), '.dk-q[data-tok="fuel"] [data-a="sell1"]');
+    await vi.waitFor(() => expect(fuel.disabled).toBe(false));
+    fuel.click();
+    await vi.waitFor(() => expect(slot.textContent).toContain("Sold 1 fuel"));
+    expect(warn.hidden).toBe(true);
+  });
+
+  it("no warning before the reveal, and none for a sale the dock refused", async () => {
+    const before = await dockWithHold(2, { core: 2 });
+    await vi.waitFor(() => expect(textOf(before.root, ".dk-tab-act")).toBe("II"));
+    const s1 = q<HTMLButtonElement>(qm(before.root), '.dk-q[data-tok="core"] [data-a="sell1"]');
+    await vi.waitFor(() => expect(s1.disabled).toBe(false));
+    s1.click();
+    await vi.waitFor(() => expect(q(qm(before.root), ".dk-slot").dataset.state).toBe("ok"));
+    expect(q(qm(before.root), ".dk-hm-warn").hidden).toBe(true);
+    before.dock.close();
+    document.body.replaceChildren();
+
+    const after = await dockWithHold(3, { core: 1 });
+    await vi.waitFor(() => expect(qm(after.root).dataset.client).toBe("harbormaster"));
+    // the core went elsewhere between the read and the call: the dock refuses, and nothing went home
+    after.chain.sell = async () => ({ ok: false, error: "You've only got 0 relay cores.", code: "E_FUNDS" });
+    const b = q<HTMLButtonElement>(qm(after.root), '.dk-q[data-tok="core"] [data-a="sell1"]');
+    await vi.waitFor(() => expect(b.disabled).toBe(false));
+    b.click();
+    await vi.waitFor(() => expect(q(qm(after.root), ".dk-slot").dataset.state).toBe("error"));
+    expect(q(qm(after.root), ".dk-hm-warn").hidden).toBe(true);
   });
 });

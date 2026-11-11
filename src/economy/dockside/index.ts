@@ -312,7 +312,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
       h(
         "section",
         { class: "dk-gate-card", role: "alertdialog", "aria-labelledby": "dk-gu-h" },
-        h("div", { class: "m-k" }, "Dock office"),
+        h("div", { class: "m-k" }, "Dock Office"),
         h("h2", { class: "dk-pass-h", id: "dk-gu-h" }, "No answer"),
         h("p", { class: "dk-pass-lede" }, `Your pass status is ${UNKNOWN}: the dock office can't be reached right now. Nothing has been charged.`),
         h("div", { class: "m-actions col" }, h("button", { class: "btn primary", type: "button", onclick: () => void checkGate() }, "Try again"), h("button", { class: "btn", type: "button", onclick: () => close() }, "Back")),
