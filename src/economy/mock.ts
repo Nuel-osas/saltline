@@ -719,7 +719,8 @@ export function createMockChain(seed = 1, opts: MockOptions = {}): MockChain {
       S.wrecks.splice(live, 1);
       const home: Amounts<CargoId> = {};
       for (const i of wreck.items) {
-        const finder = Math.floor((i.amount * FINDER_PCT) / 100);
+        // The finder's share rounds half up (docs/ECONOMY.md → Runs on-chain): 1 → 1/0, 2 → 1/1, 3 → 2/1, 6 → 4/2.
+        const finder = Math.floor((i.amount * FINDER_PCT + 50) / 100);
         add(i.tokenId, finder);
         home[i.tokenId] = (home[i.tokenId] ?? 0) + (i.amount - finder);
         credit(wreck.owner, i.tokenId, i.amount - finder);

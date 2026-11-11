@@ -25,14 +25,14 @@ what goes over the wire. Change both sides and this file together.
 |---|---|---|
 | `items` | – | `[{ id, name, kind, weight, base: U128, export: U128?, target: u32? }]` (the table in ECONOMY.md) |
 | `rules` | – | `{ spot_count, containers_per_run, wrecks_per_run, carry_limit, min_run_seconds, per_container_seconds, finder_share_pct, starter_scrip: U128 }` |
-| `profile` | `{ account_id }` | `null` or `{ account_id, callsign, registered_at, runs, extractions, deaths, best_haul: U128, active_run: u64? }` |
+| `profile` | `{ account_id }` | `null` or `{ account_id, callsign, registered_at, runs, extractions, deaths, best_haul: U128, active_run: u64? }`, where `active_run` lets a reload resume a run |
 | `balances` | `{ account_id }` | `{ "<token_id>": U128 }`, with only non-zero balances listed |
 | `mt_balance_of` / `mt_batch_balance_of` / `mt_supply` | as in NEP-245 | as in NEP-245 |
 | `brokers` | – | `[{ id, account_id, name, open, scrip: U128, stance: u32, stock: { "<cargo>": U128 }, bids: [Quote], asks: [Quote], shares: [{ account_id, callsign, shares: U128 }], last_memo: string? }]` |
 | `manifest` | `{ run_id }` | `null` or `Manifest` |
 | `wrecks` | – | `[Wreck]`, newest first, up to 24 |
 | `listings` | – | `[{ id, seller, callsign, token_id, amount: U128, price: U128, at }]` |
-| `recent` | `{ limit }` | `[{ kind, at, account, callsign?, text }]`, newest first, up to 64 kept |
+| `recent` | `{ limit }` | `[{ kind, at, account, callsign?, text }]`, newest first, up to 64 kept. There's no tx hash, because a contract can't read its own; the ticker links to the account's explorer page |
 | `leaderboard` | – | `{ net_worth: [Row], best_haul: [Row], investors: [Row] }`; Row = `{ account_id, callsign, value: U128 }`, top 10 each |
 | `simulate` | `{ hours: u32 ≤ 168, traders: u32 ≤ 30, seed: u64 }` | `[{ hour, brokers: { "<broker>": { open, scrip: U128, bids: { "<cargo>": U128 }, stock: { "<cargo>": U128 } } } }]`, one point per hour |
 | `advice` | `{ broker }` | `{ action: "none" or "export" or "stance", token_id?, amount: U128?, stance: u32?, memo }` (the default policy, used by the agent runner) |

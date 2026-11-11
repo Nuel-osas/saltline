@@ -215,8 +215,8 @@ describe("a run with a manifest", () => {
     expect(document.querySelector(".sv-sec")?.textContent).toContain("settling");
     await flush();
     const rows = [...document.querySelectorAll(".sv-sec .sv-row")].map((r) => r.textContent);
-    // The finder keeps 70% of a wreck, rounded down: one core makes none.
-    expect(rows[0]).toBe("HaulCOPPER ×1");
+    // The finder keeps 70% of a wreck, rounded half up: a lone core is the finder's.
+    expect(rows[0]).toBe("HaulCOPPER ×1CORE ×1");
     expect(rows[1]).toMatch(/^Haul value\d+ scrip$/);
     const a = document.querySelector<HTMLAnchorElement>(".sv-sec a");
     expect(a?.href).toMatch(/^https:\/\/testnet\.nearblocks\.io\/txns\/fake\d+$/);

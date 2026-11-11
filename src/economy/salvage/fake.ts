@@ -1,4 +1,4 @@
-// A small in-memory chain for the salvage lane's own tests and smoke runs, until the shared mock (mock.ts) lands. It
+// A small in-memory chain for the salvage lane's unit tests (the game itself runs on mock.ts or testnet). It
 // implements the whole Chain interface, enforces the run rules the salvage code depends on (manifest indices, each
 // listed once, the carry limit, the finder's share) and records every call so tests can check what was sent.
 import { BROKERS, ITEMS, RULES } from "../items";
@@ -176,6 +176,7 @@ export function createFakeChain(
     recent: async () => [],
     leaderboard: async () => ({ netWorth: [], bestHaul: [], investors: [] }),
     simulate: async () => [],
+    manifest: async (runId: number) => runs.get(runId) ?? null,
 
     startRun(gear: GearId[]) {
       calls.push({ method: "startRun", args: [[...gear]] });
@@ -207,10 +208,10 @@ export function createFakeChain(
             const c = m.containers.find((e) => e.spot === s)!;
             add(c.tokenId, c.amount);
           }
-          // The finder keeps 70%, rounded down: the rounding goes the original owner's way.
+          // The finder keeps 70%, rounded half up (docs/ECONOMY.md → Runs on-chain).
           for (const id of wreckIds)
             for (const it of m.wrecks.find((e) => e.id === id)!.items)
-              add(it.tokenId, Math.floor(it.amount * RULES.finderShare));
+              add(it.tokenId, Math.floor((it.amount * Math.round(RULES.finderShare * 100) + 50) / 100));
           return { ok: true, txHash: tx(), minted };
         },
         { ok: false, error: "Too soon" },
