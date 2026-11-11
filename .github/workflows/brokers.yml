@@ -1,0 +1,64 @@
+# The broker agents' cron (agents/README.md). Every 15 minutes, one round: Moss, Ines and the Quartermaster each read
+# the board on NEAR testnet, decide, and sign their own move with their own key.
+#
+# Repository secrets to add (Settings → Secrets and variables → Actions → Secrets → New repository secret):
+#   BROKER_MOSS_KEY   the ed25519 secret key ("ed25519:...") for moss.saltline.testnet
+#   BROKER_INES_KEY   the ed25519 secret key for ines.saltline.testnet
+#   BROKER_QM_KEY     the ed25519 secret key for qm.saltline.testnet
+#   NEAR_AI_API_KEY   optional: NEAR AI Cloud rewords the memos in character. The moves stay the fixed policy.
+#
+# Optional repository variables (the Variables tab on the same page):
+#   CONTRACT_ID       the game contract (default saltline.testnet)
+#   NEAR_RPC          comma-separated https testnet RPCs (default FastNEAR, then rpc.testnet.near.org)
+#   NEAR_AI_MODEL     a NEAR AI Cloud model id (default Qwen/Qwen3.6-35B-A3B-FP8)
+#
+# A broker whose key is missing is skipped with a warning and the others still run. A run goes red only when some
+# broker's state or outcome is unknown (a failed read, or a transaction that failed or wasn't confirmed).
+name: brokers
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Decide and print, without signing anything
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One round at a time: two runs signing for the same broker would race for its nonce.
+concurrency:
+  group: brokers
+  cancel-in-progress: false
+
+jobs:
+  round:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.4.0
+          cache: npm
+
+      # No install scripts: the only package with one is fsevents (macOS only). The keys aren't in this step's env.
+      - run: npm ci --ignore-scripts
+
+      - name: One broker round
+        timeout-minutes: 5
+        run: node --import ./agents/ts-hook.mjs agents/brokers.ts --once ${{ inputs.dry_run && '--dry-run' || '' }}
+        env:
+          BROKER_MOSS_KEY: ${{ secrets.BROKER_MOSS_KEY }}
+          BROKER_INES_KEY: ${{ secrets.BROKER_INES_KEY }}
+          BROKER_QM_KEY: ${{ secrets.BROKER_QM_KEY }}
+          NEAR_AI_API_KEY: ${{ secrets.NEAR_AI_API_KEY }}
+          CONTRACT_ID: ${{ vars.CONTRACT_ID }}
+          NEAR_RPC: ${{ vars.NEAR_RPC }}
+          NEAR_AI_MODEL: ${{ vars.NEAR_AI_MODEL }}
