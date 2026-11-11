@@ -104,6 +104,23 @@ pub(crate) fn expired(run: &Run, now: u64) -> bool {
     now >= run.started_at.saturating_add(RUN_EXPIRY_SECONDS * 1_000)
 }
 
+/// **The wreck split** (settled by the project lead, 11 Nov 2026). Of each item in a recovered wreck:
+///
+/// ```text
+/// finder = round-half-up(70% of n) = (70n + 50) / 100, the same as (7n + 5) / 10
+/// owner  = n − finder
+/// ```
+///
+/// 1 → 1/0, 2 → 1/1, 3 → 2/1, 4 → 3/1, 5 → 4/1, 6 → 4/2.
+///
+/// Rounding half up means a finder who carries a one-unit wreck out gets that unit. With the share rounded down, the
+/// finder would carry its weight and earn nothing. Rounding half up replaces ECONOMY.md's "rounded in the original
+/// owner's favour". Returns `(finder, owner)`.
+pub fn wreck_split(n: u128) -> (u128, u128) {
+    let finder = (n.saturating_mul(FINDER_SHARE_PCT) + 50) / 100;
+    (finder, n - finder)
+}
+
 // -----------------------------------------------------------------------------------------------------------------
 // JSON shapes
 // -----------------------------------------------------------------------------------------------------------------
@@ -396,7 +413,7 @@ impl Saltline {
         for w in &recovered {
             let mut owner_log = MintLog::new(&w.owner_id, Some("wreck recovered"));
             for &(t, n) in &w.items {
-                let (finder, owner) = pricing::wreck_split(n as u128);
+                let (finder, owner) = wreck_split(n as u128);
                 mine[t as usize] += finder;
                 if owner > 0 {
                     self.mint(Holder::Player(w.owner), t as usize, owner);
@@ -518,5 +535,23 @@ impl Saltline {
     /// Wrecks in the yard, newest first.
     pub fn wrecks(&self) -> Vec<WreckView> {
         self.wrecks.iter().rev().map(wreck_view).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wreck_split;
+
+    #[test]
+    fn the_finder_share_rounds_half_up() {
+        let cases = [(1, (1, 0)), (2, (1, 1)), (3, (2, 1)), (4, (3, 1)), (5, (4, 1)), (6, (4, 2))];
+        for (n, split) in cases {
+            assert_eq!(wreck_split(n), split, "{n} units");
+        }
+        for n in 0..1_000u128 {
+            let (finder, owner) = wreck_split(n);
+            assert_eq!(finder, (7 * n + 5) / 10);
+            assert_eq!(finder + owner, n);
+        }
     }
 }

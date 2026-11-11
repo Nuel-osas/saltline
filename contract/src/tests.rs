@@ -308,11 +308,11 @@ fn death_leaves_a_wreck_and_a_finder_splits_it_70_30() {
     w.wait(MIN_RUN_SECONDS);
     let out = w.as_("tern.testnet").extract(mt.run_id, vec![], vec![wreck_id]);
     for t in CARGO {
-        let (finder, owner) = pricing::wreck_split(carried[t]);
+        let (finder, owner) = crate::runs::wreck_split(carried[t]);
         assert_eq!(w.bal(tern, t), finder, "finder's {}", ITEMS[t].id);
         assert_eq!(w.bal(gull, t), owner, "owner's {}", ITEMS[t].id);
         assert_eq!(finder + owner, carried[t]);
-        assert!(owner * 10 >= carried[t] * 3, "rounded in the owner's favour");
+        assert_eq!(finder, (7 * carried[t] + 5) / 10, "the finder's 70% rounds half up");
         assert_eq!(out.minted.get(ITEMS[t].id).map(|x| x.0).unwrap_or(0), finder);
     }
     assert!(w.c.wrecks().is_empty(), "a wreck is recovered once");

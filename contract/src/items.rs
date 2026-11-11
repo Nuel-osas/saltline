@@ -233,7 +233,7 @@ pub const CARRY_LIMIT: u32 = 6;
 pub const MIN_RUN_SECONDS: u64 = 45;
 /// ...plus this long for each sealed container opened (also the floor before a death, with no base).
 pub const PER_CONTAINER_SECONDS: u64 = 8;
-/// Of a recovered wreck, the finder keeps this share (rounded down); the rest goes back to whoever died.
+/// Of a recovered wreck, the finder keeps this share (rounded half up: runs::wreck_split); the rest goes back to whoever died.
 pub const FINDER_SHARE_PCT: u128 = 70;
 /// Minted to a new player at registration.
 pub const STARTER_SCRIP: u128 = 150;

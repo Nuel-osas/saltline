@@ -24,8 +24,9 @@
 //!    (or recent sales) moved by one between units.
 //! 4. **The dividend split:** [`export_split`] and [`dividend_per_share`]. Shareholders get 10% of export proceeds,
 //!    pro rata, rounded down.
-//! 5. **The wreck split:** [`wreck_split`]. The finder gets 70% rounded down, so the player who died gets the
-//!    remainder.
+//!
+//! The wreck split (70/30, the finder's share rounded half up) is a run rule, so it lives with the runs in
+//! `runs::wreck_split`.
 
 use crate::items::{self, ITEMS};
 
@@ -289,14 +290,6 @@ pub fn owed(shares: u128, acc: u128) -> u128 {
     shares.saturating_mul(acc) / ACC_SCALE
 }
 
-/// **The wreck split.** Of each item in a recovered wreck, the finder gets 70% rounded down and the player who
-/// died gets the rest, so rounding goes the original owner's way. One relay core goes back to its owner.
-/// Returns `(finder, owner)`.
-pub fn wreck_split(amount: u128) -> (u128, u128) {
-    let finder = amount * items::FINDER_SHARE_PCT / 100;
-    (finder, amount - finder)
-}
-
 fn stance_note(stance: u32) -> String {
     match stance {
         s if s < STANCE_NEUTRAL => format!(" Tight-fisted today: stance {s}."),
@@ -396,10 +389,6 @@ mod tests {
         assert_eq!(export_split(35, 10, 0), (350, 0));
         assert_eq!(export_split(35, 10, 200), (315, 35));
         assert_eq!(export_split(35, 3, 200), (95, 10)); // 105 gross, 10.5 → 10 to shareholders
-        assert_eq!(wreck_split(1), (0, 1));
-        assert_eq!(wreck_split(2), (1, 1));
-        assert_eq!(wreck_split(3), (2, 1));
-        assert_eq!(wreck_split(10), (7, 3));
         let acc = dividend_per_share(35, 200);
         assert_eq!(owed(150, acc), 26); // 35 × 150/200 = 26.25
         assert_eq!(owed(50, acc), 8); // 8.75; the 0.99 left over is never minted
