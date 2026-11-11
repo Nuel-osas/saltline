@@ -12,6 +12,20 @@ function faucetDev() {
       env = loadEnv(config.mode, config.envDir || config.root, "");
     },
     configureServer(server) {
+      // POST /api/tick wakes the broker agents (server/tick.ts), as api/tick.ts does on Vercel. With no broker keys
+      // in .env it answers 503, so local play never signs as a broker by accident.
+      server.middlewares.use("/api/tick", async (req, res) => {
+        try {
+          const { handleTick } = await server.ssrLoadModule("/server/tick.ts");
+          const response = await handleTick(new Request("http://localhost/api/tick", { method: req.method }), env);
+          res.statusCode = response.status;
+          response.headers.forEach((value, key) => res.setHeader(key, value));
+          res.end(Buffer.from(await response.arrayBuffer()));
+        } catch {
+          res.statusCode = 500;
+          res.end("{}");
+        }
+      });
       server.middlewares.use("/api/faucet", async (req, res) => {
         try {
           const chunks = [];
