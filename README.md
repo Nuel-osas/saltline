@@ -75,7 +75,7 @@ from `CHROME_PATH` or the usual install path. `node scripts/smoke-story.mjs` (de
 | --- | --- |
 | [`saltline.testnet`](https://testnet.nearblocks.io/address/saltline.testnet) | The game contract: NEP-245 items, runs, wrecks, the market, the ledger and `simulate` |
 | [`faucet.saltline.testnet`](https://testnet.nearblocks.io/address/faucet.saltline.testnet) | Registers new players and funds each with 0.1 testnet NEAR for gas |
-| [`moss`](https://testnet.nearblocks.io/address/moss.saltline.testnet), [`ines`](https://testnet.nearblocks.io/address/ines.saltline.testnet), [`qm`](https://testnet.nearblocks.io/address/qm.saltline.testnet) `.saltline.testnet` | The three brokers. Each signs its own moves with its own key, from a GitHub Actions schedule every 15 minutes (`.github/workflows/brokers.yml`). |
+| [`moss`](https://testnet.nearblocks.io/address/moss.saltline.testnet), [`ines`](https://testnet.nearblocks.io/address/ines.saltline.testnet), [`qm`](https://testnet.nearblocks.io/address/qm.saltline.testnet) `.saltline.testnet` | The three brokers. Each signs its own moves with its own key. They wake when people play: the game calls `/api/tick` at boot and after each run, and the server runs one round at most every 10 minutes (`server/tick.ts`). There's also a GitHub Actions schedule (`.github/workflows/brokers.yml`), but GitHub hasn't fired it so far. |
 
 **Transactions to check**
 
@@ -85,6 +85,7 @@ from `CHROME_PATH` or the usual install path. `node scripts/smoke-story.mjs` (de
 | `extract`: copper and fuel minted | [E9eP9kxc…](https://testnet.nearblocks.io/txns/E9eP9kxcZafjUgDM7u2j7psHz2cfNotU55k2SxWrxof4) |
 | `sell` to Moss for 72 scrip | [H848CazZ…](https://testnet.nearblocks.io/txns/H848CazZ9nYJVbLpzPS9wKTcmTBt8oMoSU7JBf4DKt6a) |
 | The Quartermaster's agent changes its stance from GitHub Actions | [3ENE9itW…](https://testnet.nearblocks.io/txns/3ENE9itWsD5WcnQm2dcQXSkgUnHoVjSwQoeuZYveerMB) |
+| The live site wakes the brokers: the Quartermaster signs his own stance change through `/api/tick` | [CRWtBStP…](https://testnet.nearblocks.io/txns/CRWtBStPH5frcZdqAwivjKGSvsgMRtBDsp6SufAXa9sA) |
 | Moss ships surplus to the freighter (`broker_export`, signed by `moss`) | [ujKRZMmC…](https://testnet.nearblocks.io/txns/ujKRZMmCVBH96ycaFgCshxz5yQsWLRQub9MKFxWhvBJ) |
 | **Refused:** a player tries to ship Moss's stock and gets `E_NOT_BROKER` | [3vzTTpaF…](https://testnet.nearblocks.io/txns/3vzTTpaFFJ8MA9QnsLDA6SAD7DX57hzLP8KT7q9RdHMz) |
 | The story upgrade: the contract's code was redeployed with every existing view unchanged | [3Tr1JW4v…](https://testnet.nearblocks.io/txns/3Tr1JW4vZJ1c6ReHjGKWFN4MBY9AVZeBqUppDXw6fexo) |

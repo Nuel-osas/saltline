@@ -134,7 +134,7 @@ Without the key, the memos come from templates in `characters.ts`, chosen by a s
 
 ## The cron
 
-`.github/workflows/brokers.yml` runs one round (`--once`) every 15 minutes, and on demand from the Actions tab.
+`.github/workflows/brokers.yml` is scheduled to run one round (`--once`) every 15 minutes, and can be run on demand from the Actions tab. GitHub hasn't fired the schedule on this repo so far, so the live site also wakes the brokers when people play: `POST /api/tick` (`server/tick.ts`) runs the same round on Vercel at most once every 10 minutes, with the keys in Vercel's sensitive env.
 **Run workflow** has a dry-run box. The workflow uses:
 
 - `contents: read` permissions only
