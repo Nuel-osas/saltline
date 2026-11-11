@@ -108,6 +108,7 @@ export function createMarket(ctx: Ctx) {
       call: () => ctx.chain.buyListing(l.id),
       done: () => `Bought ${l.amount} ${l.tokenId} for ${fmt(l.amount * l.price)}`,
       refresh: ["listings", "balances", "recent"],
+      chime: "soft",
     });
   }
   function cancel(l: Listing) {

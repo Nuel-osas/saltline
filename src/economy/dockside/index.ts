@@ -17,6 +17,7 @@ import { createHold } from "./hold";
 import { createMarket } from "./market";
 import { createPad, focusables, moveFocus, type Dir } from "./pad";
 import { createPass } from "./pass";
+import { gameChimes, type Chimes } from "./sound";
 import { createStall } from "./stall";
 import { createTicker } from "./ticker";
 import { createTooltip } from "./tooltip";
@@ -55,6 +56,8 @@ export interface DocksideOptions {
   host?: HTMLElement;
   /** The deploy gate's timings (tests shorten them). */
   gate?: Pick<DeployGateOptions, "quietMs" | "askMs">;
+  /** The trade sounds (default: on the game's own audio, volume and mute). */
+  chimes?: Chimes;
 }
 
 export interface Dockside {
@@ -70,6 +73,8 @@ export interface Dockside {
   readonly week: ReturnType<typeof createWeek>;
   /** Holds the game's deploy buttons until the wallet has a dock pass (gate.ts). */
   readonly deployGate: DeployGate;
+  /** The trade sounds (sound.ts). */
+  readonly chimes: Chimes;
 }
 
 export function createDockside(G: GameLike, economy: EconomyWithGear, opts: DocksideOptions = {}): Dockside {
@@ -142,6 +147,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     return p;
   }
 
+  const chimes = opts.chimes ?? gameChimes(G);
   const ctx: Ctx = {
     economy: eco,
     chain,
@@ -151,6 +157,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     refresh: (...keys) => Promise.all(keys.map((k) => load(k, true, true))).then(() => {}),
     act: (slot, spec) => runAct(ctx, slot, spec),
     sound: (k) => emit(k === "click" ? "ui:click" : "ui:hover"),
+    chime: (k) => void chimes.play(k),
     flapTick() {
       const now = performance.now();
       if (!isOpen || now - lastTick < 60) return;
@@ -349,6 +356,8 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     away = createAwayCard(lines, prev.at, () => hideAway());
     awayEl.replaceChildren(away.el);
     root.dataset.away = "on";
+    // Scrip came in while they were gone: the till rings as the slip lands.
+    if (lines.some((l) => l.kind === "scrip")) setTimeout(() => isOpen && away && ctx.chime("cash"), reducedMotion() ? 0 : 320);
     const ok = away.ok;
     setTimeout(() => {
       if (isOpen && away?.ok === ok)
@@ -671,6 +680,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     refresh: ctx.refresh,
     week,
     deployGate,
+    chimes,
   };
 }
 
