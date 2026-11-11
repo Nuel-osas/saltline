@@ -412,6 +412,14 @@ describe("keys", () => {
     expect(r).toEqual({ ok: true, key: { accountId: "ines.saltline.testnet", privateKey: KEYS.ines, source: "keychain" } });
   });
 
+  it("reads near-cli-rs keychain files that carry only the keys, named by the account", async () => {
+    // What `near account create-account … autogenerate-new-keypair save-to-legacy-keychain` writes (v0.30).
+    const read = async () =>
+      JSON.stringify({ implicit_account_id: "ab".repeat(32), public_key: "ed25519:x", private_key: KEYS.qm, seed_phrase_hd_path: "m/44'/397'/0'" });
+    const r = await findKey("qm", "qm.saltline.testnet", {}, { credentialsDir: "/creds/testnet", read });
+    expect(r).toEqual({ ok: true, key: { accountId: "qm.saltline.testnet", privateKey: KEYS.qm, source: "keychain" } });
+  });
+
   it("says plainly where to put a missing key", async () => {
     const r = await findKey("qm", "qm.saltline.testnet", {}, { credentialsDir: "/creds/testnet", read: noFile });
     expect(r).toEqual({ ok: false, why: "no key: set BROKER_QM_KEY or add /creds/testnet/qm.saltline.testnet.json" });

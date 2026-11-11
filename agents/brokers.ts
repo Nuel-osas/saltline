@@ -192,7 +192,12 @@ export async function findKey(id: BrokerId, accountId: string, env: Record<strin
     return { ok: false, why: `${tilde(path)} isn't JSON` };
   }
   const f = (file && typeof file === "object" ? file : {}) as { account_id?: unknown; private_key?: unknown };
-  if (f.account_id !== accountId) return { ok: false, why: `${tilde(path)} is not a key for ${accountId}` };
+  // near-cli-rs writes `account_id` in some versions and leaves it out in others (its `autogenerate-new-keypair
+  // save-to-legacy-keychain` files only carry the keys), so the file's name, <account>.json, names the account. A file
+  // that does name an account must name this one.
+  if (f.account_id !== undefined && f.account_id !== accountId) {
+    return { ok: false, why: `${tilde(path)} is not a key for ${accountId}` };
+  }
   const pk = f.private_key;
   if (typeof pk !== "string" || !pk.startsWith("ed25519:") || !isPrivateKey(pk)) {
     return { ok: false, why: `${tilde(path)} has no ed25519 private_key` };
