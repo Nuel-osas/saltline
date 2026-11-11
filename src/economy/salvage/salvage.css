@@ -1,0 +1,154 @@
+/* Salvage: the in-run cargo readout (h- look), cargo and wreck markers, and the dead/debrief rows (m- look).
+   Uses the game's tokens from src/ui.css; loaded after it. */
+
+/* ---- cargo readout: bottom left, above the vitals ---- */
+.sv-cargo {
+  position: absolute;
+  left: var(--gl);
+  bottom: calc(100px + var(--sab));
+  min-width: 150px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.sv-cargo.on {
+  opacity: 1;
+}
+.sv-load {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 7px;
+}
+.sv-load i {
+  width: 15px;
+  height: 5px;
+  background: var(--bone);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+  transition: background 0.2s;
+}
+.sv-load i.off {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--bone-faint);
+}
+.sv-load b {
+  font: 500 11px/1 var(--f-mono);
+  letter-spacing: 0.04em;
+  margin-left: 6px;
+}
+.sv-cargo.heavy .sv-load i:not(.off) {
+  background: var(--signal);
+}
+.sv-items {
+  margin-top: 7px;
+  font: 600 15px/1.15 var(--f-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--bone);
+  white-space: nowrap;
+}
+.sv-sub {
+  margin-top: 3px;
+  font: 400 10px/1.4 var(--f-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+  white-space: nowrap;
+}
+.sv-cargo.pending .sv-items {
+  color: var(--bone-dim);
+}
+
+.is-touch .sv-cargo {
+  bottom: auto;
+  top: calc(196px + var(--sat));
+}
+@media (max-width: 760px) {
+  .is-touch .sv-cargo {
+    top: calc(214px + var(--sat));
+  }
+}
+@media (max-height: 520px) {
+  .sv-cargo {
+    bottom: calc(86px + var(--sab));
+  }
+  .sv-sub {
+    display: none;
+  }
+}
+
+/* ---- markers: squares for sealed cargo, rust for wrecks (relays keep the amber diamond) ---- */
+.h-cm.cargo,
+.h-wm.cargo {
+  color: #c9d4d8;
+}
+.h-cm.cargo i,
+.h-wm.cargo i {
+  transform: none;
+  width: 7px;
+  height: 7px;
+}
+.h-wm.cargo i {
+  left: -3.5px;
+  top: -3.5px;
+}
+.h-cm.cargo b,
+.h-wm.cargo b {
+  font-size: 11px;
+}
+.h-cm.wreck,
+.h-wm.wreck {
+  color: var(--rust);
+}
+.h-cm.wreck b,
+.h-wm.wreck b {
+  font-size: 11px;
+}
+/* Beyond the nearest two: a bare tick on the compass, no floating marker. */
+.h-wm.far {
+  display: none;
+}
+.h-cm.far b,
+.h-cm.far span {
+  display: none;
+}
+.h-cm.far i {
+  opacity: 0.7;
+}
+
+/* ---- cards: the dead card's cargo row and the debrief's salvage block ---- */
+.sv-row dd {
+  text-align: right;
+}
+.sv-row.sv-pending dd {
+  color: var(--bone-dim);
+}
+.sv-row.sv-refused dd {
+  color: var(--alarm);
+  font-size: 13px;
+}
+.sv-lines {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.sv-sec {
+  margin-top: 18px;
+}
+.sv-sec > .m-k {
+  margin-bottom: 8px;
+}
+.sv-row a {
+  color: var(--signal);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(255, 179, 71, 0.45);
+  pointer-events: auto;
+}
+.sv-row a:hover {
+  color: var(--signal-hot);
+  border-bottom-color: currentColor;
+}
+.sv-row a:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 3px;
+}
