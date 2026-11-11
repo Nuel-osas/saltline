@@ -21,6 +21,8 @@ function whenBooted(): Promise<GameContext> {
 whenBooted()
   .then((G) => {
     G.events?.emit("economy:ready", {});
+    // The Dockside, the between-runs market (src/economy/dockside). Guarded: if it fails, the shooter plays on.
+    import("./dockside/mount").then((d) => d.mount(G)).catch((e) => console.warn("[dockside] off:", e));
   })
   .catch((e) => console.warn("[economy] off:", e));
 
