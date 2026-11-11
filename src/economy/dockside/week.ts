@@ -410,7 +410,25 @@ export function createWeek(ctx: Ctx) {
       again,
     ),
     h("div", { class: "dk-wk-ctl" }, playBtn, h("div", { class: "dk-seg", role: "group", "aria-label": "Speed" }, ...speeds), scrub, readout),
-    h("div", { class: "dk-wk-body" }, wrap, h("aside", { class: "dk-wk-side" }, h("div", { class: "dk-hk" }, h("span", null, "Callouts")), log, status)),
+    h(
+      "div",
+      { class: "dk-wk-body" },
+      wrap,
+      h(
+        "aside",
+        { class: "dk-wk-side" },
+        h("div", { class: "dk-hk" }, h("span", null, "Callouts")),
+        log,
+        status,
+        h(
+          "dl",
+          { class: "dk-wk-key" },
+          h("div", null, h("dt", { class: "k-shut", "aria-hidden": "true" }), h("dd", null, "Shuttered: not buying")),
+          h("div", null, h("dt", { class: "k-dash", "aria-hidden": "true" }), h("dd", null, "What it would pay while shut")),
+          h("div", null, h("dt", { class: "k-tag", "aria-hidden": "true" }), h("dd", null, "Bid at the playhead")),
+        ),
+      ),
+    ),
   );
 
   let model: WeekModel | null = null;
