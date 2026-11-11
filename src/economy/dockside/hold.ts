@@ -3,7 +3,7 @@
 import { CARGO, GEAR, ITEMS, RULES } from "../items";
 import type { BrokerView, CargoId, GearId } from "../types";
 import { okv, type Ctx } from "./ctx";
-import { h, text, toggle } from "./dom";
+import { h, popDelta, text, toggle } from "./dom";
 import { createFlap } from "./flap";
 import { accountUrl, fmt, shortAccount, UNKNOWN } from "./format";
 
@@ -29,6 +29,8 @@ export function holdWorth(hold: Partial<Record<string, number>>, brokers: Broker
 export function createHold(ctx: Ctx) {
   const scrip = createFlap({ cells: 4, className: "dk-hflap", onStep: ctx.flapTick });
   const scripUnk = h("span", { class: "dk-unknown big" }, UNKNOWN);
+  const scripDelta = h("b", { class: "dk-delta big", "aria-hidden": "true" });
+  let lastScrip: number | null = null;
   const who = h("span", { class: "dk-hold-who" });
   const worth = h("p", { class: "dk-hold-worth" });
   const cargo = CARGO.map((c) => {
@@ -53,7 +55,7 @@ export function createHold(ctx: Ctx) {
     "section",
     { class: "dk-hold", "aria-label": "Your hold" },
     h("header", { class: "dk-panel-h" }, h("h3", null, "Your hold"), who),
-    h("div", { class: "dk-hold-scrip" }, scrip.el, scripUnk, h("span", { class: "dk-hold-unit" }, "scrip")),
+    h("div", { class: "dk-hold-scrip" }, scrip.el, scripUnk, h("span", { class: "dk-hold-unit" }, "scrip"), scripDelta),
     worth,
     h("div", { class: "dk-hk" }, h("span", null, "Cargo"), h("span", null, `carry ${RULES.carryLimit}`)),
     h("ul", { class: "dk-hlist" }, ...cargo.map((x) => x.el)),
@@ -84,7 +86,11 @@ export function createHold(ctx: Ctx) {
     const s = bal ? (bal.scrip ?? 0) : null;
     scrip.el.hidden = s == null;
     scripUnk.hidden = s != null || ctx.reads.balances.s === "loading";
-    if (s != null) void scrip.set(String(s), scrip.value !== "");
+    if (s != null) {
+      if (lastScrip != null && s !== lastScrip) popDelta(scripDelta, s - lastScrip);
+      lastScrip = s;
+      void scrip.set(String(s), scrip.value !== "");
+    }
     const w = bal ? holdWorth(bal, okv(ctx.reads.brokers)) : null;
     text(worth, w == null ? `Worth ${UNKNOWN} at today's bids` : `Worth ${fmt(w)} at today's best bids`);
 

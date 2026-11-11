@@ -41,5 +41,15 @@ export function toggle(el: Element, cls: string, on: boolean) {
   el.classList.toggle(cls, on);
 }
 
+/** Pop a signed change ("−5", "+190") on a delta badge; it floats and fades (CSS), coloured by direction. */
+export function popDelta(el: HTMLElement, change: number) {
+  if (!change) return;
+  el.textContent = `${change > 0 ? "+" : "−"}${Math.abs(change).toLocaleString("en-US")}`;
+  el.dataset.dir = change > 0 ? "1" : "-1";
+  el.classList.remove("go");
+  void el.offsetWidth;
+  el.classList.add("go");
+}
+
 export const reducedMotion = () =>
   typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;

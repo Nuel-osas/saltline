@@ -130,6 +130,14 @@
 .dk-tr { width: 12px; text-align: center; font: 500 11px/1 var(--f-mono); font-style: normal; color: rgba(141, 154, 163, .7); }
 .dk-tr[data-dir="1"] { color: var(--signal); } .dk-tr[data-dir="-1"] { color: var(--alarm); }
 .dk-q.moved .dk-tr { animation: dk-pop .5s cubic-bezier(.2, .8, .2, 1.4); }
+/* the change itself, floating off the price (and off your scrip) */
+.dk-price { position: relative; }
+.dk-delta { position: absolute; right: calc(100% + 8px); top: 50%; margin-top: -6px; font: 500 12px/1 var(--f-mono); font-style: normal; white-space: nowrap; pointer-events: none; opacity: 0; color: var(--signal); }
+.dk-delta[data-dir="-1"] { color: var(--alarm); }
+.dk-delta.go { animation: dk-delta 2.8s cubic-bezier(.2, .7, .2, 1) both; }
+@keyframes dk-delta { 0% { opacity: 0; transform: translateY(8px); } 12% { opacity: 1; transform: none; } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-6px); } }
+.dk-hold-scrip { position: relative; }
+.dk-delta.big { left: 0; right: auto; top: -14px; margin-top: 0; font-size: 12px; }
 @keyframes dk-pop { from { transform: scale(2.2); } to { transform: none; } }
 
 /* ======================================================================  split-flap  */

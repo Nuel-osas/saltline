@@ -3,7 +3,7 @@
 import { BROKERS, ITEMS } from "../items";
 import type { BrokerId, BrokerView, CargoId, GearId, TokenId } from "../types";
 import { createSlot, okv, type Ctx } from "./ctx";
-import { h, text, toggle } from "./dom";
+import { h, popDelta, text, toggle } from "./dom";
 import { createFlap, type Flap } from "./flap";
 import { accountUrl, FLOAT_CLOSE, FLOAT_REOPEN, fmt, fmtOr, itemName, pct, UNKNOWN } from "./format";
 
@@ -16,6 +16,7 @@ interface Row {
   flap: Flap;
   unknown: HTMLElement;
   trend: HTMLElement;
+  delta: HTMLElement;
   sub: HTMLElement;
   tip: HTMLElement;
   btns: HTMLButtonElement[];
@@ -53,7 +54,8 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
     const flap = createFlap({ cells: 3, className: "dk-pflap", onStep: ctx.flapTick });
     const unknown = h("span", { class: "dk-unknown" }, UNKNOWN);
     const trend = h("i", { class: "dk-tr", "data-dir": "0", "aria-hidden": "true" });
-    const price = h("button", { class: "dk-price", type: "button", "data-tip": tipId, "aria-describedby": tipId }, flap.el, unknown, trend);
+    const delta = h("b", { class: "dk-delta", "aria-hidden": "true" });
+    const price = h("button", { class: "dk-price", type: "button", "data-tip": tipId, "aria-describedby": tipId }, flap.el, unknown, trend, delta);
     const sub = h("span", { class: "dk-q-sub" });
     const tip = h("div", { id: tipId, class: "dk-tipsrc", hidden: true });
     const btns: HTMLButtonElement[] =
@@ -72,7 +74,7 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
       h("span", { class: "dk-q-acts" }, ...btns),
       tip,
     );
-    return { tok, kind, el, flap, unknown, trend, sub, tip, btns, last: null, was: null, dir: 0 };
+    return { tok, kind, el, flap, unknown, trend, delta, sub, tip, btns, last: null, was: null, dir: 0 };
   };
   for (const c of meta.buys) rows.push(mkRow(c, "bid"));
   for (const g of meta.sells) rows.push(mkRow(g, "ask"));
@@ -254,6 +256,7 @@ export function createStall(ctx: Ctx, id: BrokerId, index: number): Stall {
           r.el.classList.remove("moved", "up", "down");
           void r.el.offsetWidth;
           r.el.classList.add("moved", r.dir > 0 ? "up" : "down");
+          popDelta(r.delta, price - r.last);
         }
         r.last = price;
         void r.flap.set(String(price), r.flap.value !== "");
