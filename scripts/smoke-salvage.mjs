@@ -1,4 +1,6 @@
-// Headless smoke test of in-run salvage on the lane's fake chain, then a baseline check with ?noeconomy.
+// Headless smoke test of in-run salvage on the shared offline mock (src/economy/mock.ts), then a baseline check with
+// ?noeconomy. The mock plays by the real run rules (minimum run time, time between runs), so the page's Date.now gets
+// a test-only skew (window.__skew, ms) that the test moves forward instead of waiting.
 //
 //   npm run dev -- --port 5290
 //   node scripts/smoke-salvage.mjs [http://127.0.0.1:5290] [--shots DIR]
@@ -26,13 +28,35 @@ const browser = await chromium.launch({
   args: ["--use-angle=metal", "--ignore-gpu-blocklist", "--enable-gpu"],
 });
 
-async function open(query) {
+async function open(query, { economy = false } = {}) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errors = [];
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
   page.on("pageerror", (e) => errors.push(String(e)));
+  await page.addInitScript(() => {
+    localStorage.clear(); // a fresh mock economy and wallet every time
+    const real = Date.now.bind(Date);
+    window.__skew = 0;
+    Date.now = () => real() + window.__skew;
+  });
   await page.goto(`${base}/?${query}`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
+  if (economy) {
+    // Claim a dock pass on the mock, record the run calls salvage makes, then deploy.
+    await page.waitForFunction(() => !!window.__G.economy, null, { timeout: 10000 });
+    await page.evaluate(async () => {
+      const G = window.__G;
+      const r = await G.economy.wallet.claim("SMOKE " + Math.floor(Math.random() * 1e4));
+      if (!r.ok) throw new Error("claim failed: " + r.error);
+      const c = G.economy.chain;
+      c.calls = [];
+      for (const m of ["startRun", "extract", "die"]) {
+        const f = c[m].bind(c);
+        c[m] = (...args) => (c.calls.push({ method: m, args }), f(...args));
+      }
+      G.game.start({ skipIntro: true });
+    });
+  }
   return { page, errors };
 }
 
@@ -54,9 +78,9 @@ const stand = (page, x, z, tx, tz, pitch = -0.05) =>
 const fpsNow = (page) => page.evaluate(() => window.__stats().fps);
 
 try {
-  // ---- 1. a run with salvage on the fake chain ----
-  // (?autostart and ?noaudio need a value: the game tests them for truthiness.)
-  const { page, errors } = await open("autostart=1&noaudio=1");
+  // ---- 1. a run with salvage on the offline mock ----
+  // (?noaudio needs a value: the game tests it for truthiness.)
+  const { page, errors } = await open("noaudio=1", { economy: true });
   const fps = [];
   await page.waitForFunction(() => window.__G.game.state === "playing", null, { timeout: 20000 });
   await page.evaluate(() => (window.__G.player.invulnerable = true)); // drones would end a scripted run
@@ -74,7 +98,7 @@ try {
       startRun: G.economy.chain.calls.filter((c) => c.method === "startRun").length,
     };
   });
-  check(m.containers === 8 && m.startRun === 1, "a manifest arrives from the fake chain", JSON.stringify(m));
+  check(m.containers === 8 && m.startRun === 1, "a manifest arrives from the mock chain", JSON.stringify(m));
   check(await page.evaluate(() => !!document.querySelector(".sv-cargo.on")), "the cargo readout is on the HUD");
 
   // 3. go to a sealed container (shut doors) and cut its seal
@@ -206,6 +230,7 @@ try {
     return { runId: s.runId, opened: s.opened, wrecks: s.wrecks };
   });
   await page.waitForTimeout(300);
+  await page.evaluate(() => (window.__skew += 120_000)); // past the minimum run time, instead of waiting it out
   const boat = await page.evaluate(() => window.__G.level.extraction.pos);
   await stand(page, boat.x, boat.z, boat.x + 1, boat.z);
   await page.waitForFunction(() => window.__G.game.state === "complete", null, { timeout: 8000 }).catch(() => {});
@@ -239,6 +264,7 @@ try {
   await shot(page, "4-debrief");
 
   // a second run, and a death with cargo: die gets the bookkeeping and the dead card names what was lost
+  await page.evaluate(() => (window.__skew += 60_000)); // past the gap between runs
   await page.evaluate(() => window.__G.game.start({ skipIntro: true }));
   await page.evaluate(() => (window.__G.player.invulnerable = true));
   await page.waitForFunction(
