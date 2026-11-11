@@ -1,23 +1,44 @@
-// The story in the game (docs/STORY.md), beside the economy: the opening briefing on the first DEPLOY, replayable from
-// the title. The shooter never depends on any of it; on any failure the game plays on as before.
+// The story in the game (docs/STORY.md): the opening briefing, Control's lines that follow the town's arc, and the
+// Harbormaster's channel from Act III.
+//
+// It reads the town through economy.chain.town() (optional: a chain without it is Act I) and never waits on it: every
+// read has a short timeout, a failed read is unknown, and unknown plays as Act I with no line that needs a number.
+// The shooter never depends on any of it; on any failure the game plays on as before.
 import "./story.css";
 import type { Economy } from "../types";
 import { createBriefing, type Briefing } from "./briefing";
+import { HARBORMASTER } from "./copy";
+import { coresSold24h, harbormasterAwake, runStartLines, type Line } from "./lines";
 import { defaultStore, loadMemory, saveMemory } from "./memory";
+import { createChannel, type Channel } from "./radio";
+import { createTownReader, type TownRead, type TownReader } from "./town";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
 type Game = any;
 
+/** How old a town read may be at a run's start, and how long a fresh one may take. */
+const RUN_READ = { maxAge: 15_000, timeout: 2_500 };
+/** Run-start lines that arrive later than this after the run started are dropped, not said out of place. */
+const LATE_MS = 20_000;
+const RECENT_LIMIT = 64;
+
 export interface Story {
   readonly briefing: Briefing;
+  readonly town: TownReader;
+  readonly channel: Channel;
+  /** For tests and screenshots: the read this run plays on. */
+  readonly run: { read: TownRead | null; lines: Line[] };
   update(dt: number): void;
   dispose(): void;
 }
 
-export function createStory(G: Game, _economy: Economy, opts: { store?: Storage | null } = {}): Story {
+export function createStory(G: Game, economy: Economy, opts: { store?: Storage | null } = {}): Story {
   const ext = (G.ext ??= { speedScale: 1, gear: {} });
   const store = opts.store === undefined ? defaultStore() : opts.store;
   const memory = loadMemory(store);
+  const session: string[] = [];
+  const town = createTownReader(economy.chain);
+  const channel = createChannel(G);
 
   const warned = new Set<string>();
   function guard<T>(where: string, fn: () => T): T | undefined {
@@ -70,16 +91,103 @@ export function createStory(G: Game, _economy: Economy, opts: { store?: Storage 
   }
   guard("button", injectButton);
 
+  // ---- a run ----
+  let token = 0;
+  let runAt = 0;
+  let runRead: TownRead | null = null;
+  let pending: Line[] | null = null;
+  let said: Line[] = [];
+  let cutSaid = false;
+  let cores = 0;
+
+  function flush() {
+    if (!pending || G.game?.state !== "playing") return;
+    const lines = pending;
+    pending = null;
+    if (performance.now() - runAt > LATE_MS) return;
+    for (const l of lines) channel.say(l, l.who === "harbormaster" ? 4.6 : 4.2);
+    said = lines;
+  }
+
+  async function startRun() {
+    const t = ++token;
+    runAt = performance.now();
+    runRead = null;
+    pending = null;
+    said = [];
+    cutSaid = false;
+    cores = 0;
+    channel.reset();
+    const read = await town.read(RUN_READ);
+    if (t !== token) return;
+    runRead = read;
+    let cores24h: number | null = null;
+    if (harbormasterAwake(read)) {
+      const events = await Promise.race([
+        Promise.resolve()
+          .then(() => economy.chain.recent(RECENT_LIMIT))
+          .catch(() => null),
+        new Promise<null>((ok) => setTimeout(() => ok(null), RUN_READ.timeout)),
+      ]);
+      if (t !== token) return;
+      cores24h = coresSold24h(events, Date.now(), RECENT_LIMIT);
+    }
+    const out = runStartLines({ read, heard: memory.heard, session, peak: memory.peak, cores24h });
+    for (const id of out.session) session.push(id);
+    if (out.heard.length || out.peak !== memory.peak) {
+      memory.heard = [...memory.heard, ...out.heard];
+      memory.peak = out.peak;
+      saveMemory(store, memory);
+    }
+    pending = out.lines;
+    flush();
+  }
+
+  const offs: (() => void)[] = [];
+  const on = (name: string, fn: (e: any) => void) => {
+    const off = G.events?.on?.(name, (e: any) => guard(name, () => fn(e)));
+    if (typeof off === "function") offs.push(off);
+  };
+  on("run:start", () => void startRun().catch((e) => console.warn("[story] run start", e)));
+  on("game:state", (e: { state?: string }) => {
+    if (e?.state === "playing") flush();
+  });
+  on("objective:done", (e: { index?: number; total?: number }) => {
+    if (cutSaid || !harbormasterAwake(runRead) || !e || !(Number(e.index) < Number(e.total))) return;
+    cutSaid = true;
+    // After Control's own line for the cut, which the game queues right after this event.
+    queueMicrotask(() => channel.say({ who: "harbormaster", text: HARBORMASTER.relayCut }, 3.8));
+  });
+  const track = (e: { carried?: { core?: number } }) => {
+    const n = e?.carried?.core;
+    cores = typeof n === "number" && Number.isFinite(n) ? n : cores;
+  };
+  on("cargo:taken", track);
+  on("wreck:found", track);
+  on("player:dead", () => (cores = 0));
+  on("extraction:reached", () => {
+    if (!(cores > 0) || !harbormasterAwake(runRead)) return;
+    // The game clears the radio and queues Control's "aboard" line right after this event: speak after it.
+    queueMicrotask(() => channel.say({ who: "harbormaster", text: HARBORMASTER.extractWithCores }, 4.4));
+  });
+
   return {
     briefing,
+    town,
+    channel,
+    get run() {
+      return { read: runRead, lines: said };
+    },
     update() {
       guard("update", () => {
         if (!replayBtn?.isConnected) injectButton();
       });
     },
     dispose() {
+      for (const off of offs) off();
       if (ext.beforeRun) delete ext.beforeRun;
       briefing.dispose();
+      channel.dispose();
       replayBtn?.parentElement?.remove();
       app?.classList.remove("st-briefing");
     },

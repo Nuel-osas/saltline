@@ -40,6 +40,23 @@
 #app .menu { transition: opacity .4s ease; }
 #app.st-briefing .menu { opacity: 0; pointer-events: none; }
 
+/* ---- the Harbormaster's channel ---- */
+.comms.st-hm .comms-who { color: var(--st-cold); letter-spacing: .5em; margin-right: -.5em; }
+.comms.st-hm .comms-who::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 11px; vertical-align: 1px; background: var(--st-cold); animation: st-hm-dot 1.2s steps(2, jump-none) infinite; }
+.comms.st-hm .comms-t { font: 500 16px/1.45 var(--f-mono); letter-spacing: .02em; color: #dcefff; background: rgba(4, 18, 30, .74); box-shadow: inset 2px 0 0 var(--st-cold), 0 0 18px rgba(80, 180, 255, .12);
+  animation: st-hm-glitch 3.1s steps(1, end) infinite; }
+@keyframes st-hm-dot { 0% { opacity: 1; } 100% { opacity: .25; } }
+@keyframes st-hm-glitch {
+  0%, 84%, 100% { text-shadow: var(--shadow); opacity: 1; }
+  85% { text-shadow: -2px 0 rgba(255, 64, 96, .75), 2px 0 rgba(90, 220, 255, .75); }
+  87% { text-shadow: 3px 0 rgba(255, 64, 96, .6), -3px 0 rgba(90, 220, 255, .6); opacity: .82; }
+  88% { text-shadow: var(--shadow); opacity: 1; }
+  93% { text-shadow: -1px 0 rgba(90, 220, 255, .85); }
+  94% { text-shadow: var(--shadow); }
+}
+@media (max-width: 760px) { .comms.st-hm .comms-t { font-size: 14px; } }
+
 @media (prefers-reduced-motion: reduce) {
   .st-brief, .st-card, .st-bars i, #app .menu { transition-duration: .01ms !important; }
+  .comms.st-hm .comms-t, .comms.st-hm .comms-who::before { animation: none; }
 }
