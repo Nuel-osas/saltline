@@ -202,4 +202,7 @@ export interface Economy {
   manifest: Manifest | null;
   /** Cargo carried in this run, by token. */
   carried: Amounts<CargoId>;
+  /** Gear the player picked at the Dockside for the next run. The Dockside writes it; the salvage code passes it to
+   *  startRun, which burns one of each. Only gear the player holds; empty when nothing is picked. */
+  equipped: GearId[];
 }
