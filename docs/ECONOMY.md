@@ -45,7 +45,8 @@ find, and the market is a puzzle with other people in it.
 | `cutter` | Seal cutter | gear | – | 65 (ask) | – | – |
 
 - **Amounts:** integers throughout. Scrip has no decimals and is used as a plain count. The contract stores `u128`.
-- **Gear** is equipped at the start of a run and burned by it. Effects:
+- **Gear** is equipped at the start of a run and burned by it. The player picks it in the Dockside's hold, which
+  writes `economy.equipped`; the salvage code passes that list to `start_run`. Effects:
   - plate: +40 max health for the run
   - mag: +15 rounds per magazine
   - cutter: seals and relays cut 40% faster

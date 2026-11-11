@@ -55,7 +55,8 @@ whenBooted()
     }
 
     startSalvage(G); // in-run salvage (src/economy/salvage); guarded inside
-    // The Dockside lane attaches here:        createDockside(G, economy);
+    // The Dockside, the between-runs market (src/economy/dockside). Guarded: if it fails, the shooter plays on.
+    import("./dockside/mount").then((d) => d.mount(G)).catch((e) => console.warn("[dockside] off:", e));
 
     console.info(cfg.mode === "mock" ? "[economy] offline mock: not the chain" : `[economy] testnet, contract ${cfg.contractId}`);
     G.events?.emit("economy:ready", economy);
