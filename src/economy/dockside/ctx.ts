@@ -98,7 +98,11 @@ export async function runAct<T extends TxResult>(ctx: Pick<Ctx, "chain" | "refre
     await ctx.refresh(...spec.refresh);
     return null;
   }
+  // The chain client marks a call that may have landed but couldn't be confirmed as `pending` (main's TxResult):
+  // that is the same ambiguous case as a rejection, so it shows as unknown, never as failed.
+  const unconfirmed = !!r && !r.ok && (r as TxResult & { pending?: boolean }).pending === true;
   if (r && r.ok) slot.set("ok", spec.done(r), r.txHash ? ctx.chain.txUrl(r.txHash) : null);
+  else if (unconfirmed) slot.set("unknown", AMBIGUOUS, r.txHash ? ctx.chain.txUrl(r.txHash) : null);
   else slot.set("error", (r && r.error) || "The dock refused that.");
   await ctx.refresh(...spec.refresh);
   return r;

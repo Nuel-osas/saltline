@@ -174,6 +174,25 @@ describe("Dockside: selling", () => {
   });
 });
 
+describe("Dockside: receipts", () => {
+  it("shows an unconfirmed call (TxResult.pending) as unknown, never failed", async () => {
+    const { createSlot, runAct } = await import("../src/economy/dockside/ctx");
+    const slot = createSlot();
+    const refresh = vi.fn(async () => {});
+    const chain = { txUrl: (h: string) => `https://explorer.example/tx/${h}` } as unknown as Parameters<typeof runAct>[0]["chain"];
+    await runAct({ chain, refresh }, slot, {
+      pending: "Settling…",
+      call: async () => ({ ok: false, pending: true, txHash: "abc", error: "Not confirmed" }) as never,
+      done: () => "done",
+      refresh: ["balances"],
+    });
+    expect(slot.state).toBe("unknown");
+    expect(slot.el.textContent).toContain("may still settle");
+    expect(slot.el.querySelector("a")!.getAttribute("href")).toBe("https://explorer.example/tx/abc");
+    expect(refresh).toHaveBeenCalledWith("balances");
+  });
+});
+
 describe("Dockside: investing", () => {
   it("reopens a shuttered stall and shows your share", async () => {
     const { dock, root } = await setup();
