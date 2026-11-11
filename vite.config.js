@@ -4,4 +4,5 @@ import { defineConfig } from "vite";
 export default defineConfig({
   base: "./",
   build: { chunkSizeWarningLimit: 4000 },
+  test: { include: ["test/**/*.test.ts"], environment: "node" },
 });

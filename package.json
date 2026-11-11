@@ -7,10 +7,19 @@
     "dev": "vite --host 127.0.0.1 --port 5280",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 5281",
-    "format": "prettier --write \"src/**/*.{js,css}\" index.html"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run test && npm run build",
+    "format": "prettier --write \"src/**/*.{js,ts,css}\" index.html"
   },
   "devDependencies": {
+    "happy-dom": "21.0.4",
     "prettier": "3.9.6",
-    "vite": "8.3.5"
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.1.0"
+  },
+  "dependencies": {
+    "near-kit": "0.20.2"
   }
 }
