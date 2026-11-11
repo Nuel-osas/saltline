@@ -13,5 +13,5 @@
     "noFallthroughCasesInSwitch": true,
     "resolveJsonModule": true
   },
-  "include": ["src/economy", "server", "test"]
+  "include": ["src/economy", "server", "test", "agents"]
 }
