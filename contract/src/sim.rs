@@ -77,13 +77,13 @@ struct Trader {
     hold: [u128; TOKEN_COUNT],
 }
 
-fn cheapest_bid(d: &Desk) -> u128 {
-    BROKERS[d.broker].buys.iter().map(|&t| pricing::bid_for(t, d.stock[t], d.stance)).min().unwrap_or(1)
+fn top_bid(d: &Desk) -> u128 {
+    BROKERS[d.broker].buys.iter().map(|&t| pricing::bid_for(t, d.stock[t], d.stance)).max().unwrap_or(1)
 }
 
 /// The contract's close and reopen rule (Saltline::review_broker), on the copy.
 fn review(d: &mut Desk) {
-    if d.open && pricing::should_close(d.scrip, cheapest_bid(d)) {
+    if d.open && pricing::should_close(d.scrip, top_bid(d)) {
         d.open = false;
     } else if !d.open && pricing::should_reopen(d.scrip) {
         d.open = true;

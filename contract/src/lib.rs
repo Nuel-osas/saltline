@@ -419,22 +419,24 @@ impl Saltline {
 
     // ---- brokers ----
 
-    pub(crate) fn cheapest_bid(&self, b: usize) -> u128 {
+    /// The highest bid the broker is showing now, across the cargo it buys.
+    pub(crate) fn top_bid(&self, b: usize) -> u128 {
         let br = &self.brokers[b];
-        BROKERS[b].buys.iter().map(|&t| pricing::bid_for(t, br.bal[t], br.stance)).min().unwrap_or(1)
+        BROKERS[b].buys.iter().map(|&t| pricing::bid_for(t, br.bal[t], br.stance)).max().unwrap_or(1)
     }
 
-    /// Close an open broker that can no longer cover a unit, or reopen a closed one that reached the line
-    /// (pricing::should_close, pricing::should_reopen). Logs the change.
+    /// Close an open broker that can no longer cover a unit at its top bid, or reopen a closed one that reached the
+    /// line (pricing::should_close, pricing::should_reopen). Logs the change.
     pub(crate) fn review_broker(&mut self, b: usize) {
         let scrip = self.brokers[b].bal[SCRIP];
         let name = BROKERS[b].name;
         if self.brokers[b].open {
-            if pricing::should_close(scrip, self.cheapest_bid(b)) {
+            let top = self.top_bid(b);
+            if pricing::should_close(scrip, top) {
                 self.brokers[b].open = false;
                 let account = self.brokers[b].account_id.clone();
                 let text = format!(
-                    "{name} shut the stall on {scrip} scrip. Float is {}; needs {} to reopen.",
+                    "{name} shut the stall on {scrip} scrip: can't pay {top} and keep the {} float. Needs {} to reopen.",
                     pricing::FLOAT,
                     pricing::REOPEN_LINE
                 );

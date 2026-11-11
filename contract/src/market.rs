@@ -285,6 +285,8 @@ impl Saltline {
             text,
             near_sdk::serde_json::json!({ "broker": BROKERS[b].id, "token_id": ITEMS[t].id, "amount": U128(n), "cost": U128(cost) }),
         );
+        // Every trade is followed by the closing check (pricing::should_close).
+        self.review_broker(b);
         Cost { cost: U128(cost) }
     }
 

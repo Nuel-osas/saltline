@@ -469,6 +469,41 @@ fn a_broker_closes_investors_reopen_it_and_share_the_dividend() {
 }
 
 #[test]
+fn a_broker_closes_below_float_plus_its_top_bid_and_can_export_its_way_back() {
+    let mut w = World::new();
+    let me = w.register("pilot.testnet", "GULL");
+    w.give(me, COPPER, 1_000);
+    // Feed Moss copper one coil at a time. Each sale is allowed while it keeps the float; she shuts as soon as
+    // she couldn't pay her top bid (chips, untouched at 88) and keep it.
+    let mut sales = 0;
+    while w.c.brokers[MOSS].open {
+        let before = w.c.brokers[MOSS].bal[SCRIP];
+        assert!(before >= pricing::FLOAT + w.c.top_bid(MOSS), "open only while it covers its top bid");
+        w.as_("pilot.testnet").sell("moss".into(), "copper".into(), U128(1));
+        sales += 1;
+    }
+    let moss = &w.c.brokers[MOSS];
+    assert!(moss.bal[SCRIP] >= pricing::FLOAT, "never below the float");
+    assert!(moss.bal[SCRIP] < pricing::FLOAT + w.c.top_bid(MOSS));
+    assert_eq!(w.c.top_bid(MOSS), pricing::bid_for(CHIPS, 7, 100), "the top bid is chips, not the flooded copper");
+    assert!(
+        pricing::can_cover(moss.bal[SCRIP], pricing::bid_for(COPPER, moss.bal[COPPER], 100)),
+        "a coil was still affordable"
+    );
+    assert!(sales > 20);
+    refuses("E_BROKER_CLOSED", || w.as_("pilot.testnet").sell("moss".into(), "copper".into(), U128(1)));
+
+    // A closed broker can still ship to the freighter, and the scrip reopens it.
+    let stock = w.c.brokers[MOSS].bal[COPPER];
+    w.as_(MOSS_ACC).broker_export("copper".into(), U128(stock - 6), "Shut and short of float.".into());
+    assert!(w.c.brokers[MOSS].bal[SCRIP] >= pricing::REOPEN_LINE);
+    assert!(w.c.brokers[MOSS].open);
+    let kinds: Vec<String> = w.c.recent(4).into_iter().map(|e| e.kind).collect();
+    assert_eq!(&kinds[..2], &["reopen".to_string(), "export".to_string()]);
+    w.check_supply();
+}
+
+#[test]
 fn only_the_broker_exports_and_at_most_hourly() {
     let mut w = World::new();
     let me = w.register("pilot.testnet", "GULL");

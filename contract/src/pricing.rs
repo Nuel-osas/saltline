@@ -17,7 +17,7 @@
 //!
 //! ## Rules this file settles that the design doc leaves open
 //! 1. **When a broker closes:** [`should_close`]. It closes after a trade, export or stance change leaves it unable
-//!    to pay for one more unit of its cheapest cargo and stay above the float.
+//!    to pay for one more unit at its highest current bid and stay at or above the float.
 //! 2. **Lazy decay of recent sales:** [`decay_recent`]. It halves every 6 hours and is computed from a stored value
 //!    and a timestamp.
 //! 3. **Per-unit batch pricing:** [`sale_value`] and [`purchase_cost`]. Each unit is priced on its own, with stock
@@ -225,21 +225,32 @@ pub fn can_cover(scrip: u128, paid: u128) -> bool {
     scrip >= paid.saturating_add(FLOAT)
 }
 
-/// **When exactly a broker closes.**
+/// **When exactly a broker closes** (settled by the project lead, 11 Nov 2026):
 ///
-/// After every trade, export or stance change, an open broker checks whether its spare cash (scrip above the float)
-/// still pays for one more unit of the cheapest cargo it buys. If it doesn't, the broker closes. A closed broker
-/// buys nothing and sells no gear until it reopens.
+/// ```text
+/// close when  scrip < FLOAT + highest current bid
+/// ```
 ///
-/// The doc's "a broker below the float is closed" can't be met literally, because sales that would cross the float
-/// are refused. This rule closes the stall at the point where every sale would be refused anyway, and says so on
-/// the ledger.
-pub fn should_close(scrip: u128, cheapest_bid: u128) -> bool {
-    !can_cover(scrip, cheapest_bid)
+/// - **A sale** is refused (`E_BROKER_BROKE`) only if paying for it would take the broker below the float of 100.
+/// - **After every trade, export or stance change**, an open broker checks whether it could still pay for one more
+///   unit at its highest current bid and stay at or above the float. If it couldn't, it closes and the ledger says
+///   so (`close`).
+/// - **A closed broker** refuses `sell` and `buy` with `E_BROKER_CLOSED`. It can still `broker_export`, which is how
+///   it can recover by itself.
+///
+/// The doc's "a broker below the float is closed" can't be met literally, because a sale that would cross the float
+/// is refused. This rule shuts the stall while it still has its float, before it can't honour its own top price.
+///
+/// One consequence: the reopen line (400) is below `FLOAT + top bid` for a broker whose top bid is over 300. That is
+/// the Quartermaster with almost no relay cores, bidding 320 for the next one. Investors can reopen it, and the next
+/// trade closes it again unless the till has grown past that bid. That is the trap from the doc: a broker that
+/// overpays goes broke.
+pub fn should_close(scrip: u128, top_bid: u128) -> bool {
+    !can_cover(scrip, top_bid)
 }
 
-/// A closed broker reopens once its scrip reaches the reopen line. Investment is the usual way. Its own exports
-/// count too, because the freighter's scrip is as good as anyone's.
+/// A closed broker reopens once its scrip reaches the reopen line, through investment (`invest`) or its own exports
+/// (`broker_export`), and the ledger says so (`reopen`).
 pub fn should_reopen(scrip: u128) -> bool {
     scrip >= REOPEN_LINE
 }
