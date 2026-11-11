@@ -214,6 +214,13 @@ Each is marked with a `// ext:` comment so the diff against `pre-hackathon` stay
 3. **Run gear:** max health and magazine size read `G.ext.gear` at reset.
 4. **Run lifecycle:** `run:start` is emitted after the reset `H()`. The existing events cover kills, relays, death
    and extraction.
+5. **Before a run:** a run started with its intro (DEPLOY, or Enter on the title) first asks
+   `G.ext.beforeRun(go)`. A true answer takes the start, and `go()` starts the run later exactly as the game would
+   have. The story's opening briefing uses it on the first DEPLOY ever (the dock pass gate holds the press before
+   this, so the order is gate, briefing, run). Quick restarts and `?autostart` never ask.
+6. **Extra drones:** the patrol (built at the reset) and each wave add `G.ext.waveBonus.gull` gulls and `.hound`
+   hounds, and the cap on drones alive at once rises by `.alive`. The story sets it from the Harbormaster's strength
+   (docs/STORY.md → The fight).
 
 The hooks live on `G.ext`, set up at boot as `{ speedScale: 1, gear: {} }`; with those defaults (and with
 `?noeconomy`) the game plays exactly as the baseline. `G.ext.gear` holds the run's bonuses as numbers, so the item

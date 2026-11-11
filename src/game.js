@@ -58922,6 +58922,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         o.setMarkers(P));
     }
     function U({ skipIntro: P = !1, quick: V = !1, keepRetries: Y = !1 } = {}) {
+      if (!P && !V && a(i.ext, "beforeRun", () => U({ keepRetries: Y }))) return; // ext: the briefing plays first
       if (
         (Y || (c.retries = 0),
         l.show("none"),
@@ -59062,14 +59063,15 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
     function ie() {
       let P = (s.playerStart && s.playerStart.pos) || n.pos;
       for (let V of ["gull", "hound"])
-        for (let Y = 0; Y < Yi.patrol[V]; Y++)
+        for (let Y = 0; Y < Yi.patrol[V] + (i.ext?.waveBonus?.[V] | 0); Y++) // ext: the Harbormaster's extra drones
           K(V, Q(V, { minDist: 32, from: P, preferHidden: !0 }), { state: "patrol" });
     }
     function F(P) {
       let V = Yi.waves[Math.min(P, Yi.waves.length - 1)],
+        xb = i.ext?.waveBonus || {}, // ext: the Harbormaster's extra drones
         Y = [];
-      for (let oe = 0; oe < V.gull; oe++) Y.push("gull");
-      for (let oe = 0; oe < V.hound; oe++) Y.splice(Math.min(Y.length, 1 + oe * 2), 0, "hound");
+      for (let oe = 0; oe < V.gull + (xb.gull | 0); oe++) Y.push("gull");
+      for (let oe = 0; oe < V.hound + (xb.hound | 0); oe++) Y.splice(Math.min(Y.length, 1 + oe * 2), 0, "hound");
       let L = 0,
         Z = 0;
       (Y.forEach((oe, fe) => {
@@ -59087,7 +59089,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       for (let Y = 0; Y < c.queue.length; Y++) {
         let L = c.queue[Y];
         if (c.time < L.at) continue;
-        if (V >= Yi.maxAlive) {
+        if (V >= Yi.maxAlive + (i.ext?.waveBonus?.alive | 0)) { // ext: room for the extra drones
           L.at = c.time + 1;
           continue;
         }
