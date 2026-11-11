@@ -189,6 +189,7 @@ src/economy/              the game side, in TypeScript
   wallet.ts, chain.ts     keys, signing, calls queue, views, event polling
   mock.ts                 an in-memory chain with the same interface (tests and offline play)
   salvage/                in-run: manifest, sealed containers, weight, wrecks, HUD, debrief rows
+    spots.ts              the 16 salvage spots, generated from the level by scripts/gen-spots.mjs
   dockside/               between runs: stalls, tooltips, ticker, leaderboard, invest, listings, fast-forward chart
 src/game.js               the baseline game; only small, marked extension points are added (see below)
 ```
