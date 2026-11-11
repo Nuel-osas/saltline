@@ -228,7 +228,7 @@
 .dk-equip[aria-pressed="true"] { color: var(--ink); background: var(--signal); border-color: var(--signal); }
 .dk-equip[aria-pressed="true"] i { background: var(--ink); border-color: var(--ink); }
 .dk-equip:disabled { opacity: .3; cursor: default; }
-.dk-next { margin-top: 12px !important; padding: 9px 10px 8px; border: 1px dashed rgba(232, 228, 218, .22); font: 600 12px/1.3 var(--f-label); letter-spacing: .16em; text-transform: uppercase; color: var(--steel); }
+.dk .dk-next { margin-top: 12px; padding: 9px 10px 8px; border: 1px dashed rgba(232, 228, 218, .22); font: 600 12px/1.3 var(--f-label); letter-spacing: .16em; text-transform: uppercase; color: var(--steel); }
 .dk-next.set { border-style: solid; border-color: rgba(255, 179, 71, .55); color: var(--signal); }
 .dk-hold-acct { margin-top: 10px !important; font: 400 10px/1.4 var(--f-mono); color: var(--steel); }
 .dk-hold-acct a { color: var(--bone-dim); }
@@ -384,7 +384,7 @@ a.dk-tk-i:hover { color: var(--bone); } a.dk-tk-i:hover .dk-tk-t { text-decorati
 .dk .dk-cs-in::placeholder { color: rgba(232, 228, 218, .22); }
 .dk-cs-hint { min-height: 16px; margin-top: 7px !important; font: 400 11px/1.4 var(--f-mono); color: var(--steel); }
 .dk-cs-hint[data-state="error"] { color: var(--alarm); } .dk-cs-hint[data-state="ok"] { color: var(--signal); }
-.dk-pass-gift { position: relative; margin: 14px 0 14px !important; padding-left: 12px; font: 600 16px/1.25 var(--f-label); letter-spacing: .04em; }
+.dk .dk-pass-gift { position: relative; margin: 14px 0 14px; padding-left: 12px; font: 600 16px/1.25 var(--f-label); letter-spacing: .04em; }
 .dk-pass-gift::before { content: ''; position: absolute; left: 0; top: 1px; bottom: 1px; width: 3px; background: var(--signal); }
 .dk .btn.primary.dk-claim { width: 100%; }
 .dk-pass[data-state="pending"] .dk-claim { cursor: progress; background: repeating-linear-gradient(-45deg, var(--signal) 0 10px, var(--signal-hot) 10px 20px); background-size: 28px 28px; animation: dk-stripes .55s linear infinite; }
