@@ -9,7 +9,7 @@
 // faced at the doors, E is held through the real keyboard (the game's input module reads it), the relays are cut with
 // game.debugCut() and the player is moved to the boat. Exits non-zero on the first failed check.
 import { mkdirSync } from "node:fs";
-import { chromium } from "/Users/emmanuelosadebe/pier-pressure/node_modules/playwright-core/index.mjs";
+import { launch } from "./browser.mjs";
 
 const base = process.argv.find((a) => a.startsWith("http")) || "http://127.0.0.1:5290";
 const shotsAt = process.argv.indexOf("--shots");
@@ -22,11 +22,7 @@ const check = (ok, what, detail = "") => {
   if (!ok) failed++;
 };
 
-const browser = await chromium.launch({
-  executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  headless: true,
-  args: ["--use-angle=metal", "--ignore-gpu-blocklist", "--enable-gpu"],
-});
+const browser = await launch();
 
 async function open(query, { economy = false } = {}) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });

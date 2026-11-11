@@ -18,18 +18,14 @@
 // other 10 have their doors against another box or a wall. If a level change ever leaves more than 16, the script
 // keeps the shut ones first and spreads the picks (each pick is the candidate farthest from those already chosen).
 import { writeFileSync } from "node:fs";
-import { chromium } from "/Users/emmanuelosadebe/pier-pressure/node_modules/playwright-core/index.mjs";
+import { launch } from "./browser.mjs";
 
 const url = process.argv.find((a) => a.startsWith("http")) || "http://127.0.0.1:5290";
 const dry = process.argv.includes("--dry");
 const OUT = new URL("../src/economy/salvage/spots.ts", import.meta.url);
 const COUNT = 16;
 
-const browser = await chromium.launch({
-  executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  headless: true,
-  args: ["--use-angle=metal", "--ignore-gpu-blocklist", "--enable-gpu"],
-});
+const browser = await launch();
 try {
   const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
   await page.goto(url + "/?noeconomy=1&noaudio=1&q=low", { waitUntil: "load" });
