@@ -963,6 +963,24 @@ fn exports_and_trades_between_players_are_not_deliveries() {
     assert_eq!((t.delivered["core"].0, t.delivered["meds"].0, t.client.have.0), (1, 1, 1));
 }
 
+#[test]
+fn a_simulated_week_counts_its_sales_as_deliveries_and_reports_the_act() {
+    let mut w = World::new();
+    let me = w.register("pilot.testnet", "GULL");
+    w.as_("anyone.testnet");
+    let week = w.c.simulate(168, 30, 7);
+    assert_eq!(week[0].act, 1, "hour 0 is the town now");
+    assert!(week.windows(2).all(|p| p[0].act <= p[1].act), "acts never go back");
+    // From Act II, the simulated traders' cores reveal the client within the week.
+    w.light_both("pilot.testnet", me);
+    w.as_("anyone.testnet");
+    let week = w.c.simulate(168, 30, 7);
+    assert_eq!((week[0].act, week[168].act), (2, 3));
+    // A view: the real town is untouched.
+    assert_eq!(w.c.town().act, 2);
+    assert_eq!(near_sdk::serde_json::to_value(&week[0]).unwrap()["act"], 2);
+}
+
 // -----------------------------------------------------------------------------------------------------------------
 // Storage per player (the contract pays for it)
 // -----------------------------------------------------------------------------------------------------------------
@@ -1021,6 +1039,13 @@ fn print_a_simulated_week() {
                 b.stock.values().map(|v| v.0).collect::<Vec<_>>()
             )
         };
-        println!("h{:>3} moss {} | ines {} | qm {}", p.hour, f(&p.brokers.moss), f(&p.brokers.ines), f(&p.brokers.qm));
+        println!(
+            "h{:>3} act {} moss {} | ines {} | qm {}",
+            p.hour,
+            p.act,
+            f(&p.brokers.moss),
+            f(&p.brokers.ines),
+            f(&p.brokers.qm)
+        );
     }
 }
