@@ -6,7 +6,6 @@
 // The shooter never waits on any of it: a pending, refused or malformed manifest leaves the baseline game.
 import { RULES } from "../items";
 import type { Economy, GearId } from "../types";
-import { createFakeEconomy } from "./fake";
 import { createSalvageHud, type DebriefView, type Marker } from "./hud";
 import { WRECK_SLOTS, sealPoint, wreckPoint, type Point } from "./place";
 import {
@@ -524,12 +523,13 @@ export function createSalvage(G: Game, economy: Economy): Salvage {
 }
 
 /**
- * Starts salvage beside a booted game and drives its update on animation frames. Uses G.economy when the client lane
- * has set one, else this lane's fake chain (until the shared mock lands). Any failure leaves the baseline game.
+ * Starts salvage beside a booted game and drives its update on animation frames, on G.economy (the offline mock or
+ * testnet, set by main.ts). Without an economy, or on any failure, it leaves the baseline game.
  */
 export function startSalvage(G: Game): Salvage | null {
   try {
-    const economy: Economy = G.economy ?? (G.economy = createFakeEconomy({ delayMs: 400 }));
+    const economy: Economy | undefined = G.economy;
+    if (!economy) return null; // no economy attached (?noeconomy, or it failed to start): the baseline game
     const s = createSalvage(G, economy);
     G.salvage = s;
     let last = performance.now();
