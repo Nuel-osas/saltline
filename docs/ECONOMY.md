@@ -78,10 +78,12 @@ shows in a tooltip.
   - It is computed lazily from a stored value and a timestamp.
 - **Batches:** a sale of n units is priced one unit at a time, with stock rising between units. Big dumps get worse
   prices.
-- **Cash:** a broker can't pay more scrip than it holds. A sale that would take its scrip below the closing float
-  (100) is refused.
-- **Closing:** a broker below the float is **closed** and won't trade.
-- **Reopening:** players `invest` scrip. When the broker's scrip reaches the reopen line (400), it reopens.
+- **Cash:** a sale that would take a broker's scrip below the float (100) is refused.
+- **Closing:** after any trade or export, a broker **closes** when its scrip can no longer cover one more unit at its
+  highest current bid while staying at or above the float (`scrip < float + max_bid`). A closed broker refuses sales
+  and purchases, but can still export, which is how it can recover on its own.
+- **Reopening:** players `invest` scrip. When the broker's scrip reaches the reopen line (400), through investment or
+  an export, it reopens.
   Investors hold shares in proportion to what they put in.
 - **Export (a broker's only income besides gear):** a broker ships stock above target to the freighter at the export
   price. It is paid in newly minted scrip, minus a 10% dividend split between its shareholders.
@@ -102,8 +104,9 @@ shows in a tooltip.
   - Checks: the run is the player's and still open; every index is in the manifest and listed once; the total weight
     is within the carry limit; the run is at least 45 seconds old plus 8 seconds per container opened.
   - Then mints the cargo to the player.
-  - For a recovered wreck, 70% of its cargo goes to the finder and 30% back to the player who died (rounded in the
-    original owner's favour).
+  - For a recovered wreck, the finder gets 70% of each item, rounded half up, and the player who died gets the rest:
+    1 → 1/0, 2 → 1/1, 3 → 2/1, 6 → 4/2. (Rounding down left a 1-unit wreck worth nothing to the finder while it
+    still weighed down their run.)
 - **`die({ run_id, opened, wrecks, spot })`**
   - The carried cargo becomes a wreck at that salvage spot, with the player's callsign.
   - The contract keeps the newest 24 wrecks, and the oldest is lost to the sea.
@@ -190,6 +193,7 @@ src/economy/              the game side, in TypeScript
   wallet.ts, chain.ts     keys, signing, calls queue, views, event polling
   mock.ts                 an in-memory chain with the same interface (tests and offline play)
   salvage/                in-run: manifest, sealed containers, weight, wrecks, HUD, debrief rows
+    spots.ts              the 16 salvage spots, generated from the level by scripts/gen-spots.mjs
   dockside/               between runs: stalls, tooltips, ticker, leaderboard, invest, listings, fast-forward chart
 src/game.js               the baseline game; only small, marked extension points are added (see below)
 ```
@@ -205,6 +209,13 @@ Each is marked with a `// ext:` comment so the diff against `pre-hackathon` stay
 4. **Run lifecycle:** `run:start` is emitted after the reset `H()`. The existing events cover kills, relays, death
    and extraction.
 
+The hooks live on `G.ext`, set up at boot as `{ speedScale: 1, gear: {} }`; with those defaults (and with
+`?noeconomy`) the game plays exactly as the baseline. `G.ext.gear` holds the run's bonuses as numbers, so the item
+table stays in TypeScript: `health` (added to max health, 40 for a plate), `rounds` (added to the magazine, 15 for a
+mag) and `cutTime` (multiplies relay and seal cut times, 0.6 with a cutter: 40% less time). Health and magazine are
+read at the reset, before `run:start`, so the salvage module keeps `G.ext.gear` in step with `economy.equipped`
+between runs.
+
 ## Following the baseline's patterns
 
 - Modules are `create(G)` returning `{ update(dt) }`.
@@ -219,4 +230,5 @@ Each is marked with a `// ext:` comment so the diff against `pre-hackathon` stay
 - **Contract:** `cargo test` (unit tests on pricing, runs and market), plus a sandbox or testnet run of a full loop.
 - **Client:** `npm run check` (typecheck, vitest, build).
 - **Browser:** a headless smoke test that plays a run on the mock chain and on testnet: deploy, crack, extract, sell,
-  then read the balance.
+  then read the balance. `scripts/smoke-salvage.mjs` covers the in-run half (cut, carry, die, extract) and checks that
+  `?noeconomy` still plays the baseline.

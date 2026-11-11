@@ -25,16 +25,16 @@ what goes over the wire. Change both sides and this file together.
 |---|---|---|
 | `items` | – | `[{ id, name, kind, weight, base: U128, export: U128?, target: u32? }]` (the table in ECONOMY.md) |
 | `rules` | – | `{ spot_count, containers_per_run, wrecks_per_run, carry_limit, min_run_seconds, per_container_seconds, finder_share_pct, starter_scrip: U128 }` |
-| `profile` | `{ account_id }` | `null` or `{ account_id, callsign, registered_at, runs, extractions, deaths, best_haul: U128, active_run: u64? }` |
+| `profile` | `{ account_id }` | `null` or `{ account_id, callsign, registered_at, runs, extractions, deaths, best_haul: U128, active_run: u64? }`, where `active_run` lets a reload resume a run |
 | `balances` | `{ account_id }` | `{ "<token_id>": U128 }`, with only non-zero balances listed |
 | `mt_balance_of` / `mt_batch_balance_of` / `mt_supply` | as in NEP-245 | as in NEP-245 |
 | `brokers` | – | `[{ id, account_id, name, open, scrip: U128, stance: u32, stock: { "<cargo>": U128 }, bids: [Quote], asks: [Quote], shares: [{ account_id, callsign, shares: U128 }], last_memo: string? }]` |
 | `manifest` | `{ run_id }` | `null` or `Manifest` |
 | `wrecks` | – | `[Wreck]`, newest first, up to 24 |
 | `listings` | – | `[{ id, seller, callsign, token_id, amount: U128, price: U128, at }]` |
-| `recent` | `{ limit }` | `[{ kind, at, account, callsign?, text }]`, newest first, up to 64 kept |
+| `recent` | `{ limit }` | `[{ kind, at, account, callsign?, text }]`, newest first, up to 64 kept. There's no tx hash, because a contract can't read its own; the ticker links to the account's explorer page |
 | `leaderboard` | – | `{ net_worth: [Row], best_haul: [Row], investors: [Row] }`; Row = `{ account_id, callsign, value: U128 }`, top 10 each |
-| `simulate` | `{ hours: u32 ≤ 168, traders: u32 ≤ 30, seed: u64 }` | `[{ hour, brokers: { "<broker>": { open, scrip: U128, bids: { "<cargo>": U128 }, stock: { "<cargo>": U128 } } } }]`, one point per hour |
+| `simulate` | `{ hours: u32 ≤ 168, traders: u32 ≤ 30, seed: u64 }` | `[{ hour, brokers: { "<broker>": { open, scrip: U128, bids: { "<cargo>": U128 }, stock: { "<cargo>": U128 } } } }]`: `hours + 1` points, with hour 0 being now. Each point is taken before that hour's broker exports. 168 × 30 burns about 103 Tgas |
 | `advice` | `{ broker }` | `{ action: "none" or "export" or "stance", token_id?, amount: U128?, stance: u32?, memo }` (the default policy, used by the agent runner) |
 
 - **Quote:** `{ token_id, price: U128, reason }`.
@@ -51,13 +51,20 @@ what goes over the wire. Change both sides and this file together.
 | `die` | `{ run_id, opened: [u32], wrecks: [u64], spot: u32 }` | the run's player | `{ wreck_id: u64? }` (null when nothing was carried) |
 | `sell` | `{ broker, token_id, amount: U128 }` | player | `{ paid: U128 }` |
 | `buy` | `{ broker, token_id, amount: U128 }` | player | `{ cost: U128 }` |
-| `invest` | `{ broker, amount: U128 }` | player | `{ shares: U128, reopened: bool }` |
+| `invest` | `{ broker, amount: U128 }` | player | `{ shares: U128, reopened: bool }`, where `shares` is the caller's total after the call |
 | `list` | `{ token_id, amount: U128, price: U128 }` | player | `{ id }` |
 | `buy_listing` | `{ id }` | player | `{ paid: U128 }` |
 | `cancel_listing` | `{ id }` | the seller | `{}` |
-| `broker_export` | `{ token_id, amount: U128, memo }` | the broker's account | `{ earned: U128, dividend: U128 }` |
+| `broker_export` | `{ token_id, amount: U128, memo }` | the broker's account | `{ earned: U128, dividend: U128 }`: `earned` is what the broker kept, and `earned + dividend` is the gross |
 | `broker_stance` | `{ stance: u32, memo }` | the broker's account | `{}` |
 | NEP-245 `mt_transfer` / `mt_batch_transfer` | as in NEP-245 (1 yoctoNEAR deposit, as the standard requires) | holder | as in NEP-245 |
+
+### Notes from the implementation
+
+- Optional fields are sent as `null`, not left out.
+- Dividends show up in `balances` and `mt_balance_of` straight away. They are minted at the holder's next call.
+- An unknown broker or token id gets the nearest code: `E_NOT_BROKER`, or `E_DOESNT_BUY` / `E_DOESNT_SELL`.
+- Not implemented: NEP-245 `mt_transfer_call` and approvals.
 
 ### Callsigns
 
@@ -90,3 +97,4 @@ Callsigns are 3–16 characters from `A–Z 0–9 - . _ space`, stored upper-cas
 | `E_STANCE_RANGE` | Stance outside 80–120 |
 | `E_NO_LISTING` | No such listing |
 | `E_BAD_AMOUNT` | Zero or too large |
+| `E_FULL` | The contract is at a limit: 500 profiles or 100 open listings |
