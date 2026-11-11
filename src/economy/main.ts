@@ -5,6 +5,7 @@ import { createTestnetChain } from "./chain";
 import { type EconomyConfig, readConfig } from "./config";
 import { type MockChain, createMockChain, createMockWallet } from "./mock";
 import { startSalvage } from "./salvage";
+import { startStory } from "./story";
 import type { Economy } from "./types";
 import { type GuestWallet, createGuestWallet } from "./wallet";
 
@@ -55,6 +56,9 @@ whenBooted()
     }
 
     startSalvage(G); // in-run salvage (src/economy/salvage); guarded inside
+    // The story (src/economy/story): briefing, radio, the Harbormaster, the town's lights. Guarded inside. Started
+    // before the Dockside so its key and click capture runs ahead of the deploy gate's while the briefing is up.
+    startStory(G);
     // The Dockside, the between-runs market (src/economy/dockside). Guarded: if it fails, the shooter plays on.
     import("./dockside/mount").then((d) => d.mount(G)).catch((e) => console.warn("[dockside] off:", e));
 

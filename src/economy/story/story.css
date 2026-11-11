@@ -1,0 +1,45 @@
+/* The story layer (src/economy/story): the opening briefing's title cards and the Harbormaster's radio channel.
+   Built from the game's own tokens and type (src/ui.css): the display and label faces, bone on ink, the signal
+   orange for Control and the Dock Office, and one cold colour that belongs to the Harbormaster alone. */
+:root { --st-cold: #8fd3ff; --st-cold-dim: rgba(143, 211, 255, .55); --st-bar: clamp(30px, 11vh, 110px); }
+
+/* ---- the briefing ---- */
+.st-brief { position: absolute; inset: 0; z-index: 30; pointer-events: auto; color: var(--bone); opacity: 0; transition: opacity .45s ease; cursor: default; }
+.st-brief[hidden] { display: none; }
+.st-brief.on { opacity: 1; }
+.st-brief.out { opacity: 0; transition-duration: .5s; pointer-events: none; }
+.st-veil { position: absolute; inset: 0; background: radial-gradient(120% 95% at 28% 52%, rgba(6, 8, 10, .5) 0%, rgba(6, 8, 10, .86) 72%), rgba(6, 8, 10, .2); }
+.st-bars i { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--st-bar) + var(--sat)); background: #000; transform: translateY(-101%); transition: transform .8s cubic-bezier(.2, .7, .2, 1); }
+.st-bars i + i { top: auto; bottom: 0; height: calc(var(--st-bar) + var(--sab)); transform: translateY(101%); }
+.st-brief.on .st-bars i { transform: none; }
+.st-card { position: absolute; left: max(var(--gl), 9vw); right: max(var(--gr), 9vw); top: 50%; max-width: 31em; transform: translateY(calc(-50% + 12px)); opacity: 0;
+  transition: opacity .4s ease, transform 1.1s cubic-bezier(.2, .7, .2, 1); }
+.st-card.in { opacity: 1; transform: translateY(-50%); }
+.st-k { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; font: 600 13px/1.2 var(--f-label); letter-spacing: .24em; text-transform: uppercase; color: var(--bone-dim); }
+.st-tag { font: 900 15px/1 var(--f-display); letter-spacing: .06em; color: var(--ink); background: var(--signal); padding: 4px 7px 3px; }
+.st-n { font: 500 11px/1 var(--f-mono); letter-spacing: .1em; color: var(--steel); }
+.st-t { position: relative; margin: 0; padding-top: 20px; border-top: 1px solid var(--line); font: 500 clamp(24px, 3.2vw, 46px)/1.16 var(--f-label); letter-spacing: .012em; color: var(--bone);
+  text-shadow: 0 2px 26px rgba(0, 0, 0, .55); text-wrap: balance; }
+.st-t::before { content: ''; position: absolute; left: 0; top: -2px; width: 72px; height: 3px; background: var(--signal); }
+.st-foot { position: absolute; left: max(var(--gl), 9vw); right: max(var(--gr), 6vw); bottom: calc(var(--st-bar) + var(--sab) + 16px); display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.st-ticks { display: flex; gap: 6px; }
+.st-ticks i { width: 22px; height: 3px; background: var(--bone-faint); transition: background .3s; }
+.st-ticks i.done { background: var(--bone-dim); }
+.st-ticks i.on { background: var(--signal); }
+.st-skip { display: flex; align-items: center; gap: 10px; padding: 8px 0; background: none; border: 0; cursor: pointer; font: 600 12px/1 var(--f-label); letter-spacing: .24em; text-transform: uppercase; color: var(--bone-dim); }
+.st-skip:hover, .st-skip:focus-visible { color: var(--bone); outline: none; }
+.st-skip kbd { background: rgba(11, 13, 15, .45); }
+/* BRIEFING, on its own line under the title's actions */
+.st-replay-line { margin-top: clamp(12px, 2.2vh, 18px); }
+.st-replay { display: inline-flex; align-items: center; gap: 8px; padding: 3px 0 2px; background: none; border: 0; border-bottom: 1px solid rgba(255, 179, 71, .45); border-radius: 0; cursor: pointer;
+  font: 600 13px/1.2 var(--f-label); letter-spacing: .24em; margin-right: -.24em; text-transform: uppercase; color: var(--signal); }
+.st-replay::before { content: ''; width: 0; height: 0; border-left: 7px solid currentColor; border-top: 4.5px solid transparent; border-bottom: 4.5px solid transparent; }
+.st-replay:hover { color: var(--signal-hot); border-bottom-color: var(--signal-hot); }
+.menu .st-replay:focus-visible { outline: 2px solid var(--signal); outline-offset: 4px; }
+/* The title steps back while the cards play; the title camera keeps panning behind them. */
+#app .menu { transition: opacity .4s ease; }
+#app.st-briefing .menu { opacity: 0; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .st-brief, .st-card, .st-bars i, #app .menu { transition-duration: .01ms !important; }
+}
