@@ -114,6 +114,14 @@ describe("chain.ts on real near-kit", () => {
     expect(await chain.balances("rook.testnet")).toEqual({ scrip: 150, core: 2 });
   });
 
+  it("reads views at optimistic finality, where its own calls land", async () => {
+    const requests = stubFetch([], { balances: { scrip: "1" } });
+    const { chain } = makeChain();
+    await chain.balances("rook.testnet");
+    const view = requests.find((r) => r.method === "query" && r.params.request_type === "call_function");
+    expect(view?.params.finality).toBe("optimistic");
+  });
+
   it("retries a view after an HTTP 503 on the next RPC", async () => {
     let first = true;
     const requests = stubFetch([], {
