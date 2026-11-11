@@ -1,10 +1,9 @@
-# Only what the site and its faucet function need goes to Vercel.
+# Only what the site and its functions (the faucet, the broker tick) need goes to Vercel.
 node_modules
 .claude
 .env
 .env.*
 contract
-agents
 test
 scripts
 reference

@@ -5,6 +5,7 @@ import { createTestnetChain } from "./chain";
 import { type EconomyConfig, readConfig } from "./config";
 import { type MockChain, createMockChain, createMockWallet, mockActParam } from "./mock";
 import { startSalvage } from "./salvage";
+import { startTicks, tickUrl } from "./tick";
 import { startStory } from "./story";
 import type { Economy } from "./types";
 import { type GuestWallet, createGuestWallet } from "./wallet";
@@ -56,6 +57,9 @@ whenBooted()
         if (!document.hidden) mock.ambient(AMBIENT_TICK);
       }, AMBIENT_TICK * 1000);
     }
+
+    // On testnet, wake the broker agents when someone plays (server/tick.ts): GitHub's schedule never fired.
+    if (cfg.mode !== "mock") startTicks(tickUrl(cfg.faucetUrl), G.events);
 
     startSalvage(G); // in-run salvage (src/economy/salvage); guarded inside
     // The story (src/economy/story): briefing, radio, the Harbormaster, the town's lights. Guarded inside. Started
