@@ -6,6 +6,7 @@
 //! - `pricing.rs`: the pricing rules (the one readable file)
 //! - `policy.rs`: the default broker policy (used by `advice` and `simulate`)
 //! - `runs.rs`: start_run, extract, die, manifests and wrecks
+//! - `market.rs`: sell, buy, invest, listings, broker calls, the broker board and the leaderboard
 //!
 //! Integers only: amounts are whole scrip in `u128`, times are block milliseconds in `u64`.
 
@@ -19,6 +20,7 @@ use near_sdk::store::{IterableMap, LookupMap, Vector};
 use near_sdk::{AccountId, PanicOnDefault, env, near};
 
 pub mod items;
+pub mod market;
 pub mod mt;
 pub mod policy;
 pub mod pricing;
