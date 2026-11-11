@@ -111,7 +111,11 @@ export type LedgerKind =
   | "reopen"
   | "export"
   | "stance"
-  | "listing";
+  | "listing"
+  /** A district of the town relit (docs/STORY.md → The arc). */
+  | "district"
+  /** The town's act moved on: the lights on the water (II) or the client revealed (III). */
+  | "act";
 
 export interface LedgerEvent {
   kind: LedgerKind;
@@ -164,7 +168,10 @@ export interface TownView {
   districts: District[];
   /** The Quartermaster's client: revealed once the lights are back and 8 cores have been sold to him in total. */
   client: { need: number; have: number; revealed: boolean; revealedAt: number | null };
-  /** 0–100. Zero before the reveal. Each wave gets `bonusDrones` extra drones. */
+  /**
+   * 0–100. Zero before the reveal. Each wave gets `bonusDrones` extra drones. `recentCores` is the decayed count of
+   * cores sold to the Quartermaster since the reveal, in thousandths of a core (as the contract keeps it).
+   */
   harbormaster: { strength: number; recentCores: number; bonusDrones: number };
 }
 

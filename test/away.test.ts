@@ -7,7 +7,7 @@ import { createDockside, type Dockside, type GameLike } from "../src/economy/doc
 import { addWrecks, awayLines, listingSeller, loadSeen, MAX_LINES, noteNews, ownerShare, saveSeen, SEEN_KEY, seenFrom, wreckOwners, type AwayReads, type Seen } from "../src/economy/dockside/away";
 import { BROKERS } from "../src/economy/items";
 import { createMockChain, createMockWallet } from "../src/economy/mock";
-import type { BrokerView, LedgerEvent } from "../src/economy/types";
+import type { BrokerView, LedgerEvent, TownView } from "../src/economy/types";
 
 const ME = "a".repeat(64);
 const T0 = 1_800_000_000_000;
@@ -184,6 +184,61 @@ describe("the away card's lines", () => {
   });
 });
 
+/** A town: which districts are lit, and whether the client is known. */
+function town(lit: ("clinic" | "generators")[], revealed = false, bonusDrones = 0): TownView {
+  const d = (id: "clinic" | "generators", tokenId: "meds" | "fuel", need: number) => ({ id, tokenId, need, have: lit.includes(id) ? need : 2, lit: lit.includes(id), litAt: lit.includes(id) ? T0 + 1 : null });
+  return {
+    act: revealed ? 3 : lit.length === 2 ? 2 : 1,
+    delivered: {},
+    districts: [d("clinic", "meds", 15), d("generators", "fuel", 10)],
+    client: { need: 8, have: revealed ? 8 : 3, revealed, revealedAt: revealed ? T0 + 2 : null },
+    harbormaster: { strength: bonusDrones * 25, recentCores: bonusDrones * 2500, bonusDrones },
+  };
+}
+
+describe("the away card's town lines", () => {
+  it("says a district lit while they were away", () => {
+    const lines = awayLines(seen({ town: { lit: [], revealed: false } }), reads({ town: town(["clinic"]) }), ME);
+    expect(lines).toEqual([{ kind: "town", tag: "Lights", text: "The clinic's lights are back on.", figure: undefined, tone: "up" }]);
+  });
+
+  it("says the lights came on across the water when the second district lit, or both did", () => {
+    const one = awayLines(seen({ town: { lit: ["clinic"], revealed: false } }), reads({ town: town(["clinic", "generators"]) }), ME);
+    expect(one).toEqual([
+      { kind: "town", tag: "Act II", text: "The generators are running. The town across the water is lit again.", figure: "Lights on the water", tone: "up" },
+    ]);
+    const both = awayLines(seen({ town: { lit: [], revealed: false } }), reads({ town: town(["clinic", "generators"]) }), ME);
+    expect(both[0].text).toBe("The clinic and the generators are lit. The town across the water is lit again.");
+    expect(both).toHaveLength(1);
+  });
+
+  it("says the client was revealed, with the drones it fields", () => {
+    const lines = awayLines(seen({ town: { lit: ["clinic", "generators"], revealed: false } }), reads({ town: town(["clinic", "generators"], true, 2) }), ME);
+    expect(lines).toEqual([{ kind: "town", tag: "Act III", text: "The Quartermaster's client is the Harbormaster.", figure: "+2 drones a wave", tone: "down" }]);
+    // the whole arc in one absence: the lights, then the reveal
+    const all = awayLines(seen({ town: { lit: [], revealed: false } }), reads({ town: town(["clinic", "generators"], true) }), ME);
+    expect(all.map((l) => l.tag)).toEqual(["Act II", "Act III"]);
+    expect(all[1].figure).toBeUndefined();
+  });
+
+  it("leads with the town's news, ahead of their own", () => {
+    const lines = awayLines(seen({ town: { lit: [], revealed: false } }), reads({ town: town(["clinic"]), balances: { scrip: 190 } }), ME);
+    expect(lines.map((l) => l.kind)).toEqual(["town", "scrip"]);
+  });
+
+  it("says nothing about the town on a first look at it, when it couldn't be read, or when nothing moved", () => {
+    expect(awayLines(seen(), reads({ town: town(["clinic"], true) }), ME)).toEqual([]); // a snapshot from before the town
+    expect(awayLines(seen({ town: { lit: [], revealed: false } }), reads({ town: null }), ME)).toEqual([]);
+    expect(awayLines(seen({ town: { lit: ["clinic"], revealed: false } }), reads({ town: town(["clinic"]) }), ME)).toEqual([]);
+  });
+
+  it("records the town it saw in the snapshot, and keeps it through a failed read", () => {
+    const s = seenFrom(null, { town: town(["clinic"]) }, ME, T0);
+    expect(s.town).toEqual({ lit: ["clinic"], revealed: false });
+    expect(seenFrom(s, { town: null }, ME, T0 + 1).town).toEqual({ lit: ["clinic"], revealed: false });
+  });
+});
+
 describe("the snapshot", () => {
   it("takes what was read and keeps what wasn't", () => {
     const prev = seen({ scrip: 150, ledgerAt: T0 });
@@ -302,6 +357,31 @@ describe("the away card in the Dockside", () => {
     await vi.waitFor(() => expect(dock.gate).toBe("in"));
     await new Promise((r) => setTimeout(r, 30));
     expect(dock.root.querySelector(".dk-away")).toBe(null);
+  });
+
+  it("tells them the lights came on and the client was named while they were gone", async () => {
+    const mock = createMockChain(7, { storage: null, act: 1 });
+    const wallet = createMockWallet(mock);
+    expect((await wallet.claim("WREN")).ok).toBe(true);
+    const ui = document.createElement("div");
+    document.body.append(ui);
+    const G: GameLike = { events: { on: () => () => {}, emit: () => {} }, game: { state: "title", menus: { root: ui } } };
+    const dock = createDockside(G, { chain: mock, wallet, manifest: null, carried: {} }, { host: ui });
+    docks.push(dock);
+    await dock.open("title");
+    await vi.waitFor(() => expect(loadSeen(localStorage, wallet.accountId()!)?.town).toEqual({ lit: [], revealed: false }));
+    dock.close();
+
+    // the town moves on without them: the lights, then the reveal
+    mock.forceAct(3);
+
+    await dock.open("title");
+    await vi.waitFor(() => expect(dock.root.querySelector(".dk-away")).not.toBe(null));
+    const rows = [...dock.root.querySelectorAll<HTMLElement>(".dk-away-i")];
+    expect(rows.map((r) => r.dataset.kind)).toEqual(["town", "town"]);
+    expect(rows[0].textContent).toBe("Act IIThe clinic and the generators are lit. The town across the water is lit again.Lights on the water");
+    expect(rows[1].textContent).toBe("Act IIIThe Quartermaster's client is the Harbormaster.+2 drones a wave");
+    expect(rows[1].dataset.tone).toBe("down");
   });
 
   it("doesn't count the player's own sale as scrip that came in while away, even when they leave before it settles", async () => {

@@ -10,6 +10,10 @@ import {
   bidReason,
   createMockChain,
   createMockWallet,
+  decayMilli,
+  mockActParam,
+  STORY,
+  strengthOf,
 } from "../src/economy/mock";
 import type { Manifest, WreckView } from "../src/economy/types";
 
@@ -477,5 +481,255 @@ describe("ambient play and persistence", () => {
     const chain = createMockChain(1, { storage: null });
     expect(chain.network).toBe("mock");
     expect(chain.txUrl("anything")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------
+// The town's arc (docs/STORY.md)
+
+/** A registered ROOK holding plenty of every cargo, with brokers rich enough to buy it all. */
+const townSetup = (seed = 7) =>
+  setup((s) => {
+    Object.assign(s.accounts[s.me].balances, { meds: 40, fuel: 40, core: 40, copper: 10 });
+    for (const id of ["moss", "ines", "qm"] as const) s.brokers[id].scrip = 1_000_000;
+  }, seed);
+
+describe("the town's arc: deliveries and districts", () => {
+  it("counts every player's sale to a broker as a delivery, and nothing else", async () => {
+    const { chain } = await townSetup();
+    expect((await chain.town()).delivered).toEqual({ copper: 0, meds: 0, chips: 0, fuel: 0, core: 0 });
+    expect((await chain.sell("moss", "copper", 3)).ok).toBe(true);
+    expect((await chain.sell("ines", "fuel", 2)).ok).toBe(true);
+    expect((await chain.sell("qm", "fuel", 1)).ok).toBe(true); // fuel to the Quartermaster counts for the generators too
+    expect((await chain.town()).delivered).toEqual({ copper: 3, meds: 0, chips: 0, fuel: 3, core: 0 });
+    // a refused sale isn't a delivery
+    expect((await chain.sell("ines", "copper", 1)).code).toBe("E_DOESNT_BUY");
+    // a broker shipping to the freighter isn't one either
+    const ship = await chain.brokerExport("moss", "copper", 3, "Shelves can't take more.");
+    expect(ship.ok).toBe(true);
+    expect((await chain.town()).delivered).toEqual({ copper: 3, meds: 0, chips: 0, fuel: 3, core: 0 });
+  });
+
+  it("lights the clinic at 15 meds and the generators at 10 fuel, one at a time; Act II when both are lit", async () => {
+    const { chain, clock } = await townSetup();
+    expect((await chain.sell("ines", "meds", 14)).ok).toBe(true);
+    let t = await chain.town();
+    expect(t.act).toBe(1);
+    expect(t.districts[0]).toEqual({ id: "clinic", tokenId: "meds", need: 15, have: 14, lit: false, litAt: null });
+
+    clock.advance(60_000);
+    const clinicAt = T0 + 60_000;
+    expect((await chain.sell("ines", "meds", 1)).ok).toBe(true);
+    t = await chain.town();
+    expect(t.districts[0]).toMatchObject({ have: 15, lit: true, litAt: clinicAt });
+    expect(t.districts[1]).toMatchObject({ id: "generators", tokenId: "fuel", need: 10, have: 0, lit: false });
+    expect(t.act).toBe(1);
+    expect((await chain.recent(1))[0]).toMatchObject({ kind: "district", text: "The clinic's lights are back on." });
+
+    clock.advance(60_000);
+    expect((await chain.sell("qm", "fuel", 4)).ok).toBe(true);
+    const last = await chain.sell("ines", "fuel", 6);
+    expect(last.ok).toBe(true);
+    t = await chain.town();
+    expect(t.districts[1]).toMatchObject({ have: 10, lit: true, litAt: clinicAt + 60_000 });
+    expect(t.act).toBe(2);
+    expect((await chain.recent(3)).map((e) => e.text)).toEqual([
+      "The town across the water is lit again.",
+      "The generators are running. Lights on the water.",
+      `ROOK sold 6 fuel cells to Ines for ${last.paid}.`,
+    ]);
+    // more deliveries keep counting, and nothing relights twice
+    expect((await chain.sell("ines", "meds", 3)).ok).toBe(true);
+    expect((await chain.town()).districts[0]).toMatchObject({ have: 18, litAt: clinicAt });
+    expect((await chain.recent(64)).filter((e) => e.kind === "district")).toHaveLength(2);
+  });
+});
+
+describe("the town's arc: the client", () => {
+  async function actTwo(chain: Awaited<ReturnType<typeof townSetup>>["chain"]) {
+    expect((await chain.sell("ines", "meds", 15)).ok).toBe(true);
+    expect((await chain.sell("ines", "fuel", 10)).ok).toBe(true);
+    expect((await chain.town()).act).toBe(2);
+  }
+
+  it("is revealed in Act II on the 8th core sold to the Quartermaster", async () => {
+    const { chain, clock } = await townSetup();
+    await actTwo(chain);
+    expect((await chain.sell("qm", "core", 7)).ok).toBe(true);
+    let t = await chain.town();
+    expect(t.client).toEqual({ need: 8, have: 7, revealed: false, revealedAt: null });
+    expect(t.act).toBe(2);
+    clock.advance(5_000);
+    expect((await chain.sell("qm", "core", 1)).ok).toBe(true);
+    t = await chain.town();
+    expect(t.client).toEqual({ need: 8, have: 8, revealed: true, revealedAt: T0 + 5_000 });
+    expect(t.act).toBe(3);
+    expect((await chain.recent(1))[0]).toMatchObject({ kind: "act", text: "The Quartermaster's client is the Harbormaster." });
+  });
+
+  it("counts cores sold before Act II: the reveal comes the moment the lights do", async () => {
+    const { chain } = await townSetup();
+    expect((await chain.sell("qm", "core", 9)).ok).toBe(true);
+    expect((await chain.town()).act).toBe(1); // the lights aren't on yet
+    expect((await chain.town()).client).toMatchObject({ have: 9, revealed: false });
+    await chain.sell("ines", "meds", 15);
+    expect((await chain.town()).client.revealed).toBe(false);
+    expect((await chain.sell("ines", "fuel", 10)).ok).toBe(true);
+    const t = await chain.town();
+    expect(t.act).toBe(3);
+    expect(t.client).toMatchObject({ have: 9, revealed: true });
+    // the generators, the lights on the water and the reveal land in that order
+    expect((await chain.recent(3)).map((e) => e.kind)).toEqual(["act", "act", "district"]);
+    expect((await chain.recent(1))[0].text).toBe("The Quartermaster's client is the Harbormaster.");
+  });
+
+  it("doesn't count cores offered to anyone else (only the Quartermaster buys them)", async () => {
+    const { chain } = await townSetup();
+    expect((await chain.sell("ines", "core", 1)).code).toBe("E_DOESNT_BUY");
+    expect((await chain.town()).client.have).toBe(0);
+  });
+});
+
+describe("the town's arc: the Harbormaster's strength", () => {
+  async function revealed() {
+    const s = await townSetup();
+    await s.chain.sell("qm", "core", 8);
+    await s.chain.sell("ines", "meds", 15);
+    await s.chain.sell("ines", "fuel", 10);
+    expect((await s.chain.town()).act).toBe(3);
+    return s;
+  }
+
+  it("is 0 before the reveal however many cores are sold, and 0 at the reveal", async () => {
+    const { chain } = await townSetup();
+    await chain.sell("qm", "core", 20);
+    expect((await chain.town()).harbormaster).toEqual({ strength: 0, recentCores: 0, bonusDrones: 0 });
+    const r = await revealed();
+    expect((await r.chain.town()).harbormaster).toEqual({ strength: 0, recentCores: 0, bonusDrones: 0 });
+  });
+
+  it("is 10 a core sold since the reveal, capped at 100, with a drone a wave per 25", async () => {
+    const { chain } = await revealed();
+    await chain.sell("qm", "core", 2);
+    expect((await chain.town()).harbormaster).toEqual({ strength: 20, recentCores: 2000, bonusDrones: 0 });
+    await chain.sell("qm", "core", 1);
+    expect((await chain.town()).harbormaster).toEqual({ strength: 30, recentCores: 3000, bonusDrones: 1 });
+    await chain.sell("qm", "core", 4);
+    expect((await chain.town()).harbormaster).toMatchObject({ strength: 70, bonusDrones: 2 });
+    await chain.sell("qm", "core", 5);
+    expect((await chain.town()).harbormaster).toEqual({ strength: 100, recentCores: 12000, bonusDrones: 4 });
+    // the ledger says where each core went
+    expect((await chain.recent(1))[0].text).toMatch(/^ROOK sold 5 relay cores to Quartermaster for \d+\. They go home to the Harbormaster\.$/);
+    await chain.sell("qm", "core", 1);
+    expect((await chain.recent(1))[0].text).toMatch(/for \d+\. It goes home to the Harbormaster\.$/);
+  });
+
+  it("halves every 12 hours the town doesn't sell, so the town can starve it", async () => {
+    const { chain, clock } = await revealed();
+    await chain.sell("qm", "core", 8);
+    expect((await chain.town()).harbormaster).toEqual({ strength: 80, recentCores: 8000, bonusDrones: 3 });
+    clock.advance(6 * 3_600_000);
+    expect((await chain.town()).harbormaster).toEqual({ strength: 56, recentCores: 5656, bonusDrones: 2 });
+    clock.advance(6 * 3_600_000);
+    expect((await chain.town()).harbormaster).toEqual({ strength: 40, recentCores: 4000, bonusDrones: 1 });
+    // a sale adds to what's left after the decay, not to the old peak
+    await chain.sell("qm", "core", 1);
+    expect((await chain.town()).harbormaster).toEqual({ strength: 50, recentCores: 5000, bonusDrones: 2 });
+    clock.advance(10 * 24 * 3_600_000);
+    expect((await chain.town()).harbormaster).toEqual({ strength: 0, recentCores: 0, bonusDrones: 0 });
+    expect((await chain.town()).act).toBe(3); // the reveal stays
+  });
+
+  it("decays in integers the way the contract's decay_recent does", () => {
+    const h = 3_600_000;
+    // contract/src/pricing.rs's own vectors at its 6-hour half-life
+    expect(decayMilli(8_000, 0, 6 * h)).toBe(8_000);
+    expect(decayMilli(8_000, 6 * h, 6 * h)).toBe(4_000);
+    expect(decayMilli(8_000, 12 * h, 6 * h)).toBe(2_000);
+    expect(decayMilli(8_000, 3 * h, 6 * h)).toBe(5_656);
+    // the story's 12 hours
+    expect(decayMilli(8_000, 12 * h, STORY.halfLifeMs)).toBe(4_000);
+    expect(decayMilli(0, h, STORY.halfLifeMs)).toBe(0);
+    expect(decayMilli(1_000, 1_000 * 12 * h, STORY.halfLifeMs)).toBe(0);
+    // it only ever falls
+    let last = Infinity;
+    for (let m = 0; m <= 48 * 4; m++) {
+      const v = decayMilli(10_000, m * 15 * 60_000, STORY.halfLifeMs);
+      expect(v).toBeLessThanOrEqual(last);
+      last = v;
+    }
+    expect(strengthOf(12_345)).toBe(100);
+    expect(strengthOf(2_499)).toBe(24);
+  });
+});
+
+describe("the town's arc offline: ambient play and the ?act= switch", () => {
+  it("other players move the arc at a pace you can watch: the lights inside half an hour, then the reveal", async () => {
+    let t = T0;
+    const chain = createMockChain(7, { storage: null, now: () => t, warmupSeconds: 240 });
+    const seen: { min: number; act: number; meds: number }[] = [];
+    for (let s = 0; s <= 45 * 60; s += 3) {
+      const town = await chain.town();
+      if (s % 300 === 0 || town.act !== seen[seen.length - 1]?.act) seen.push({ min: s / 60, act: town.act, meds: town.districts[0].have });
+      chain.ambient(3);
+      t += 3_000;
+    }
+    const at = (act: number) => seen.find((x) => x.act >= act)?.min ?? Infinity;
+    expect(at(2)).toBeLessThan(30);
+    expect(at(3)).toBeLessThan(45);
+    // the clinic's count climbed in steps along the way, not all at once
+    const meds = seen.filter((x) => x.min <= 10).map((x) => x.meds);
+    expect(new Set(meds).size).toBeGreaterThan(2);
+  });
+
+  it("reads ?act=1|2|3 and nothing else", () => {
+    expect(mockActParam("?act=1")).toBe(1);
+    expect(mockActParam("?noaudio=1&act=3")).toBe(3);
+    for (const bad of ["", "?act=0", "?act=4", "?act=two", "?act="]) expect(mockActParam(bad)).toBeNull();
+  });
+
+  it("puts the town at the start of each act, with the ledger's lines to match, on every load", async () => {
+    let t = T0;
+    const storage = memStorage();
+    const three = createMockChain(5, { storage, now: () => t, act: 3 });
+    const town = await three.town();
+    expect(town.act).toBe(3);
+    expect(town.districts.every((d) => d.lit && d.have >= d.need)).toBe(true);
+    expect(town.client).toMatchObject({ have: 13, revealed: true });
+    expect(town.client.revealedAt).toBeLessThan(T0);
+    expect(town.harbormaster).toEqual({ strength: 62, recentCores: 6200, bonusDrones: 2 });
+    const lines = (await three.recent(64)).filter((e) => e.kind === "district" || e.kind === "act").map((e) => e.text);
+    expect(lines).toEqual([
+      "The Quartermaster's client is the Harbormaster.",
+      "The town across the water is lit again.",
+      "The generators are running. Lights on the water.",
+      "The clinic's lights are back on.",
+    ]);
+
+    t += 60_000;
+    const one = createMockChain(5, { storage, now: () => t, act: 1 });
+    const dark = await one.town();
+    expect(dark.act).toBe(1);
+    expect(dark.districts.map((d) => [d.have, d.need, d.lit])).toEqual([
+      [9, 15, false],
+      [4, 10, false],
+    ]);
+    expect(dark.client).toMatchObject({ have: 3, revealed: false });
+    expect((await one.recent(64)).some((e) => e.kind === "district" || e.kind === "act")).toBe(false);
+
+    const two = createMockChain(5, { storage, now: () => t, act: 2 });
+    expect(await two.town()).toMatchObject({ act: 2, client: { have: 5, revealed: false }, harbormaster: { strength: 0 } });
+    // without the switch, the saved town carries on from where it was
+    const plain = createMockChain(5, { storage, now: () => t });
+    expect((await plain.town()).act).toBe(2);
+  });
+
+  it("gives a state saved before the story a town of its own, counted from then", async () => {
+    const storage = memStorage();
+    const old = createMockChain(3, { storage, now: () => T0 }).snapshot() as Partial<MockState>;
+    delete old.town;
+    storage.setItem(MOCK_STORAGE_KEY, JSON.stringify(old));
+    const chain = createMockChain(3, { storage, now: () => T0 });
+    expect(await chain.town()).toMatchObject({ act: 1, delivered: { meds: 0, fuel: 0, core: 0 }, client: { have: 0 } });
   });
 });

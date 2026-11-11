@@ -73,8 +73,9 @@ export function createPass(opts: PassOptions): PassCard {
       { class: "dk-pc-body" },
       h("span", { class: "dk-pc-k" }, "Callsign"),
       shownName,
-      h("span", { class: "dk-pc-meta" }, `Saltline Port Authority · issued ${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}`),
+      h("span", { class: "dk-pc-meta" }, `Dock Office · issued ${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}`),
       bars,
+      h("span", { class: "dk-pc-ledger" }, "Written on the open ledger"),
     ),
     stamp,
   );
@@ -98,8 +99,8 @@ export function createPass(opts: PassOptions): PassCard {
       "p",
       null,
       chain.network === "testnet"
-        ? "Your cargo and scrip live on NEAR testnet, a public ledger, under an account made for you in this browser. No sign-up, no fees."
-        : "On this build your cargo and scrip live on a local mock ledger. The live game keeps them on NEAR testnet.",
+        ? "Your pass, cargo and scrip are written on the open ledger: NEAR testnet, where anyone can read them and nobody can quietly change them. The account was made for you in this browser. No sign-up, no fees."
+        : "On this build your cargo and scrip are written on a local mock ledger. The live game keeps them on the open ledger, NEAR testnet.",
     ),
     h(
       "p",
@@ -130,7 +131,7 @@ export function createPass(opts: PassOptions): PassCard {
   const el = h(
     "section",
     { class: "dk-pass", role: "dialog", "aria-modal": "true", "aria-labelledby": "dk-pass-h", "data-mode": opts.skip ? "deploy" : null },
-    h("div", { class: "m-k" }, "Saltline Port Authority · Berth 4"),
+    h("div", { class: "m-k" }, "Dock Office · Open Ledger"),
     h("h2", { class: "dk-pass-h", id: "dk-pass-h" }, "Sign on"),
     h("p", { class: "dk-pass-lede" }, opts.lede ?? PASS_LEDE),
     card,
