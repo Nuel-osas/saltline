@@ -87,6 +87,32 @@ impl World {
             assert_eq!(self.c.supply[t], total_held(&self.c, t), "supply of {} drifted", ITEMS[t].id);
         }
     }
+    /// Test setup only: deepen a broker's till so long test sequences don't close it.
+    fn fund(&mut self, b: usize, scrip: u128) {
+        self.c.mint(Holder::Broker(b), SCRIP, scrip);
+    }
+    /// Give `who` (player `ix`) cargo and sell it to `broker`, as one call.
+    fn deliver(&mut self, who: &str, ix: u32, broker: &str, token: &str, n: u128) {
+        self.give(ix, token_index(token).unwrap(), n);
+        self.as_(who).sell(broker.into(), token.into(), U128(n));
+    }
+    /// Light both districts (Act II): 15 meds and 10 fuel to Ines, the fuel last.
+    fn light_both(&mut self, who: &str, ix: u32) {
+        self.fund(INES, 10_000);
+        self.deliver(who, ix, "ines", "meds", crate::town::CLINIC_MEDS);
+        self.deliver(who, ix, "ines", "fuel", crate::town::GENERATOR_FUEL);
+    }
+}
+
+/// The data of each NEP-297 `saltline` event of this kind the last call logged.
+fn saltline_events(kind: &str) -> Vec<near_sdk::serde_json::Value> {
+    get_logs()
+        .iter()
+        .filter_map(|l| l.strip_prefix("EVENT_JSON:"))
+        .map(|j| near_sdk::serde_json::from_str::<near_sdk::serde_json::Value>(j).unwrap())
+        .filter(|v| v["standard"] == "saltline" && v["event"] == kind)
+        .map(|v| v["data"][0].clone())
+        .collect()
 }
 
 /// Containers from a manifest that fit within the carry limit, lightest first.
@@ -721,6 +747,241 @@ fn a_simulated_week_moves_prices_and_a_broker_closes_and_reopens() {
 }
 
 // -----------------------------------------------------------------------------------------------------------------
+// The town's arc (town.rs, docs/STORY.md)
+// -----------------------------------------------------------------------------------------------------------------
+
+const CLINIC_LINE: &str = "The clinic's lights are back on.";
+const GENERATORS_LINE: &str = "The generators are running. Lights on the water.";
+
+/// (kind, text) of the newest `n` ledger lines.
+fn lines(c: &Saltline, n: u32) -> Vec<(String, String)> {
+    c.recent(n).into_iter().map(|e| (e.kind, e.text)).collect()
+}
+
+fn line(kind: &str, text: &str) -> (String, String) {
+    (kind.to_string(), text.to_string())
+}
+
+#[test]
+fn the_town_starts_at_act_one_with_nothing_delivered_and_no_key() {
+    let mut w = World::new();
+    w.as_("anyone.testnet");
+    assert!(env::storage_read(crate::town::TOWN_KEY).is_none(), "nothing is stored until the first delivery");
+    let t = w.c.town();
+    assert_eq!(t.act, 1);
+    assert_eq!(t.delivered.keys().cloned().collect::<Vec<_>>(), vec!["chips", "copper", "core", "fuel", "meds"]);
+    assert!(t.delivered.values().all(|v| v.0 == 0));
+    let districts: Vec<_> =
+        t.districts.iter().map(|d| (d.id.as_str(), d.token_id.as_str(), d.need.0, d.have.0, d.lit, d.lit_at)).collect();
+    assert_eq!(districts, vec![("clinic", "meds", 15, 0, false, None), ("generators", "fuel", 10, 0, false, None)]);
+    assert_eq!((t.client.need.0, t.client.have.0, t.client.revealed, t.client.revealed_at), (8, 0, false, None));
+    let h = &t.harbormaster;
+    assert_eq!((h.strength, h.recent_cores.0, h.bonus_drones), (0, 0, 0));
+    // Optional fields go over the wire as null.
+    let json = near_sdk::serde_json::to_value(&t).unwrap();
+    assert!(json["districts"][0]["lit_at"].is_null() && json["client"]["revealed_at"].is_null());
+    assert_eq!(json["client"]["need"], "8", "U128 as a string");
+}
+
+#[test]
+fn districts_light_at_their_thresholds_and_act_two_waits_for_both() {
+    let mut w = World::new();
+    let me = w.register("pilot.testnet", "GULL");
+    w.fund(INES, 10_000);
+    w.fund(QM, 10_000);
+
+    w.deliver("pilot.testnet", me, "ines", "meds", 14);
+    assert_eq!((w.c.town().districts[0].have.0, w.c.town().districts[0].lit), (14, false));
+    assert!(saltline_events("district").is_empty());
+    w.wait(60);
+    w.deliver("pilot.testnet", me, "ines", "meds", 1);
+    let t = w.c.town();
+    assert_eq!((t.districts[0].lit, t.districts[0].lit_at), (true, Some(w.now)));
+    assert_eq!(t.act, 1, "one district lit isn't Act II");
+    assert!(env::storage_read(crate::town::TOWN_KEY).is_some(), "the town lives under its own key");
+    // The event, and the line in the ticker, credited to the player whose crate did it.
+    let ev = saltline_events("district");
+    assert_eq!(ev.len(), 1);
+    assert_eq!((ev[0]["id"].as_str(), ev[0]["at"].as_u64()), (Some("clinic"), Some(w.now)));
+    assert_eq!((ev[0]["account"].as_str(), ev[0]["text"].as_str()), (Some("pilot.testnet"), Some(CLINIC_LINE)));
+    assert!(saltline_events("act").is_empty());
+    assert_eq!(lines(&w.c, 2)[0], line("district", CLINIC_LINE));
+    assert_eq!(lines(&w.c, 2)[1].0, "sale");
+    assert_eq!(w.c.recent(1)[0].callsign.as_deref(), Some("GULL"));
+
+    // Fuel counts whichever broker buys it: 5 to Ines and 4 to the Quartermaster, then the tenth lights the
+    // generators and, with the clinic lit, starts Act II in the same call.
+    w.deliver("pilot.testnet", me, "ines", "fuel", 5);
+    w.deliver("pilot.testnet", me, "qm", "fuel", 4);
+    assert!(!w.c.town().districts[1].lit);
+    w.wait(60);
+    w.deliver("pilot.testnet", me, "qm", "fuel", 1);
+    let t = w.c.town();
+    assert_eq!(t.act, 2);
+    assert_eq!((t.delivered["meds"].0, t.delivered["fuel"].0), (15, 10));
+    assert_eq!(t.districts[1].lit_at, Some(w.now));
+    assert!(!t.client.revealed);
+    let acts = saltline_events("act");
+    assert_eq!(acts.len(), 1);
+    assert_eq!((acts[0]["act"].as_u64(), acts[0]["at"].as_u64()), (Some(2), Some(w.now)));
+    assert_eq!(saltline_events("district")[0]["id"], "generators");
+    assert_eq!(
+        lines(&w.c, 3),
+        vec![
+            line("act", crate::town::ACT_II_LINE),
+            line("district", GENERATORS_LINE),
+            line("sale", &w.c.recent(3)[2].text)
+        ]
+    );
+
+    // Each district and act is announced once.
+    let lit_at = w.c.town().districts[0].lit_at;
+    w.deliver("pilot.testnet", me, "ines", "meds", 3);
+    assert!(saltline_events("district").is_empty() && saltline_events("act").is_empty());
+    assert_eq!(w.c.recent(1)[0].kind, "sale");
+    assert_eq!((w.c.town().districts[0].lit_at, w.c.town().delivered["meds"].0), (lit_at, 18));
+    w.check_supply();
+}
+
+#[test]
+fn cores_sold_before_act_two_count_but_the_client_waits_for_act_two() {
+    let mut w = World::new();
+    let me = w.register("pilot.testnet", "GULL");
+    w.fund(QM, 10_000);
+
+    // Act I: nine cores to the Quartermaster. Counted, but the client can't be revealed before Act II.
+    w.deliver("pilot.testnet", me, "qm", "core", 9);
+    let t = w.c.town();
+    assert_eq!((t.act, t.client.have.0, t.client.revealed), (1, 9, false));
+    assert_eq!((t.harbormaster.strength, t.harbormaster.recent_cores.0), (0, 0), "silent before the reveal");
+    assert!(saltline_events("act").is_empty());
+
+    // The fuel that lights the second district starts Act II and, with the cores already in, reveals the client:
+    // district, Act II, Act III, in that order, in one call.
+    w.wait(60);
+    w.light_both("pilot.testnet", me);
+    let t = w.c.town();
+    assert_eq!((t.act, t.client.revealed, t.client.revealed_at), (3, true, Some(w.now)));
+    let acts: Vec<u64> = saltline_events("act").iter().map(|e| e["act"].as_u64().unwrap()).collect();
+    assert_eq!(acts, vec![2, 3]);
+    assert!(saltline_events("act").iter().all(|e| e["at"].as_u64() == Some(w.now)));
+    assert_eq!(
+        lines(&w.c, 3),
+        vec![
+            line("act", "The Quartermaster's client is the Harbormaster."),
+            line("act", crate::town::ACT_II_LINE),
+            line("district", GENERATORS_LINE)
+        ]
+    );
+    assert_eq!(t.harbormaster.strength, 0, "cores sold before the reveal don't feed the Harbormaster");
+
+    // From the reveal on, every core sold to the Quartermaster feeds it.
+    w.deliver("pilot.testnet", me, "qm", "core", 1);
+    let t = w.c.town();
+    assert_eq!((t.client.have.0, t.harbormaster.recent_cores.0, t.harbormaster.strength), (10, 1_000, 10));
+    assert!(saltline_events("act").is_empty(), "revealed once");
+    w.check_supply();
+}
+
+#[test]
+fn in_act_two_the_eighth_core_reveals_the_client_and_does_not_feed_it() {
+    let mut w = World::new();
+    let me = w.register("pilot.testnet", "GULL");
+    w.fund(QM, 10_000);
+    w.light_both("pilot.testnet", me);
+    assert_eq!(w.c.town().act, 2);
+    w.deliver("pilot.testnet", me, "qm", "core", 7);
+    assert_eq!((w.c.town().act, w.c.town().client.have.0), (2, 7));
+    w.deliver("pilot.testnet", me, "qm", "core", 1);
+    let t = w.c.town();
+    assert_eq!((t.act, t.client.have.0, t.harbormaster.strength), (3, 8, 0));
+    assert_eq!(lines(&w.c, 1), vec![line("act", "The Quartermaster's client is the Harbormaster.")]);
+    w.deliver("pilot.testnet", me, "qm", "core", 2);
+    assert_eq!(w.c.town().harbormaster.strength, 20);
+}
+
+#[test]
+fn the_harbormaster_halves_in_twelve_hours_and_caps_at_100() {
+    let mut w = World::new();
+    let me = w.register("pilot.testnet", "GULL");
+    w.fund(QM, 100_000);
+    w.deliver("pilot.testnet", me, "qm", "core", 8);
+    w.light_both("pilot.testnet", me);
+    assert_eq!(w.c.town().act, 3);
+
+    let hm = |w: &mut World| {
+        w.as_("anyone.testnet");
+        let h = w.c.town().harbormaster;
+        (h.recent_cores.0, h.strength, h.bonus_drones)
+    };
+    w.deliver("pilot.testnet", me, "qm", "core", 5);
+    assert_eq!(hm(&mut w), (5_000, 50, 2));
+    w.wait(12 * 3_600);
+    assert_eq!(hm(&mut w), (2_500, 25, 1), "half after 12 hours, read lazily by the view");
+    w.wait(12 * 3_600);
+    assert_eq!(hm(&mut w), (1_250, 12, 0));
+    // A sale adds to the decayed value, not the stored one.
+    w.deliver("pilot.testnet", me, "qm", "core", 15);
+    assert_eq!(hm(&mut w), (16_250, 100, 4), "strength caps at 100; recent cores don't");
+    // The town can starve it back down by not selling.
+    w.wait(3 * 12 * 3_600);
+    assert_eq!(hm(&mut w), (2_031, 20, 0));
+    w.check_supply();
+}
+
+#[test]
+fn exports_and_trades_between_players_are_not_deliveries() {
+    let mut w = World::new();
+    let gull = w.register("gull.testnet", "GULL");
+    w.register("tern.testnet", "TERN");
+
+    // Brokers ship their stock to the freighter: not a delivery.
+    w.as_(INES_ACC).broker_export("meds".into(), U128(6), "".into());
+    w.as_(QM_ACC).broker_export("core".into(), U128(3), "".into());
+    w.as_(INES_ACC).broker_export("fuel".into(), U128(4), "".into());
+    // Players trade among themselves: not a delivery.
+    w.give(gull, MEDS, 2);
+    w.give(gull, CORE, 1);
+    context("gull.testnet", w.now, 1);
+    w.c.mt_transfer(acc("tern.testnet"), "meds".into(), U128(1), None, None);
+    let id = w.as_("gull.testnet").list("core".into(), U128(1), U128(10)).id;
+    w.as_("tern.testnet").buy_listing(id);
+    // A refused sale delivers nothing.
+    refuses("E_DOESNT_BUY", || w.as_("tern.testnet").sell("moss".into(), "core".into(), U128(1)));
+    let t = w.c.town();
+    assert!(
+        t.delivered.values().all(|v| v.0 == 0),
+        "{:?}",
+        t.delivered.iter().map(|(k, v)| (k, v.0)).collect::<Vec<_>>()
+    );
+    assert_eq!(t.client.have.0, 0);
+
+    // Only a sale to a broker is.
+    w.as_("tern.testnet").sell("qm".into(), "core".into(), U128(1));
+    w.as_("gull.testnet").sell("ines".into(), "meds".into(), U128(1));
+    let t = w.c.town();
+    assert_eq!((t.delivered["core"].0, t.delivered["meds"].0, t.client.have.0), (1, 1, 1));
+}
+
+#[test]
+fn a_simulated_week_counts_its_sales_as_deliveries_and_reports_the_act() {
+    let mut w = World::new();
+    let me = w.register("pilot.testnet", "GULL");
+    w.as_("anyone.testnet");
+    let week = w.c.simulate(168, 30, 7);
+    assert_eq!(week[0].act, 1, "hour 0 is the town now");
+    assert!(week.windows(2).all(|p| p[0].act <= p[1].act), "acts never go back");
+    // From Act II, the simulated traders' cores reveal the client within the week.
+    w.light_both("pilot.testnet", me);
+    w.as_("anyone.testnet");
+    let week = w.c.simulate(168, 30, 7);
+    assert_eq!((week[0].act, week[168].act), (2, 3));
+    // A view: the real town is untouched.
+    assert_eq!(w.c.town().act, 2);
+    assert_eq!(near_sdk::serde_json::to_value(&week[0]).unwrap()["act"], 2);
+}
+
+// -----------------------------------------------------------------------------------------------------------------
 // Storage per player (the contract pays for it)
 // -----------------------------------------------------------------------------------------------------------------
 
@@ -778,6 +1039,13 @@ fn print_a_simulated_week() {
                 b.stock.values().map(|v| v.0).collect::<Vec<_>>()
             )
         };
-        println!("h{:>3} moss {} | ines {} | qm {}", p.hour, f(&p.brokers.moss), f(&p.brokers.ines), f(&p.brokers.qm));
+        println!(
+            "h{:>3} act {} moss {} | ines {} | qm {}",
+            p.hour,
+            p.act,
+            f(&p.brokers.moss),
+            f(&p.brokers.ines),
+            f(&p.brokers.qm)
+        );
     }
 }

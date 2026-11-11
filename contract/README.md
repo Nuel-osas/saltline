@@ -15,8 +15,10 @@ The design is in [`docs/ECONOMY.md`](../docs/ECONOMY.md); the wire format is in
 | `src/runs.rs` | `start_run`, `extract`, `die`, manifests, wrecks, the wreck split |
 | `src/market.rs` | `sell`, `buy`, `invest`, listings, `broker_export`, `broker_stance`, the `brokers` board, `leaderboard`, `advice` |
 | `src/sim.rs` | `simulate`: a week of the market, fast-forwarded in a view |
+| `src/town.rs` | The town's arc (docs/STORY.md): deliveries, districts, acts, the reveal and the Harbormaster's strength, under its own storage key |
 | `src/tests.rs` | Unit tests on the mocked chain |
-| `sandbox/` | One full loop on a local nearcore sandbox (a separate crate, so `cargo test` stays light) |
+| `sandbox/` | One full loop, and the upgrade rehearsal, on a local nearcore sandbox (a separate crate, so `cargo test` stays light) |
+| `upgrade.sh` | Deploys new code to saltline.testnet without an init call, after every gate passes (see Upgrading) |
 
 ## Build, test, deploy
 
@@ -44,6 +46,14 @@ How the contract reads the API, for anyone writing a client against it:
     `list` and `mt_transfer`, `E_EXPORT_STOCK` in `broker_export`.
 - **Optional fields** (`T?`) are sent as `null`, never left out.
 - **`simulate`** returns `hours + 1` points. Hour 0 is the market now, and point h is the end of hour h's trading.
+  Each point also carries `act`: the simulated traders' sales count as deliveries to a copy of the town.
+- **`town`:**
+  - `delivered` lists all five cargo, zeros included.
+  - A district, act or reveal is announced once, by the sale that causes it: a `district` or `act` event and a
+    `recent` line, with the seller as `account` and `callsign`.
+  - The Act II line is "The town across the water is lit again." STORY.md gives the others but not that one.
+  - Cores sold in the sale that causes the reveal count towards the reveal but don't feed the Harbormaster; the
+    ones sold after it do.
 - **`invest`** returns the caller's total shares in that broker after the call (one share per scrip ever invested).
 - **`broker_export`:** `earned` is what the broker kept, `dividend` is what went to its shareholders, and the gross is
   their sum.
@@ -89,10 +99,12 @@ Measured on 11 Nov 2026. Gas is the function call's own receipt, from `sandbox/`
 
 | What | Value | How |
 | --- | --- | --- |
-| Release wasm | 347,580 bytes (≈ 3.5 NEAR of storage on the contract account) | `cargo near build non-reproducible-wasm` |
-| `simulate` 168 h × 30 traders | **101.2–102.9 Tgas** over seeds 7, 42, 1 and 2026 | sandbox, called as a transaction |
-| `register`, `start_run`, `extract`, `sell`, `broker_export` | 2.2, 2.4, 2.5, 2.3, 2.1 Tgas | sandbox |
-| `brokers`, `leaderboard` (1 player) | 1.7, 1.5 Tgas | sandbox |
+| Release wasm | 356,979 bytes (≈ 3.6 NEAR of storage on the contract account); 347,580 before the story | `cargo near build non-reproducible-wasm` |
+| `simulate` 168 h × 30 traders | **109.2–110.8 Tgas** over seeds 7, 42, 1 and 2026 (101.2–102.9 before it tracked the act) | sandbox, called as a transaction |
+| `register`, `start_run`, `extract`, `sell`, `broker_export` | 2.2, 2.4, 2.5, 2.5, 2.1 Tgas | sandbox |
+| `sell` that lights both districts and reveals the client at once (four events) | 3.4 Tgas | sandbox `upgrade.rs`, from a patched town |
+| `brokers`, `leaderboard` (1 player), `town` | 1.7, 1.5, 1.6 Tgas | sandbox |
+| The town's state | 187–211 bytes under the key `town` (more once districts are lit) | `Town`'s Borsh size |
 | Storage per player | 502 bytes (27-character account) to 596 bytes (64-character implicit account, 16-character callsign) | sandbox `storage_usage` delta; unit test `storage_per_player_is_measured` |
 | Storage per open run | 196–255 bytes, freed when the run closes | the same |
 
@@ -101,7 +113,8 @@ Measured on 11 Nov 2026. Gas is the function call's own receipt, from `sandbox/`
   protocol 88, as read from `EXPERIMENTAL_protocol_config`. `client_config` shows no override on
   rpc.testnet.near.org or test.rpc.fastnear.com.
 - `simulate` was sized to stay under 300 Tgas, so it also works on RPCs that set the older 300 Tgas override.
-- At about 100 Tgas, a full week fits with three times to spare. Neither the hours nor the traders had to be cut.
+- At about 110 Tgas, a full week fits with more than twice that to spare. Neither the hours nor the traders had to
+  be cut.
 
 **What storage costs the contract account:**
 
@@ -111,17 +124,18 @@ Measured on 11 Nov 2026. Gas is the function call's own receipt, from `sandbox/`
 | Its open run, while open | about 0.0025 NEAR |
 | 500 players with a run each (≈ 425 KB) | ≈ 4.3 NEAR |
 | 100 listings, 24 wrecks and the 64-event ticker (≈ 45 KB, estimated from their Borsh sizes) | ≈ 0.5 NEAR |
-| The code | ≈ 3.5 NEAR |
+| The code (356,979 bytes) | ≈ 3.6 NEAR |
 
-At its bounds, the contract needs about 8.3 NEAR of storage.
+At its bounds, the contract needs about 8.4 NEAR of storage.
 
 Not measured: `leaderboard` and `brokers` with 500 players. Each reads at most 500 profiles; estimated from
 NEAR's storage-read costs, that is about 30–40 Tgas.
 
 ## Testnet
 
-`saltline.testnet` exists, with its full-access key in `~/.near-credentials/testnet/saltline.testnet.json`. **The
-contract is not deployed yet.**
+`saltline.testnet` exists, with its full-access key in `~/.near-credentials/testnet/saltline.testnet.json`. The
+contract is deployed there and holds live players, so new code goes out with `./upgrade.sh` (below), never
+`./deploy.sh` again: `new` would refuse to run over existing state anyway.
 
 ```sh
 cd contract
@@ -146,3 +160,36 @@ near contract deploy saltline.testnet use-file target/near/saltline.wasm with-in
   storage up to the bounds above.
 - New keys go to `~/.near-credentials/testnet/` only. The broker agents and the faucet server read them from `.env`.
 - Redeploying code with a different state layout needs a migration or a fresh account. There is no migration code.
+
+## Upgrading
+
+The contract on saltline.testnet holds players, so new code goes out as a code deploy with **no init call** and no
+migration. That works only while the root struct `Saltline` keeps its Borsh layout. New state goes under its own
+storage key instead, as the town does (`town`, see `src/town.rs`).
+
+```sh
+cd contract
+CHECK_ONLY=1 ./upgrade.sh   # every gate below, then stop
+./upgrade.sh                # every gate, then the deploy
+```
+
+`upgrade.sh` deploys only if all of these pass, in order:
+1. `cargo test`.
+2. `cargo near build non-reproducible-wasm`.
+3. `sandbox/fetch-live.sh`, which downloads the code live on saltline.testnet to `sandbox/res/` (gitignored).
+4. `sandbox/tests/upgrade.rs`, the rehearsal. It upgrades the live code to the new wasm twice, over fresh state made
+   by the old code and over a copy of saltline.testnet's real state, and checks every view reads back the same and
+   `town` starts at Act I.
+5. The wasm hasn't changed since the rehearsal, and saltline.testnet still runs the code the rehearsal upgraded
+   from.
+
+Then it runs the deploy and reads back the code hash, `town` and `rules`:
+
+```sh
+near contract deploy saltline.testnet use-file target/near/saltline.wasm without-init-call \
+  network-config testnet sign-with-legacy-keychain send
+```
+
+To run the rehearsal alone: `(cd sandbox && ./fetch-live.sh && cargo test --test upgrade -- --nocapture
+--test-threads=1)`, after building the wasm. It needs the testnet RPC. A changed root layout fails it with
+"Cannot deserialize the contract state". That was checked on 11 Nov 2026 by adding a field and reverting it.
