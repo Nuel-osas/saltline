@@ -199,6 +199,8 @@ src/economy/              the game side, in TypeScript
   salvage/                in-run: manifest, sealed containers, weight, wrecks, HUD, debrief rows
     spots.ts              the 16 salvage spots, generated from the level by scripts/gen-spots.mjs
   dockside/               between runs: stalls, tooltips, ticker, leaderboard, invest, listings, fast-forward chart
+    gate.ts               the first deploy asks for a dock pass
+    away.ts               "while you were away": what changed since the last look (snapshot in saltline.seen.v1)
 src/game.js               the baseline game; only small, marked extension points are added (see below)
 ```
 

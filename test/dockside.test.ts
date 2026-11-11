@@ -52,6 +52,7 @@ afterEach(() => {
     d.deployGate.dispose();
   }
   docks = [];
+  localStorage.clear(); // the "while you were away" snapshot belongs to one test
   document.body.replaceChildren();
 });
 

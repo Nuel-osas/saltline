@@ -6,6 +6,7 @@
 // It reads the chain through economy.chain, polls while open, and every action shows settling → result.
 import "./dockside.css";
 import type { GearId } from "../types";
+import { addWrecks, awayLines, createAwayCard, loadSeen, noteNews, saveSeen, seenFrom, type AwayReads } from "./away";
 import { createBoard } from "./board";
 import { createEntries, type Origin } from "./entry";
 import { okv, runAct, type Ctx, type EconomyWithGear, type ReadKey, type Reads } from "./ctx";
@@ -98,6 +99,10 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
   let tab: Tab = "stalls";
   /** The game's deploy press this visit is holding, when the Dockside opened on its pass card for it. */
   let deployReq: DeployRequest | null = null;
+  /** True once this visit's "while you were away" diff is taken: from then on, what's read is what they've seen. */
+  let seenLive = false;
+  let awayToken = 0;
+  let away: { el: HTMLElement; ok: HTMLButtonElement } | null = null;
 
   // ---- the shared context ----
   const inflight: Partial<Record<ReadKey, Promise<void>>> = {};
@@ -116,12 +121,16 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     recent: () => chain.recent(20),
     leaderboard: () => chain.leaderboard(),
   };
-  function load(key: ReadKey, fresh = false): Promise<void> {
+  /** `own`: the read follows the player's own action, so it counts as seen even if they've closed the Dockside since. */
+  function load(key: ReadKey, fresh = false, own = false): Promise<void> {
     const cur = inflight[key];
-    if (cur) return fresh ? cur.then(() => load(key)) : cur;
+    if (cur) return fresh ? cur.then(() => load(key, false, own)) : cur;
     const p = fetchers[key]()
       .then(
-        (v) => void ((reads as Record<ReadKey, unknown>)[key] = { s: "ok", v }),
+        (v) => {
+          (reads as Record<ReadKey, unknown>)[key] = { s: "ok", v };
+          if (seenLive && (isOpen || own)) noteSeen({ [key]: v });
+        },
         (e) => void ((reads as Record<ReadKey, unknown>)[key] = { s: "unknown", error: String(e) }),
       )
       .finally(() => {
@@ -139,7 +148,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     wallet,
     reads,
     me: () => wallet.accountId(),
-    refresh: (...keys) => Promise.all(keys.map((k) => load(k, true))).then(() => {}),
+    refresh: (...keys) => Promise.all(keys.map((k) => load(k, true, true))).then(() => {}),
     act: (slot, spec) => runAct(ctx, slot, spec),
     sound: (k) => emit(k === "click" ? "ui:click" : "ui:hover"),
     flapTick() {
@@ -193,8 +202,9 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
   };
   const main = h("main", { class: "dk-main" }, ...Object.values(panes), h("aside", { class: "dk-side" }, hold.el));
   const gateEl = h("div", { class: "dk-gate" });
+  const awayEl = h("div", { class: "dk-away-wrap" });
   const bot = h("footer", { class: "dk-bot" }, ticker.el);
-  root.append(h("div", { class: "dk-veil", "aria-hidden": "true" }), grain, top, main, bot, gateEl, tooltip.el);
+  root.append(h("div", { class: "dk-veil", "aria-hidden": "true" }), grain, top, main, bot, gateEl, awayEl, tooltip.el);
   (opts.host ?? document.getElementById("ui") ?? document.body).append(root);
   makeGrain(grain);
 
@@ -291,6 +301,102 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     paint();
     setTab(tab);
     focusFirst();
+    void checkAway();
+  }
+
+  // ---- while you were away (away.ts): what changed since they last looked, once per visit ----
+  const store = (): Storage | null => {
+    try {
+      return window.localStorage ?? null;
+    } catch {
+      return null;
+    }
+  };
+  /** Folds what was just read into the snapshot of what they've seen. */
+  function noteSeen(r: Partial<AwayReads>) {
+    const me = wallet.accountId();
+    if (me) saveSeen(store(), seenFrom(loadSeen(store(), me), r, me, Date.now()));
+  }
+  async function checkAway() {
+    const me = wallet.accountId();
+    if (!me) return;
+    const token = ++awayToken;
+    // Nothing this visit has read was folded in yet (seenLive went false when the overlay opened).
+    const prev = loadSeen(store(), me);
+    const got = <T>(f: () => Promise<T>): Promise<T | null> => {
+      try {
+        return Promise.resolve(f()).catch(() => null);
+      } catch {
+        return Promise.resolve(null);
+      }
+    };
+    const [balances, brokers, recent, leaderboard, profile, wrecks] = await Promise.all([
+      got(() => chain.balances(me)),
+      got(() => chain.brokers()),
+      got(() => chain.recent(64)),
+      got(() => chain.leaderboard()),
+      got(() => chain.profile(me)),
+      got(() => chain.wrecks()),
+    ]);
+    // Closed before the reads came back: nothing was seen, so the snapshot stays for next time.
+    if (token !== awayToken || !isOpen || gate !== "in") return;
+    const now: AwayReads = { balances, brokers, recent, leaderboard, profile, wrecks };
+    const lines = awayLines(prev, now, me);
+    saveSeen(store(), { ...seenFrom(prev, now, me, Date.now()), news: [] }); // the caught lines are told now
+    seenLive = true;
+    if (!lines.length || !prev) return;
+    hideAway(true);
+    away = createAwayCard(lines, prev.at, () => hideAway());
+    awayEl.replaceChildren(away.el);
+    root.dataset.away = "on";
+    const ok = away.ok;
+    setTimeout(() => {
+      if (isOpen && away?.ok === ok)
+        try {
+          ok.focus({ preventScroll: true });
+        } catch {
+          /* best effort */
+        }
+    }, 60);
+  }
+  function hideAway(now = false) {
+    if (!away) return;
+    const el = away.el;
+    const had = el.contains(document.activeElement);
+    away = null;
+    delete root.dataset.away;
+    if (now || reducedMotion()) el.remove();
+    else {
+      el.classList.add("out");
+      setTimeout(() => el.remove(), 240);
+    }
+    if (had && isOpen) focusFirst();
+  }
+  /** After a death: their new wreck goes into the snapshot, so a recovery before their next look can say what came home. */
+  async function noteWrecks() {
+    const me = wallet.accountId();
+    if (!me || !loadSeen(store(), me)) return;
+    let w;
+    try {
+      w = await chain.wrecks();
+    } catch {
+      return;
+    }
+    const seen = loadSeen(store(), me);
+    if (seen) saveSeen(store(), addWrecks(seen, w));
+  }
+  /** While the Dockside is shut, lines about them are caught before they scroll out of the chain's last 64. */
+  async function noteLedger() {
+    const me = wallet.accountId();
+    if (!me || !loadSeen(store(), me)) return;
+    let r;
+    try {
+      r = await chain.recent(64);
+    } catch {
+      return;
+    }
+    const seen = loadSeen(store(), me);
+    if (seen && !isOpen) saveSeen(store(), noteNews(seen, r));
   }
 
   /** A pass was issued here: everything that asks "registered?" hears yes, and the title's board stops asking. */
@@ -382,6 +488,8 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
   function show(o: Origin | "paused") {
     origin = o;
     isOpen = true;
+    // Nothing read from here on counts as seen until this visit's away diff is taken (checkGate reads the ledger first).
+    seenLive = false;
     root.hidden = false;
     root.classList.remove("out");
     document.getElementById("app")?.classList.add("dk-on");
@@ -401,6 +509,9 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     // Backing out of the pass card drops the held press: the game stays on its card.
     if (deployReq) deployGate.cancel(deployReq);
     deployReq = null;
+    awayToken++;
+    hideAway(true);
+    awayEl.replaceChildren(); // a slip still fading out goes too
     tooltip.hide();
     week.hide();
     ticker.stop();
@@ -434,6 +545,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
 
   function back() {
     if (tooltip.dismiss()) return;
+    if (away) return hideAway();
     close();
   }
 
@@ -454,7 +566,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
   function focusFirst() {
     setTimeout(() => {
       if (!isOpen) return;
-      const target = gate === "in" ? tabsEl.querySelector<HTMLElement>(`[data-tab="${tab}"]`) : focusables(gateEl)[0];
+      const target = gate === "in" ? (away?.ok ?? tabsEl.querySelector<HTMLElement>(`[data-tab="${tab}"]`)) : focusables(gateEl)[0];
       try {
         target?.focus({ preventScroll: true });
       } catch {
@@ -522,6 +634,8 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
   G.events?.on("game:state", ((e: { state?: string }) => {
     if (isOpen && e?.state && !ORIGINS.includes(e.state as Origin)) close();
     if (e?.state && ORIGINS.includes(e.state as Origin)) void quiet();
+    // The die call takes a moment to land; look for the new wreck once it has.
+    if (e?.state === "dead") setTimeout(() => void noteWrecks(), 5000);
   }) as never);
 
   // While a card is up and the Dockside is shut, keep the title's dock board fresh (slowly, and never mid-run).
@@ -536,7 +650,7 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     } catch {
       registered = null;
     }
-    await Promise.all([load("brokers"), registered ? load("balances") : Promise.resolve()]);
+    await Promise.all([load("brokers"), registered ? load("balances") : Promise.resolve(), noteLedger(), st === "dead" ? noteWrecks() : Promise.resolve()]);
     entries.update(registered);
   }
   void quiet();

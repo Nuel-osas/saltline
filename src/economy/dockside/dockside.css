@@ -1,7 +1,8 @@
 /* dockside.css: the Dockside, the between-runs market. Same language as ui.css (port-authority signage on a film
    title card): its tokens, black letterbox bars for chrome, square corners, letter-spaced Barlow labels, Big Shoulders
    for names, Plex Mono for figures. Class prefix dk-. Sections: frame · stalls · split-flap · shutter · gauges ·
-   receipts · hold · ticker · market · board · week · pass card · tooltip · narrow screens · motion. */
+   receipts · hold · ticker · market · board · week · pass card · while you were away · tooltip · narrow screens ·
+   motion. */
 
 /* ======================================================================  frame  */
 #app.dk-on .menu { opacity: 0; pointer-events: none !important; transition: opacity .25s ease; }
@@ -430,6 +431,42 @@ a.dk-tk-i:hover { color: var(--bone); } a.dk-tk-i:hover .dk-tk-t { text-decorati
 .dk-what p { margin-top: 8px !important; }
 .dk-what code { font: inherit; color: var(--bone); }
 .dk-what a { color: var(--signal); }
+
+/* ======================================================================  while you were away: the dock office's slip  */
+/* A slip dropped over the top of the stalls on the way in: what changed while they were gone, then out of the way.
+   The layer lets clicks through everywhere but the slip itself. */
+.dk-away-wrap { position: absolute; z-index: 6; left: 0; right: 0; top: calc(58px + var(--sat)); display: flex; justify-content: center; padding: 14px var(--dk-padr) 0 var(--dk-pad); pointer-events: none; }
+.dk-away-wrap:empty { display: none; }
+.dk-away-wrap::before { content: ''; position: absolute; inset: 0 0 -60px; background: linear-gradient(180deg, rgba(6, 8, 10, .82) 0%, rgba(6, 8, 10, .55) 55%, transparent 100%); opacity: 0; transition: opacity .3s ease; }
+.dk[data-away="on"] .dk-away-wrap::before { opacity: 1; }
+.dk-away { position: relative; width: min(640px, 100%); pointer-events: auto; padding: 16px 20px 12px; background: var(--plate-solid); border: 1px solid var(--line); border-top: 3px solid var(--signal);
+  box-shadow: 0 28px 60px rgba(0, 0, 0, .62), 0 0 0 1px rgba(0, 0, 0, .4); animation: dk-slip .5s cubic-bezier(.2, .8, .25, 1.1) both; }
+.dk-away::after { content: ''; position: absolute; left: 20px; right: 20px; top: -3px; height: 3px; background: repeating-linear-gradient(-45deg, transparent 0 7px, rgba(11, 13, 15, .55) 7px 14px); pointer-events: none; }
+.dk-away.out { animation: dk-slip-out .24s ease-in both; }
+@keyframes dk-slip { from { opacity: 0; transform: translateY(-22px) rotate(-.6deg); } to { opacity: 1; transform: none; } }
+@keyframes dk-slip-out { to { opacity: 0; transform: translateY(-16px); } }
+.dk-away-hd { display: flex; flex-direction: column; gap: 7px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.dk-away-h { font: 900 32px/.9 var(--f-display); letter-spacing: .1em; text-transform: uppercase; }
+.dk-away-list { list-style: none; }
+.dk-away-i { display: grid; grid-template-columns: 88px minmax(0, 1fr) auto; align-items: baseline; gap: 12px; padding: 9px 0 8px; border-bottom: 1px solid rgba(232, 228, 218, .08);
+  animation: dk-rise .45s cubic-bezier(.2, .7, .2, 1) both; animation-delay: calc(.18s + var(--i, 0) * .08s); }
+.dk-away-tag { justify-self: start; font: 700 10.5px/1 var(--f-label); letter-spacing: .2em; text-transform: uppercase; color: var(--steel); padding: 4px 6px 3px; border: 1px solid currentColor; white-space: nowrap; }
+.dk-away-i[data-tone="up"] .dk-away-tag { color: var(--signal); }
+.dk-away-i[data-tone="down"] .dk-away-tag { color: var(--alarm); }
+.dk-away-t { font: 500 15px/1.3 var(--f-label); letter-spacing: .02em; color: var(--bone); }
+.dk-away-f { font: 500 14px/1 var(--f-mono); white-space: nowrap; color: var(--bone-dim); text-align: right; }
+.dk-away-i[data-tone="up"] .dk-away-f { color: var(--signal); }
+.dk-away-i[data-tone="down"] .dk-away-f { color: var(--alarm); }
+.dk-away-i[data-kind="scrip"] .dk-away-f { font-size: 17px; }
+.dk-away-ft { display: flex; justify-content: flex-end; padding-top: 10px; }
+.dk .btn.small.dk-away-ok { min-height: 32px; padding: 1px 18px 0 20px; }
+@media (max-width: 760px) {
+  .dk-away-wrap { top: calc(86px + var(--sat)); }
+  .dk-away { padding: 14px 14px 10px; }
+  .dk-away-h { font-size: 26px; }
+  .dk-away-i { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "tag f" "t t"; row-gap: 6px; }
+  .dk-away-tag { grid-area: tag; } .dk-away-t { grid-area: t; } .dk-away-f { grid-area: f; }
+}
 
 /* ======================================================================  tooltip  */
 .dk-tip { position: absolute; left: 0; top: 0; z-index: 40; width: 300px; max-width: calc(100vw - 20px); padding: 12px 14px 12px; background: rgba(9, 11, 12, .97); border: 1px solid rgba(232, 228, 218, .24); border-left: 3px solid var(--signal);
