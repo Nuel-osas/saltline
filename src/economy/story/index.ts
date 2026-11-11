@@ -1,5 +1,5 @@
-// The story in the game (docs/STORY.md): the opening briefing, Control's lines that follow the town's arc, and the
-// Harbormaster's channel from Act III.
+// The story in the game (docs/STORY.md): the opening briefing, Control's lines that follow the town's arc, the
+// Harbormaster's channel from Act III, and its extra drones.
 //
 // It reads the town through economy.chain.town() (optional: a chain without it is Act I) and never waits on it: every
 // read has a short timeout, a failed read is unknown, and unknown plays as Act I with no line that needs a number.
@@ -11,13 +11,16 @@ import { HARBORMASTER } from "./copy";
 import { coresSold24h, harbormasterAwake, runStartLines, type Line } from "./lines";
 import { defaultStore, loadMemory, saveMemory } from "./memory";
 import { createChannel, type Channel } from "./radio";
-import { createTownReader, type TownRead, type TownReader } from "./town";
+import { bonusOf, createTownReader, type TownRead, type TownReader } from "./town";
+import { NO_BONUS, waveBonus } from "./waves";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
 type Game = any;
 
 /** How old a town read may be at a run's start, and how long a fresh one may take. */
 const RUN_READ = { maxAge: 15_000, timeout: 2_500 };
+/** Between runs and on the title, the next run's patrol follows the town at this pace (ms). */
+const IDLE_POLL = 60_000;
 /** Run-start lines that arrive later than this after the run started are dropped, not said out of place. */
 const LATE_MS = 20_000;
 const RECENT_LIMIT = 64;
@@ -49,6 +52,10 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
       return undefined;
     }
   }
+
+  // ---- extra drones: game.js reads G.ext.waveBonus for the patrol (at the reset) and each wave ----
+  ext.waveBonus = { ...NO_BONUS };
+  const setBonus = (read: TownRead | null) => (ext.waveBonus = waveBonus(bonusOf(read)));
 
   // ---- the briefing ----
   const host = document.getElementById("ui") ?? document.body;
@@ -121,6 +128,7 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     const read = await town.read(RUN_READ);
     if (t !== token) return;
     runRead = read;
+    setBonus(read); // the waves of this run; the patrol already took the last known bonus at the reset
     let cores24h: number | null = null;
     if (harbormasterAwake(read)) {
       const events = await Promise.race([
@@ -151,6 +159,7 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
   on("run:start", () => void startRun().catch((e) => console.warn("[story] run start", e)));
   on("game:state", (e: { state?: string }) => {
     if (e?.state === "playing") flush();
+    if (e?.state === "title" || e?.state === "complete" || e?.state === "dead") idleRead();
   });
   on("objective:done", (e: { index?: number; total?: number }) => {
     if (cutSaid || !harbormasterAwake(runRead) || !e || !(Number(e.index) < Number(e.total))) return;
@@ -171,6 +180,21 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     queueMicrotask(() => channel.say({ who: "harbormaster", text: HARBORMASTER.extractWithCores }, 4.4));
   });
 
+  // ---- reads between runs ----
+  let idleT = IDLE_POLL / 1000;
+  function idleRead() {
+    idleT = IDLE_POLL / 1000;
+    town.read({ maxAge: 10_000 }).then(
+      (r) => {
+        const st = G.game?.state;
+        if (st === "playing" || st === "intro" || st === "paused") return; // a run took over; its own read rules
+        setBonus(r);
+      },
+      () => {},
+    );
+  }
+  idleRead();
+
   return {
     briefing,
     town,
@@ -178,14 +202,18 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     get run() {
       return { read: runRead, lines: said };
     },
-    update() {
+    update(dt: number) {
       guard("update", () => {
+        if (G.game?.state === "paused") return;
         if (!replayBtn?.isConnected) injectButton();
+        const st = G.game?.state;
+        if ((st === "title" || st === "complete" || st === "dead") && !document.hidden && (idleT -= dt) <= 0) idleRead();
       });
     },
     dispose() {
       for (const off of offs) off();
       if (ext.beforeRun) delete ext.beforeRun;
+      ext.waveBonus = { ...NO_BONUS };
       briefing.dispose();
       channel.dispose();
       replayBtn?.parentElement?.remove();
