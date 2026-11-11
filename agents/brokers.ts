@@ -387,8 +387,19 @@ async function turn(id: BrokerId, board: BrokerView[], d: RoundDeps): Promise<Li
   const decision: Decision & { invalid?: true } = decide(view, advice);
   const move = decision.move;
   let memo = memoFor(view, decision, d.seed);
+  if (move.action === "hold") {
+    const held: Line = { broker: id, status: "held", action: "hold", memo, voice: "template" };
+    if (decision.invalid) held.note = "the advice didn't add up against the board";
+    return held;
+  }
+  const benched = d.bench?.check(id, move);
+  if (benched) {
+    const until = new Date(benched).toISOString().slice(11, 16);
+    return { broker: id, status: "held", action: "hold", note: `${describeMove(move)} was refused; benched until ${until} UTC` };
+  }
+  // The move is fixed from here on: the voice only ever returns the memo's words.
   let voice: Line["voice"] = "template";
-  if (d.voice && move.action !== "hold") {
+  if (d.voice) {
     const rewrite = await rewriteMemo(id, memo, factsFor(view, decision), d.voice);
     if (rewrite) {
       memo = rewrite;
@@ -396,15 +407,6 @@ async function turn(id: BrokerId, board: BrokerView[], d: RoundDeps): Promise<Li
     }
   }
   const line: Line = { broker: id, status: "held", action: describeMove(move), memo, voice };
-  if (move.action === "hold") {
-    if (decision.invalid) line.note = "the advice didn't add up against the board";
-    return line;
-  }
-  const benched = d.bench?.check(id, move);
-  if (benched) {
-    const until = new Date(benched).toISOString().slice(11, 16);
-    return { broker: id, status: "held", action: "hold", note: `${describeMove(move)} was refused; benched until ${until} UTC` };
-  }
   if (d.dryRun) {
     return { ...line, status: "dry-run", note: key.ok ? `would sign as ${key.key.accountId} (key from ${key.key.source})` : `would skip: ${key.why}` };
   }

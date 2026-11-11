@@ -577,6 +577,16 @@ describe("the LLM voice can't change the move", () => {
     spy.mockRestore();
   });
 
+  it("isn't asked about a move that's benched after a refusal", async () => {
+    const { fetch, voice } = voiceWith(chat("Eight coils out."));
+    const bench = new Bench();
+    bench.put("moss", { action: "export", tokenId: "copper", amount: 8 }, 3_600_000);
+    const s = busy();
+    const lines = await round(s, { voice, bench });
+    expect(by(lines, "moss")).toMatchObject({ status: "held", action: "hold" });
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps a rewrite to one plain line", () => {
     const truth = "Moss is open with 1500 scrip at stance 100. Shipping 8 coils to the freighter at 35 each.";
     expect(acceptRewrite("<think>numbers 999</think>\n\"Eight coils, 35 apiece. Gone.\"\nextra", truth)).toBe("Eight coils, 35 apiece. Gone.");
