@@ -506,11 +506,14 @@ export function createWeek(ctx: Ctx) {
     if (playing) raf = requestAnimationFrame(frame);
   }
 
+  /** Draw in layout pixels; the backing store is sized in device pixels, counting any CSS zoom on the overlay
+   *  (big screens scale the whole Dockside), so canvas text scales with the rest of the type. */
   function sizeCanvas() {
     const r = wrap.getBoundingClientRect();
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const w = Math.max(1, Math.round(r.width));
-    const hh = Math.max(1, Math.round(r.height));
+    const w = Math.max(1, wrap.clientWidth || Math.round(r.width));
+    const hh = Math.max(1, wrap.clientHeight || Math.round(r.height));
+    const zoom = r.width > 0 ? r.width / w : 1;
+    const dpr = Math.min(3, (window.devicePixelRatio || 1) * zoom);
     if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(hh * dpr)) {
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(hh * dpr);

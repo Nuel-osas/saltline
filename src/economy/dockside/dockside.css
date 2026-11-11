@@ -455,6 +455,11 @@ a.dk-tk-i:hover { color: var(--bone); } a.dk-tk-i:hover .dk-tk-t { text-decorati
 .dk-entry .dk-entry-n:empty { display: none; }
 .dk-entry .dk-entry-n { font: 500 12px/1 var(--f-mono); letter-spacing: 0; color: var(--ink); background: var(--signal); padding: 3px 5px 2px; }
 
+/* ======================================================================  big screens: the 720p composition, scaled  */
+/* Media queries see the real viewport, so anything keyed to width has to follow the zoomed layout width here. */
+@media (min-width: 1500px) and (min-height: 860px) { .dk { zoom: 1.2; } .dk-brand-sub { display: none; } }
+@media (min-width: 1800px) and (min-height: 1020px) { .dk { zoom: 1.45; } }
+
 /* ======================================================================  narrower screens  */
 @media (max-width: 1440px) { .dk-brand-sub { display: none; } }
 @media (max-width: 1240px) { .dk-tabs { gap: 18px; } .dk-me span { display: none; } }
