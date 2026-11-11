@@ -202,4 +202,9 @@ export interface Economy {
   manifest: Manifest | null;
   /** Cargo carried in this run, by token. */
   carried: Amounts<CargoId>;
+  /**
+   * Gear equipped for the next run, set by the Dockside. The salvage module applies it at the run's reset (through
+   * G.ext.gear), sends it to startRun, and empties the list once the chain confirms the run burned it.
+   */
+  equipped?: GearId[];
 }
