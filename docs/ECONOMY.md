@@ -204,6 +204,13 @@ Each is marked with a `// ext:` comment so the diff against `pre-hackathon` stay
 4. **Run lifecycle:** `run:start` is emitted after the reset `H()`. The existing events cover kills, relays, death
    and extraction.
 
+The hooks live on `G.ext`, set up at boot as `{ speedScale: 1, gear: {} }`; with those defaults (and with
+`?noeconomy`) the game plays exactly as the baseline. `G.ext.gear` holds the run's bonuses as numbers, so the item
+table stays in TypeScript: `health` (added to max health, 40 for a plate), `rounds` (added to the magazine, 15 for a
+mag) and `cutTime` (multiplies relay and seal cut times, 0.6 with a cutter: 40% less time). Health and magazine are
+read at the reset, before `run:start`, so the salvage module keeps `G.ext.gear` in step with `economy.equipped`
+between runs.
+
 ## Following the baseline's patterns
 
 - Modules are `create(G)` returning `{ update(dt) }`.
