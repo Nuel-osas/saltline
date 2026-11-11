@@ -214,7 +214,7 @@ describe("wrecks: the 70/30 split", () => {
     at: T0,
   };
 
-  it("gives the finder 70% and the owner 30%, rounded in the owner's favour", async () => {
+  it("gives the finder 70% rounded half up and the owner the rest", async () => {
     const { chain, clock, me } = await setup((s) => {
       s.wrecks = [wreck];
       s.accounts["gull.mock"].balances = { scrip: 10 };
@@ -224,10 +224,30 @@ describe("wrecks: the 70/30 split", () => {
     clock.advance(RULES.minRunSeconds * 1000);
     const out = await chain.extract(m.runId, [], [77]);
     expect(out.ok).toBe(true);
-    expect(out.minted).toEqual({ copper: 2 });
-    expect(await chain.balances("gull.mock")).toEqual({ scrip: 10, copper: 1, core: 1 });
+    expect(out.minted).toEqual({ copper: 2, core: 1 });
+    expect(await chain.balances("gull.mock")).toEqual({ scrip: 10, copper: 1 });
     expect((await chain.balances(me)).copper).toBe(2);
     expect(await chain.wrecks()).toEqual([]);
+  });
+
+  it.each([
+    [1, 1, 0],
+    [2, 1, 1],
+    [3, 2, 1],
+    [4, 3, 1],
+    [5, 4, 1],
+    [6, 4, 2],
+  ])("a wreck of %i splits %i to the finder and %i to the owner", async (n, finder, owner) => {
+    const w: WreckView = { ...wreck, id: 79, items: [{ tokenId: "copper", amount: n }] };
+    const { chain, clock, me } = await setup((s) => {
+      s.wrecks = [w];
+      s.accounts["gull.mock"].balances = {};
+    });
+    const m = (await chain.startRun([])).manifest!;
+    clock.advance(RULES.minRunSeconds * 1000);
+    expect((await chain.extract(m.runId, [], [79])).ok).toBe(true);
+    expect((await chain.balances(me)).copper ?? 0).toBe(finder);
+    expect((await chain.balances("gull.mock")).copper ?? 0).toBe(owner);
   });
 
   it("counts a wreck's whole weight against the carry limit", async () => {
