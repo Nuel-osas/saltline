@@ -226,4 +226,5 @@ between runs.
 - **Contract:** `cargo test` (unit tests on pricing, runs and market), plus a sandbox or testnet run of a full loop.
 - **Client:** `npm run check` (typecheck, vitest, build).
 - **Browser:** a headless smoke test that plays a run on the mock chain and on testnet: deploy, crack, extract, sell,
-  then read the balance.
+  then read the balance. `scripts/smoke-salvage.mjs` covers the in-run half (cut, carry, die, extract) and checks that
+  `?noeconomy` still plays the baseline.
