@@ -132,10 +132,14 @@ export function createTownLights(G: Game): TownLights | null {
   const lc: number[] = []; // colour (HDR)
   const la: number[] = []; // district (0 clinic, 1 generators), delay 0–1, size px, twinkle phase
   const counts = { clinic: 0, generators: 0, tris: 0 };
+  // Overall brightness and size, tuned so the lights still read through the title's scrim at the end of its pan.
+  const GAIN = 1.4,
+    GROW = 1.12;
   function light(u: number, v: number, y: number, c: number[], k: number, district: 0 | 1, size: number) {
     const [x, z] = at(u, v - 0.6);
     lp.push(x, y, z);
-    lc.push(c[0] * k, c[1] * k, c[2] * k);
+    lc.push(c[0] * k * GAIN, c[1] * k * GAIN, c[2] * k * GAIN);
+    size *= GROW;
     // The clinic comes on window by window; the generators sweep the town from the power station at the east end.
     const delay = district === 0 ? r() : Math.min(1, Math.max(0, (half - u) / TOWN.span) * 0.75 + r() * 0.25);
     la.push(district, delay, size, r() * 6.283);
