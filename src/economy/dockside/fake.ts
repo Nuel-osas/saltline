@@ -551,6 +551,7 @@ export function createFakeChain(opts: FakeOptions = {}): FakeChain {
         return { netWorth: rows(worth), bestHaul: rows((t) => t.bestHaul), investors: rows((t) => t.invested) };
       }),
     simulate: (hours, n, seed) => view("simulate", () => simulate(Math.min(168, hours), Math.min(30, n), seed)),
+    manifest: () => view("manifest", () => null),
 
     startRun: (gear) =>
       call("startRun", () => {
