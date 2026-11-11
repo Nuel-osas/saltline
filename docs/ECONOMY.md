@@ -189,6 +189,7 @@ src/economy/              the game side, in TypeScript
   wallet.ts, chain.ts     keys, signing, calls queue, views, event polling
   mock.ts                 an in-memory chain with the same interface (tests and offline play)
   salvage/                in-run: manifest, sealed containers, weight, wrecks, HUD, debrief rows
+    spots.ts              the 16 salvage spots, generated from the level by scripts/gen-spots.mjs
   dockside/               between runs: stalls, tooltips, ticker, leaderboard, invest, listings, fast-forward chart
 src/game.js               the baseline game; only small, marked extension points are added (see below)
 ```
@@ -204,6 +205,13 @@ Each is marked with a `// ext:` comment so the diff against `pre-hackathon` stay
 4. **Run lifecycle:** `run:start` is emitted after the reset `H()`. The existing events cover kills, relays, death
    and extraction.
 
+The hooks live on `G.ext`, set up at boot as `{ speedScale: 1, gear: {} }`; with those defaults (and with
+`?noeconomy`) the game plays exactly as the baseline. `G.ext.gear` holds the run's bonuses as numbers, so the item
+table stays in TypeScript: `health` (added to max health, 40 for a plate), `rounds` (added to the magazine, 15 for a
+mag) and `cutTime` (multiplies relay and seal cut times, 0.6 with a cutter: 40% less time). Health and magazine are
+read at the reset, before `run:start`, so the salvage module keeps `G.ext.gear` in step with `economy.equipped`
+between runs.
+
 ## Following the baseline's patterns
 
 - Modules are `create(G)` returning `{ update(dt) }`.
@@ -218,4 +226,5 @@ Each is marked with a `// ext:` comment so the diff against `pre-hackathon` stay
 - **Contract:** `cargo test` (unit tests on pricing, runs and market), plus a sandbox or testnet run of a full loop.
 - **Client:** `npm run check` (typecheck, vitest, build).
 - **Browser:** a headless smoke test that plays a run on the mock chain and on testnet: deploy, crack, extract, sell,
-  then read the balance.
+  then read the balance. `scripts/smoke-salvage.mjs` covers the in-run half (cut, carry, die, extract) and checks that
+  `?noeconomy` still plays the baseline.

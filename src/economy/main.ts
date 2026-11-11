@@ -4,6 +4,7 @@
 import { createTestnetChain } from "./chain";
 import { type EconomyConfig, readConfig } from "./config";
 import { type MockChain, createMockChain, createMockWallet } from "./mock";
+import { startSalvage } from "./salvage";
 import type { Economy } from "./types";
 import { type GuestWallet, createGuestWallet } from "./wallet";
 
@@ -43,6 +44,7 @@ function whenBooted(): Promise<GameContext> {
 
 whenBooted()
   .then((G) => {
+    if (G.params && typeof G.params === "object" && "noeconomy" in G.params) return; // ?noeconomy: the baseline game
     const cfg = readConfig();
     const { economy, mock } = buildEconomy(cfg);
     G.economy = economy;
@@ -52,7 +54,7 @@ whenBooted()
       }, AMBIENT_TICK * 1000);
     }
 
-    // The in-run salvage lane attaches here:  createSalvage(G, economy);
+    startSalvage(G); // in-run salvage (src/economy/salvage); guarded inside
     // The Dockside lane attaches here:        createDockside(G, economy);
 
     console.info(cfg.mode === "mock" ? "[economy] offline mock: not the chain" : `[economy] testnet, contract ${cfg.contractId}`);

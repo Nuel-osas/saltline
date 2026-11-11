@@ -52240,6 +52240,7 @@ void main() {
             (C.yaw = X.yaw || 0),
             (C.pitch = 0),
             C.vel.set(0, 0, 0),
+            (C.maxHealth = 100 + (i.ext?.gear?.health || 0)), // ext: armour plate
             (C.health = C.maxHealth),
             (C.alive = !0),
             (C.onGround = !0),
@@ -52370,6 +52371,7 @@ void main() {
       (C.crouching ? (P = Mt.crouch) : B && (P = Mt.sprint),
         (P = bi(P, Math.min(P, Mt.ads), C.ads)),
         me < 0 && (P *= bi(1, 0.82, -me)));
+      P *= i.ext?.speedScale || 1; // ext: carried weight slows every gait
       let V = Math.sin(C.yaw),
         Y = Math.cos(C.yaw);
       U.set(ue * Y - me * V, 0, -ue * V - me * Y).multiplyScalar(P);
@@ -55145,7 +55147,8 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         },
       };
     function _e() {
-      ((ve.ammo = Gv),
+      ((ve.magSize = Gv + (i.ext?.gear?.rounds || 0)), // ext: extended mag
+        (ve.ammo = ve.magSize),
         (ve.reserve = B_),
         (ve.state = "idle"),
         (ve.ads = 0),
@@ -58923,6 +58926,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         l.locationCard(!1),
         a(i.audio, "setPaused", !1),
         H(),
+        i.events.emit("run:start", { retries: c.retries }), // ext: run lifecycle
         a(i.weapon, "setVisible", !0),
         (g = !1),
         P)
@@ -59153,14 +59157,16 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         L.cut ||
           (L === V && r.down("interact")
             ? (L.cutting || ((L.cutting = !0), O(L.o, "cutting")),
-              (L.t += P / Yi.cutSeconds),
+              (L.t += P / (Yi.cutSeconds * (i.ext?.gear?.cutTime || 1))), // ext: seal cutter
               i.events.emit("objective:progress", { id: L.id, t: Math.min(1, L.t) }),
               L.t >= 1 && me(L))
             : L.t > 0 &&
               ((L.t = Math.max(0, L.t - P * 1.6)),
               L.cutting &&
                 ((L.cutting = !1), O(L.o, "live"), i.events.emit("objective:progress", { id: L.id, t: 0 }))));
-      V && !V.cut ? o.setPrompt && o.setPrompt("Cut relay " + V.short, Fo(V.t)) : o.setPrompt && o.setPrompt(null);
+      V && !V.cut
+        ? o.setPrompt && o.setPrompt("Cut relay " + V.short, Fo(V.t))
+        : a(i.ext, "interact", P) || (o.setPrompt && o.setPrompt(null)); // ext: other interactables take the slot
       let Y = s.extraction;
       if (Y && Y.pos) {
         let L = Math.hypot(Y.pos.x - n.pos.x, Y.pos.z - n.pos.z),
@@ -59325,6 +59331,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       rng: il(+(i.seed || 4207)),
       time: { t: 0, dt: 0, frame: 0, real: 0 },
       quality: zy(i.q || (i.shot ? "test" : "")),
+      ext: { speedScale: 1, gear: {} }, // ext: hooks for the economy layer; these defaults play the baseline
     };
     window.__G = t;
     let n = i.show && gM[i.show] ? i.show : null;

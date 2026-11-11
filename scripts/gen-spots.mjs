@@ -1,0 +1,134 @@
+// Generates src/economy/salvage/spots.ts: the 16 salvage spots (container doors) that manifests and wrecks index.
+// Run it once against a dev server and commit the output. The spots are static data, so the game, the tests and the
+// contract agree on them without loading the level.
+//
+//   npm run dev -- --port 5290
+//   node scripts/gen-spots.mjs [http://127.0.0.1:5290] [--dry]
+//
+// A container qualifies when:
+//   - it sits on the ground (y = 0). Stacked boxes have their doors in the air;
+//   - the way out of its doors is clear at chest height and walkable on the nav grid, 1.1 to 1.7 m out (the stand
+//     point); and
+//   - nav.findPath from the player start reaches the stand point (the path ends within 0.75 m of it).
+// Each spot records whether the doors are shut: a ray fired at the door face from 0.6 m out stops at the face. Open
+// boxes are hollow, so the ray runs on inside. The game seals shut doors on the door and open ones on a crate in the
+// doorway.
+//
+// The level as built (11 Nov 2026) has 26 ground-level containers, and exactly 16 qualify (13 shut, 3 open); the
+// other 10 have their doors against another box or a wall. If a level change ever leaves more than 16, the script
+// keeps the shut ones first and spreads the picks (each pick is the candidate farthest from those already chosen).
+import { writeFileSync } from "node:fs";
+import { chromium } from "/Users/emmanuelosadebe/pier-pressure/node_modules/playwright-core/index.mjs";
+
+const url = process.argv.find((a) => a.startsWith("http")) || "http://127.0.0.1:5290";
+const dry = process.argv.includes("--dry");
+const OUT = new URL("../src/economy/salvage/spots.ts", import.meta.url);
+const COUNT = 16;
+
+const browser = await chromium.launch({
+  executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  headless: true,
+  args: ["--use-angle=metal", "--ignore-gpu-blocklist", "--enable-gpu"],
+});
+try {
+  const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
+  await page.goto(url + "/?noeconomy=1&noaudio=1&q=low", { waitUntil: "load" });
+  await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
+  const found = await page.evaluate(() => {
+    const G = window.__G;
+    const V = G.THREE.Vector3;
+    const nav = G.physics.nav;
+    const start = G.level.playerStart.pos;
+    const len = { container20: 6.06, container40: 12.19, container40hc: 12.19 };
+    const zoneOf = (x, z) =>
+      (G.level.zones.find((q) => x >= q.min[0] && x < q.max[0] && z >= q.min[1] && z < q.max[1]) || { name: "?" }).name;
+    const out = [];
+    for (const p of G.level.placed) {
+      if (!len[p.name] || p.y > 0.05) continue;
+      // The doors are at the container's local +x end (see M3/zA in game.js); three.js yaw turns +x to (cos, -sin).
+      const half = len[p.name] / 2;
+      const fx = Math.cos(p.yaw),
+        fz = -Math.sin(p.yaw);
+      const door = { x: p.x + fx * half, z: p.z + fz * half };
+      const hit = G.physics.raycast(new V(door.x + fx * 0.6, 1.2, door.z + fz * 0.6), new V(-fx, 0, -fz), 8);
+      const shut = !!hit && Math.abs(hit.dist - 0.6) < 0.2;
+      let stand = null;
+      let why = "blocked";
+      for (const d of [1.1, 1.4, 1.7]) {
+        const s = { x: door.x + fx * d, z: door.z + fz * d };
+        const clear = G.physics.lineOfSight(new V(door.x + fx * 0.1, 1.2, door.z + fz * 0.1), new V(s.x, 1.2, s.z));
+        if (!clear || !nav.isWalkable(s.x, s.z)) continue;
+        const path = nav.findPath(start, new V(s.x, 0, s.z));
+        const end = path && path[path.length - 1];
+        if (end && Math.hypot(end.x - s.x, end.z - s.z) < 0.75) {
+          stand = s;
+          break;
+        }
+        why = "no path";
+      }
+      out.push({ name: p.name, x: p.x, z: p.z, yaw: p.yaw, door, stand, shut, why, zone: zoneOf(door.x, door.z) });
+    }
+    return out;
+  });
+  for (const c of found)
+    console.log(
+      c.name.padEnd(14),
+      `(${c.x.toFixed(2)}, ${c.z.toFixed(2)})`.padEnd(18),
+      c.zone.padEnd(5),
+      c.shut ? "shut" : "open",
+      c.stand ? "reachable" : c.why,
+    );
+  const ok = found.filter((c) => c.stand);
+  console.log(`${ok.length} of ${found.length} ground containers qualify`);
+  if (ok.length < COUNT) throw new Error(`only ${ok.length} qualifying containers; need ${COUNT}`);
+
+  const picked = [];
+  const far = (c) => Math.min(1e9, ...picked.map((p) => Math.hypot(p.door.x - c.door.x, p.door.z - c.door.z)));
+  const pool = [...ok];
+  while (picked.length < COUNT) {
+    pool.sort((a, b) => Number(b.shut) - Number(a.shut) || far(b) - far(a) || a.door.x - b.door.x);
+    picked.push(pool.shift());
+  }
+  // A stable order: by zone along the routes (yard, shed, quay, then the gate), then west to east, north to south.
+  const order = { yard: 0, shed: 1, quay: 2, gate: 3 };
+  picked.sort((a, b) => order[a.zone] - order[b.zone] || a.door.x - b.door.x || a.door.z - b.door.z);
+
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const rows = picked.map(
+    (c, i) =>
+      `  { id: ${i}, zone: "${c.zone}", box: "${c.name}", open: ${!c.shut}, x: ${r2(c.door.x)}, z: ${r2(c.door.z)}, ` +
+      `yaw: ${r2(c.yaw)}, standX: ${r2(c.stand.x)}, standZ: ${r2(c.stand.z)} },`,
+  );
+  const src = `// GENERATED by scripts/gen-spots.mjs from the level as built. Do not edit by hand: rerun the script.
+//
+// The salvage spots: the 16 ground-level containers whose doors a player can reach on foot from the start
+// (nav.findPath reaches the stand point). \`spot\` in a manifest entry or a wreck indexes this list, and the
+// contract's loot tables use the same indices (RULES.spotCount).
+//
+// x, z: the centre of the door end at ground level. yaw: the container's yaw; the doors face (cos yaw, 0, -sin yaw).
+// open: the doors stand open (the seal goes on a crate in the doorway instead of the doors).
+// standX, standZ: where a player stands to cut the seal, 1.1 to 1.7 m out from the doors.
+
+export interface SalvageSpot {
+  id: number;
+  zone: "yard" | "shed" | "quay" | "gate";
+  box: "container20" | "container40" | "container40hc";
+  open: boolean;
+  x: number;
+  z: number;
+  yaw: number;
+  standX: number;
+  standZ: number;
+}
+
+// One spot per line, as generated.
+// prettier-ignore
+export const SALVAGE_SPOTS: readonly SalvageSpot[] = [
+${rows.join("\n")}
+];
+`;
+  if (dry) console.log(src);
+  else writeFileSync(OUT, src);
+} finally {
+  await browser.close();
+}
