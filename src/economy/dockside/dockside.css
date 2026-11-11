@@ -778,6 +778,7 @@ a.dk-tk-i:hover { color: var(--bone); } a.dk-tk-i:hover .dk-tk-t { text-decorati
   .dk-tw-sees { font-size: 14.5px; }
   .dk-tw-view { min-height: 190px; }
   .dk-tw-status { font-size: 21px; }
+  .dk-tw-sky .lbls { display: none; } /* the districts are named just below; the caption needs the room */
   .dk-tw-ds, .dk-tw-right { grid-template-columns: minmax(0, 1fr); }
   .dk-tw-hm-n { font-size: 50px; }
   .dk-tw-client[data-revealed="true"] .dk-tw-client-h { font-size: 26px; }
