@@ -77,10 +77,12 @@ shows in a tooltip.
   - It is computed lazily from a stored value and a timestamp.
 - **Batches:** a sale of n units is priced one unit at a time, with stock rising between units. Big dumps get worse
   prices.
-- **Cash:** a broker can't pay more scrip than it holds. A sale that would take its scrip below the closing float
-  (100) is refused.
-- **Closing:** a broker below the float is **closed** and won't trade.
-- **Reopening:** players `invest` scrip. When the broker's scrip reaches the reopen line (400), it reopens.
+- **Cash:** a sale that would take a broker's scrip below the float (100) is refused.
+- **Closing:** after any trade or export, a broker **closes** when its scrip can no longer cover one more unit at its
+  highest current bid while staying at or above the float (`scrip < float + max_bid`). A closed broker refuses sales
+  and purchases, but can still export, which is how it can recover on its own.
+- **Reopening:** players `invest` scrip. When the broker's scrip reaches the reopen line (400), through investment or
+  an export, it reopens.
   Investors hold shares in proportion to what they put in.
 - **Export (a broker's only income besides gear):** a broker ships stock above target to the freighter at the export
   price. It is paid in newly minted scrip, minus a 10% dividend split between its shareholders.
@@ -101,8 +103,9 @@ shows in a tooltip.
   - Checks: the run is the player's and still open; every index is in the manifest and listed once; the total weight
     is within the carry limit; the run is at least 45 seconds old plus 8 seconds per container opened.
   - Then mints the cargo to the player.
-  - For a recovered wreck, 70% of its cargo goes to the finder and 30% back to the player who died (rounded in the
-    original owner's favour).
+  - For a recovered wreck, the finder gets 70% of each item, rounded half up, and the player who died gets the rest:
+    1 → 1/0, 2 → 1/1, 3 → 2/1, 6 → 4/2. (Rounding down left a 1-unit wreck worth nothing to the finder while it
+    still weighed down their run.)
 - **`die({ run_id, opened, wrecks, spot })`**
   - The carried cargo becomes a wreck at that salvage spot, with the player's callsign.
   - The contract keeps the newest 24 wrecks, and the oldest is lost to the sea.
