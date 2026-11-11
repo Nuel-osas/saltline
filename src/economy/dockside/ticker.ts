@@ -17,8 +17,8 @@ export function createTicker(ctx: Ctx) {
   const credit = h("span", { class: "dk-tk-credit" });
   const el = h(
     "div",
-    { class: "dk-tk", role: "log", "aria-label": "Dock ledger", "aria-live": "off" },
-    h("span", { class: "dk-tk-k" }, h("i", { "aria-hidden": "true" }), "Ledger"),
+    { class: "dk-tk", role: "log", "aria-label": "The open ledger", "aria-live": "off" },
+    h("span", { class: "dk-tk-k" }, h("i", { "aria-hidden": "true" }), "Open ledger"),
     view,
     credit,
   );
@@ -47,7 +47,9 @@ export function createTicker(ctx: Ctx) {
       h("span", { class: "dk-tk-t" }, e.text),
       h("time", { "data-at": e.at }, ` · ${ago(e.at)}`),
     ];
-    const cls = `dk-tk-i${mine ? " mine" : ""}${isNew ? " new" : ""}`;
+    // The town's own lines (a district relit, the act moving on) read as news; the reveal reads as a warning.
+    const town = e.kind === "district" || e.kind === "act" ? (/Harbormaster/.test(e.text) ? " town hm" : " town") : "";
+    const cls = `dk-tk-i${mine ? " mine" : ""}${isNew ? " new" : ""}${town}`;
     return url ? h("a", { class: cls, href: url, target: "_blank", rel: "noopener" }, ...kids) : h("span", { class: cls }, ...kids);
   }
 

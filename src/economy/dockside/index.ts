@@ -5,7 +5,7 @@
 // createDockside(G, economy) builds it, adds a DOCKSIDE button to the three cards and returns a small handle.
 // It reads the chain through economy.chain, polls while open, and every action shows settling → result.
 import "./dockside.css";
-import type { GearId } from "../types";
+import type { GearId, TownView } from "../types";
 import { addWrecks, awayLines, createAwayCard, loadSeen, noteNews, saveSeen, seenFrom, type AwayReads } from "./away";
 import { createBoard } from "./board";
 import { createEntries, type Origin } from "./entry";
@@ -367,17 +367,18 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
         return Promise.resolve(null);
       }
     };
-    const [balances, brokers, recent, leaderboard, profile, wrecks] = await Promise.all([
+    const [balances, brokers, recent, leaderboard, profile, wrecks, town] = await Promise.all([
       got(() => chain.balances(me)),
       got(() => chain.brokers()),
       got(() => chain.recent(64)),
       got(() => chain.leaderboard()),
       got(() => chain.profile(me)),
       got(() => chain.wrecks()),
+      got(() => fetchers.town() as Promise<TownView>),
     ]);
     // Closed before the reads came back: nothing was seen, so the snapshot stays for next time.
     if (token !== awayToken || !isOpen || gate !== "in") return;
-    const now: AwayReads = { balances, brokers, recent, leaderboard, profile, wrecks };
+    const now: AwayReads = { balances, brokers, recent, leaderboard, profile, wrecks, town };
     const lines = awayLines(prev, now, me);
     saveSeen(store(), { ...seenFrom(prev, now, me, Date.now()), news: [] }); // the caught lines are told now
     seenLive = true;

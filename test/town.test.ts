@@ -240,6 +240,19 @@ describe("Town tab in the Dockside", () => {
     expect(q(root, ".dk-town").dataset.act).toBe("1"); // the generators are still dark
   });
 
+  it("runs the town's lines along the open ledger as news, and the reveal as a warning", async () => {
+    const { root } = await mockDock(3);
+    await vi.waitFor(() => expect(root.querySelectorAll(".dk-tk-i.town").length).toBe(4));
+    expect(textOf(root, ".dk-tk-k")).toBe("Open ledger");
+    const hm = [...root.querySelectorAll<HTMLElement>(".dk-tk-i.town.hm")];
+    expect(hm).toHaveLength(1);
+    expect(hm[0].textContent).toContain(REVEAL);
+    expect(q(hm[0], ".dk-tk-dot").dataset.kind).toBe("act");
+    const texts = [...root.querySelectorAll(".dk-tk-i.town .dk-tk-t")].map((t) => t.textContent);
+    expect(texts).toContain("The clinic's lights are back on.");
+    expect(texts).toContain("The town across the water is lit again.");
+  });
+
   it("doesn't touch the stalls on a chain without a town view", async () => {
     const eco = createFakeEconomy({ registered: true, latency: 2 });
     const { root } = await dockOn(eco.chain, eco.wallet);

@@ -288,6 +288,10 @@ a.dk-tk-i:hover { color: var(--bone); } a.dk-tk-i:hover .dk-tk-t { text-decorati
 /* the town's own lines: a district relit, the act moving on */
 .dk-tk-dot[data-kind="district"] { background: var(--signal-hot); box-shadow: 0 0 7px var(--signal); border-radius: 50%; }
 .dk-tk-dot[data-kind="act"] { width: 8px; height: 8px; background: var(--signal); box-shadow: 0 0 7px var(--signal); transform: rotate(45deg); }
+.dk-tk-i.town { color: var(--signal-hot); }
+.dk-tk-i.town .dk-tk-t { font-weight: 700; }
+.dk-tk-i.town.hm { color: var(--alarm); }
+.dk-tk-i.town.hm .dk-tk-dot { background: var(--alarm); box-shadow: 0 0 7px var(--alarm); }
 .dk-tk-credit { flex: none; font: 400 10.5px/1 var(--f-mono); color: var(--steel); white-space: nowrap; padding-left: 12px; border-left: 1px solid var(--line); }
 .dk-tk-credit a { color: var(--bone-dim); text-decoration: none; border-bottom: 1px solid rgba(232, 228, 218, .3); }
 .dk-tk-credit a:hover { color: var(--signal); }
@@ -479,6 +483,11 @@ a.dk-tk-i:hover { color: var(--bone); } a.dk-tk-i:hover .dk-tk-t { text-decorati
 .dk-away-i[data-tone="up"] .dk-away-f { color: var(--signal); }
 .dk-away-i[data-tone="down"] .dk-away-f { color: var(--alarm); }
 .dk-away-i[data-kind="scrip"] .dk-away-f { font-size: 17px; }
+/* the town's news leads the slip */
+.dk-away-i[data-kind="town"] .dk-away-t { font-weight: 600; }
+.dk-away-i[data-kind="town"][data-tone="up"] .dk-away-tag { color: var(--ink); background: var(--signal); border-color: var(--signal); }
+.dk-away-i[data-kind="town"][data-tone="down"] .dk-away-tag { color: var(--ink); background: var(--alarm); border-color: var(--alarm); }
+.dk-away-i[data-kind="town"][data-tone="down"] .dk-away-t { color: var(--bone); }
 .dk-away-ft { display: flex; justify-content: flex-end; padding-top: 10px; }
 .dk .btn.small.dk-away-ok { min-height: 32px; padding: 1px 18px 0 20px; }
 @media (max-width: 760px) {

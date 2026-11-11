@@ -8,9 +8,10 @@
 // their account or callsign. Money is measured, never claimed: the scrip line is the balance against the snapshot.
 // A read that failed drops the lines that need it, so the card shows less, never a wrong number.
 import { CARGO, ITEMS, RULES } from "../items";
-import type { Amounts, BrokerId, BrokerView, CargoId, Leaderboard, LedgerEvent, Profile, WreckView } from "../types";
+import type { Amounts, BrokerId, BrokerView, CargoId, District, Leaderboard, LedgerEvent, Profile, TownView, WreckView } from "../types";
 import { h } from "./dom";
 import { ago, fmt } from "./format";
+import { dronesLine, REVEAL } from "./town";
 
 export const SEEN_KEY = "saltline.seen.v1";
 /** A glance, not a report. */
@@ -39,6 +40,8 @@ export interface Seen {
   wrecks: { id: number; items: { tokenId: CargoId; amount: number }[] }[] | null;
   /** The brokers (account ids) they held shares in. */
   shareIn?: string[];
+  /** The town as they last saw it: which districts were lit, and whether the client was known. */
+  town?: { lit: District["id"][]; revealed: boolean } | null;
   /**
    * Ledger lines about them, caught while the Dockside was shut and kept until they look: the chain only serves the
    * last 64 lines, and on a busy dock a recovery can scroll out of that before they come back.
@@ -57,10 +60,12 @@ export interface AwayReads {
   leaderboard: Leaderboard | null;
   profile: Profile | null;
   wrecks: WreckView[] | null;
+  /** The town's arc; absent on a chain without one. */
+  town?: TownView | null;
 }
 
 export interface AwayLine {
-  kind: "wreck" | "scrip" | "broker" | "board" | "price";
+  kind: "wreck" | "scrip" | "broker" | "board" | "price" | "town";
   tag: string;
   text: string;
   figure?: string;
@@ -153,6 +158,9 @@ export function awayLines(prev: Seen | null, now: AwayReads, me: string): AwayLi
   const fresh = pool ? pool.filter((e) => isNum(e.at) && e.at > since) : null;
   // Brokers they hold shares in (shares only ever grow, so today's list covers the whole time away).
   const theirs = now.brokers ? now.brokers.filter((b) => b.shares.some((s) => s.accountId === me && s.shares > 0)) : null;
+
+  // The town first: it's everyone's news. Only against a town they saw, so a first look or a failed read says nothing.
+  lines.push(...townLines(prev.town, now.town));
 
   // A wreck of theirs, hauled out by someone else.
   if (fresh && callsign) {
@@ -266,6 +274,39 @@ export function awayLines(prev: Seen | null, now: AwayReads, me: string): AwayLi
   return lines.slice(0, MAX_LINES);
 }
 
+/** The town's ledger lines (story/contract's words), for what changed while they were away. */
+export const TOWN_NEWS = {
+  clinic: "The clinic's lights are back on.",
+  generators: "The generators are running.",
+  both: "The clinic and the generators are lit.",
+  act2: "The town across the water is lit again.",
+} as const;
+
+/** A district lit, the lights on the water, the client named: each since the town they last saw. */
+export function townLines(was: Seen["town"], now: TownView | null | undefined): AwayLine[] {
+  if (!was || !now) return [];
+  const out: AwayLine[] = [];
+  const lit = now.districts.filter((d) => d.lit && !was.lit.includes(d.id));
+  if (lit.length) {
+    const ids = new Set(now.districts.map((d) => d.id));
+    const allWere = [...ids].every((id) => was.lit.includes(id));
+    const lightsOn = now.act >= 2 && !allWere;
+    const said = lit.length > 1 ? TOWN_NEWS.both : TOWN_NEWS[lit[0].id];
+    out.push({
+      kind: "town",
+      tag: lightsOn ? "Act II" : "Lights",
+      text: lightsOn ? `${said} ${TOWN_NEWS.act2}` : said,
+      figure: lightsOn ? "Lights on the water" : undefined,
+      tone: "up",
+    });
+  }
+  if (now.client.revealed && !was.revealed) {
+    const n = now.harbormaster.bonusDrones;
+    out.push({ kind: "town", tag: "Act III", text: REVEAL, figure: n > 0 ? dronesLine(n) : undefined, tone: "down" });
+  }
+  return out;
+}
+
 // ---- the snapshot ----
 
 /** The snapshot after these reads: what was read replaces what was seen, and a failed or missing read keeps it. */
@@ -292,6 +333,7 @@ export function seenFrom(prev: Seen | null, r: Partial<AwayReads>, me: string, a
     s.haul = { best, above: rows.filter((x) => x.accountId !== me && x.value > best).map((x) => x.accountId), ranked: rows.some((x) => x.accountId === me) };
   }
   if (r.wrecks) s.wrecks = mine(r.wrecks, me);
+  if (r.town) s.town = { lit: r.town.districts.filter((d) => d.lit).map((d) => d.id), revealed: r.town.client.revealed };
   return s;
 }
 
@@ -340,7 +382,7 @@ export function createAwayCard(lines: AwayLine[], since: number, onDismiss: () =
     h(
       "header",
       { class: "dk-away-hd" },
-      h("div", { class: "m-k" }, `Dock office · last look ${a === "now" ? "moments" : a} ago`),
+      h("div", { class: "m-k" }, `Dock Office · last look ${a === "now" ? "moments" : a} ago`),
       h("h3", { class: "dk-away-h", id: "dk-away-h" }, "While you were away"),
     ),
     h(
