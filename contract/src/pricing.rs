@@ -198,23 +198,30 @@ pub fn purchase_cost(gear: usize, recent_milli: u128, stance: u32, n: u128) -> u
 ///   straight line between steps. That is within 0.1% of the true curve, and integer-only.
 /// - The stored value is rewritten only when a sale changes it. Reading it costs nothing and changes nothing.
 pub fn decay_recent(recent_milli: u128, elapsed_ms: u64) -> u128 {
+    halve(recent_milli, elapsed_ms, RECENT_HALF_LIFE_MS)
+}
+
+/// The curve behind [`decay_recent`], for any half-life: `value × 2^(−elapsed / half_life)`, integer-only.
+/// `town.rs` uses it for the Harbormaster's strength (12 hours).
+pub fn halve(value: u128, elapsed_ms: u64, half_life_ms: u64) -> u128 {
     // 2^(−k/16) × 1,000,000 for k = 0..=16.
     const HALVING_PPM: [u128; 17] = [
         1_000_000, 957_603, 917_004, 878_126, 840_896, 805_245, 771_105, 738_413, 707_107, 677_128, 648_420, 620_929,
         594_604, 569_394, 545_254, 522_137, 500_000,
     ];
-    let halvings = elapsed_ms / RECENT_HALF_LIFE_MS;
-    if halvings >= 64 || recent_milli == 0 {
+    let half_life_ms = half_life_ms.max(1);
+    let halvings = elapsed_ms / half_life_ms;
+    if halvings >= 64 || value == 0 {
         return 0;
     }
-    let whole = recent_milli >> halvings;
-    let rest = (elapsed_ms % RECENT_HALF_LIFE_MS) as u128; // 0 ≤ rest < half-life
-    let span = RECENT_HALF_LIFE_MS as u128;
+    let whole = value >> halvings;
+    let rest = (elapsed_ms % half_life_ms) as u128; // 0 ≤ rest < half-life
+    let span = half_life_ms as u128;
     let step = (rest * 16 / span) as usize; // 0..=15
     let into_step = rest * 16 % span; // how far between step and step + 1, out of span
     let (a, b) = (HALVING_PPM[step], HALVING_PPM[step + 1]);
     let ppm = a - (a - b) * into_step / span;
-    whole * ppm / 1_000_000
+    whole.saturating_mul(ppm) / 1_000_000
 }
 
 // -------------------------------------------------------------------------------------------------------------
