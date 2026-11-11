@@ -58425,7 +58425,8 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       <div class="m-title-main">
         <div class="m-eyebrow"><span class="m-tag">B4</span><span>Port Authority Breach Unit</span><span class="m-dim">Saltline Terminal \xB7 05:42</span></div>
         <h1 class="m-word">SALTLINE</h1>
-        <p class="m-premise">The port\u2019s security net has gone feral. Cut its three uplinks. Reach the boat.</p>
+        <!-- story: the premise is docs/STORY.md's (Copy across the game) -->
+        <p class="m-premise">The port\u2019s machine kept the only ledger. Then it locked the gates. Cut its uplinks, haul out the town\u2019s cargo, reach the boat.</p>
         <div class="m-actions">
           <button class="btn primary" data-act="deploy">Deploy</button>
           <button class="btn" data-act="settings">Settings</button>
@@ -58722,15 +58723,16 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       titleFov: 50,
     },
     jC = ["NORTH", "NORTH-EAST", "EAST", "SOUTH-EAST", "SOUTH", "SOUTH-WEST", "WEST", "NORTH-WEST"],
+    // story: Control's lines are docs/STORY.md's (Radio, Control), at the same moments as before
     _l = {
       intro:
-        "Breacher, this is Control. The Harbormaster holds the berth. Cut its three uplinks \u2014 yard, shed, quay.",
+        "Breacher, Control. The Harbormaster holds the berth. Cut its three uplinks, yard, shed, quay, and bring back what you can carry. The town is counting on the boat.",
       contact: "It has seen you. Gulls fly, Hounds walk. Put them down.",
       cut: [
-        "One relay dark. It felt that \u2014 machines inbound.",
+        "One uplink dark. It felt that. Machines inbound.",
         "Two dark. It is throwing everything it has left at you.",
       ],
-      all: "All three dark. The boat is holding at the quay ladder, south end. Run.",
+      all: "All three dark. It's blind for now. The boat holds at the quay ladder, south end. Run.",
       low: "You are hit hard. Get behind steel and breathe.",
       done: "Breacher is aboard. Saltline is dark. Good work.",
     };
