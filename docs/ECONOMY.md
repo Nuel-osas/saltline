@@ -201,6 +201,11 @@ src/economy/              the game side, in TypeScript
   dockside/               between runs: stalls, tooltips, ticker, leaderboard, invest, listings, fast-forward chart
     gate.ts               the first deploy asks for a dock pass
     away.ts               "while you were away": what changed since the last look (snapshot in saltline.seen.v1)
+  story/                  the town's arc in the game (docs/STORY.md): reads town(), never waits on it
+    briefing.ts           the five title cards on the first DEPLOY (G.ext.beforeRun), BRIEFING on the title
+    lines.ts, radio.ts    Control's town lines and the Harbormaster's own channel (memory in saltline.story.v1)
+    waves.ts              the Harbormaster's extra drones (G.ext.waveBonus)
+    lights.ts             the town across the water, dark in Act I, relit district by district
 src/game.js               the baseline game; only small, marked extension points are added (see below)
 ```
 
