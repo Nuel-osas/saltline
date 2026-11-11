@@ -10,7 +10,7 @@ what goes over the wire. Change both sides and this file together.
 - Token ids: `scrip copper meds chips fuel core plate mag cutter`. Broker ids: `moss ines qm`.
 - A refused call panics with a short player-facing message starting `E_`, for example `E_BROKER_CLOSED: Moss is
   shut until someone invests`. chain.ts shows the text after the colon.
-- Calls attach no deposit. Gas is 100 Tgas for `start_run`, `extract` and `die`, and 50 Tgas for the rest.
+- Calls attach no deposit. Prepaid gas is 30 Tgas for `start_run`, `extract` and `die`, and 20 Tgas for the rest. Each burns about 2.5 Tgas, and NEAR reserves prepaid gas at about 10× the base price, so higher limits would price new players out.
 
 ## Init
 
