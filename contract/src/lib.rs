@@ -7,6 +7,7 @@
 //! - `policy.rs`: the default broker policy (used by `advice` and `simulate`)
 //! - `runs.rs`: start_run, extract, die, manifests and wrecks
 //! - `market.rs`: sell, buy, invest, listings, broker calls, the broker board and the leaderboard
+//! - `sim.rs`: simulate
 //!
 //! Integers only: amounts are whole scrip in `u128`, times are block milliseconds in `u64`.
 
@@ -25,6 +26,7 @@ pub mod mt;
 pub mod policy;
 pub mod pricing;
 pub mod runs;
+pub mod sim;
 
 
 use items::*;
