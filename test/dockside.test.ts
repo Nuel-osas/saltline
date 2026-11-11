@@ -197,6 +197,46 @@ describe("Dockside: investing", () => {
   });
 });
 
+describe("Dockside: player market and leaderboard", () => {
+  it("posts a listing, cancels it, and buys someone else's", async () => {
+    const { dock, root } = await setup();
+    await openIn(dock);
+    dock.tab("market");
+    await vi.waitFor(() => expect(root.querySelectorAll(".dk-mk-list:not(.mine) .dk-mk-row").length).toBe(5));
+    // post 2 copper at 45
+    q<HTMLButtonElement>(root, '.dk-market .dk-chip[data-t="copper"]').click();
+    q<HTMLButtonElement>(root, '.dk-market [aria-label="More amount"]').click();
+    for (let i = 0; i < 5; i++) q<HTMLButtonElement>(root, '.dk-market [aria-label="More each"]').click();
+    expect(q(root, ".dk-mk-hint").textContent).toContain("Total 90");
+    q<HTMLButtonElement>(root, ".dk-market .dk-b.wide").click();
+    const slot = q(root, ".dk-market .dk-slot");
+    expect(slot.dataset.state).toBe("pending");
+    await vi.waitFor(() => expect(root.querySelectorAll(".dk-mk-list.mine .dk-mk-row").length).toBe(1));
+    expect(q(root, ".dk-mk-list.mine").textContent).toContain("Copper coil ×2");
+    await vi.waitFor(() => expect(q(root, ".dk-hlist b").textContent).toBe("×3"));
+    // cancel it: the copper comes back
+    q<HTMLButtonElement>(root, ".dk-mk-list.mine .dk-b").click();
+    await vi.waitFor(() => expect(root.querySelectorAll(".dk-mk-list.mine .dk-mk-row").length).toBe(0));
+    await vi.waitFor(() => expect(q(root, ".dk-hlist b").textContent).toBe("×5"));
+    // buy HOOK's relay core for 205
+    const hook = [...root.querySelectorAll<HTMLElement>(".dk-mk-row")].find((r) => r.textContent!.includes("HOOK"))!;
+    q<HTMLButtonElement>(hook, ".dk-b").click();
+    await vi.waitFor(() => expect(slot.textContent).toContain("Bought 1 core for 205"));
+    await vi.waitFor(() => expect(q(root, ".dk-hold-scrip .dk-flap").dataset.value).toBe("207"));
+  });
+
+  it("lights your row on the leaderboard", async () => {
+    const { dock, root } = await setup();
+    await openIn(dock);
+    dock.tab("board");
+    await vi.waitFor(() => expect(root.querySelectorAll(".dk-lb-row").length).toBeGreaterThan(10));
+    const mine = [...root.querySelectorAll<HTMLElement>(".dk-lb-row.mine")];
+    expect(mine.length).toBeGreaterThan(0);
+    for (const r of mine) expect(r.textContent).toContain("WREN");
+    expect(root.querySelectorAll('.dk-lb-row[aria-current="true"]').length).toBe(mine.length);
+  });
+});
+
 describe("Dockside: the dock pass card", () => {
   it("checks callsigns the way the contract does", () => {
     expect(checkCallsign("wren")).toEqual({ ok: true, callsign: "WREN" });
