@@ -379,7 +379,7 @@ a.dk-tk-i:hover { color: var(--bone); } a.dk-tk-i:hover .dk-tk-t { text-decorati
 .dk-pc-k { font: 600 10px/1 var(--f-label); letter-spacing: .28em; text-transform: uppercase; color: rgba(11, 13, 15, .55); }
 .dk-pc-name { max-width: 66%; font: 900 36px/.92 var(--f-display); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dk-pc-name.empty { color: rgba(11, 13, 15, .2); }
-.dk-pc-meta { font: 400 9px/1.3 var(--f-mono); letter-spacing: .04em; color: rgba(11, 13, 15, .62); }
+.dk-pc-meta { max-width: 64%; font: 400 9px/1.3 var(--f-mono); letter-spacing: .04em; color: rgba(11, 13, 15, .62); }
 .dk-pc-bars { display: flex; gap: 0; height: 22px; margin-top: 4px; max-width: 66%; }
 .dk-pc-bars i { height: 100%; background: var(--ink); }
 .dk-pc-bars i.gap { background: transparent; }
