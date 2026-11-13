@@ -9,6 +9,7 @@ import { createTestnetChain2 } from "./chain";
 import { resolveV2Config } from "./config";
 import { mountDock } from "./dock";
 import { MOCK2_WARMUP_SECONDS, type MockChain2, createMockChain2, createMockWallet2 } from "./mock";
+import { startTicksV2 } from "./tick";
 import type { V2 } from "./types";
 import { type GuestWallet2, createGuestWallet2 } from "./wallet";
 
@@ -49,6 +50,10 @@ export function startV2(G: Game): void {
       if (!document.hidden) mock.ambient(AMBIENT_TICK);
     }, AMBIENT_TICK * 1000);
   }
+
+  // On testnet, wake Moss, Ines and the Harbormaster when someone plays (server/tick.ts runs one round at most
+  // every 10 minutes): the characters act because players are there, with no scheduler to keep alive.
+  if (!mock) guard("ticks", () => startTicksV2(cfg.faucetUrl, G.events));
 
   guard("arsenal", () => startArsenal(G)); // breaker charge, rifle butt, pickups (G.arsenal)
   guard("bailiff", () => startBailiff(G)); // the hunter (G.bailiff)
