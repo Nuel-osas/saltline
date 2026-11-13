@@ -51,12 +51,10 @@ export function startV2(G: Game): void {
     }, AMBIENT_TICK * 1000);
   }
 
-  // The raid: sign-on, the gun in the shooter, loot, the invoice (G.raid). Before the Bailiff: it opens the one radio
-  // channel the Bailiff and the Assessor speak through.
-  guard("raid", () => startRaid(G));
   guard("arsenal", () => startArsenal(G)); // breaker charge, rifle butt, pickups (G.arsenal)
   guard("bailiff", () => startBailiff(G)); // the hunter (G.bailiff)
   guard("score", () => startScore(G)); // the music (G.score)
+  guard("raid", () => startRaid(G)); // sign-on, the owned gun in the shooter, loot, the invoice and its thresholds (G.raid)
   guard("dock", () => mountDock(G)); // the hub: loadout, armoury, market, vendors, the ledger
 
   console.info(cfg.mode === "mock" ? "[v2] offline mock: not the chain" : `[v2] testnet, contract ${cfg.contractId}`);

@@ -18,7 +18,7 @@ import { startAssessor, type Boss } from "../../boss";
 import { createBriefing, type Briefing } from "../../story/briefing";
 import { defaultStore, loadMemory, saveMemory } from "../../story/memory";
 import { createPacer, type Pacer } from "../../story/pacing";
-import { createChannel, type TimedChannel } from "../../story/radio";
+import type { TimedChannel } from "../../story/radio";
 import { NO_BONUS, waveBonus } from "../../story/waves";
 import { WRECK_SLOTS, sealPoint, wreckPoint, type Point } from "../../salvage/place";
 import { SALVAGE_SPOTS } from "../../salvage/spots";
@@ -26,6 +26,7 @@ import { CONDITION, INVOICE, MATERIALS, RAID } from "../items";
 import type { DeathBy, Loadout, Raid, V2, Weapon } from "../types";
 import { LINES, SIGN, THRESHOLD_NOTE, THRESHOLD_WARN } from "./copy";
 import { createRaidHud, type Marker, type RaidHud, type Row } from "./hud";
+import { openChannel } from "./radio";
 import {
   HOLD,
   PART_OF,
@@ -164,13 +165,10 @@ export function createRaid(G: Game): RaidApi {
     if (typeof off === "function") offs.push(off);
   };
 
-  // ---- one radio channel for every voice: the Bailiff and the Assessor pick it up from G.story.channel ----
-  const ownChannel: TimedChannel | null = G.story?.channel ? null : createChannel(G);
-  const channel: TimedChannel = G.story?.channel ?? ownChannel!;
-  if (ownChannel) {
-    if (G.bailiff) console.warn("[raid] started after the Bailiff: its lines may be relabelled. Start the raid first (v2/index.ts).");
-    G.story = { ...(G.story ?? {}), channel };
-  }
+  // ---- the radio: one channel for every voice where it can be, a guest beside the Bailiff's where it can't (radio.ts).
+  // The Assessor, started below, picks it up from G.story.channel either way.
+  const radio = openChannel(G);
+  const channel: TimedChannel = radio.channel;
   const pacer: Pacer = createPacer({ now, busy: () => channel.busy(), lastHarbormasterEnd: () => channel.lastHarbormasterEnd(), say: (line, seconds) => channel.say(line, seconds) });
   const boss: Boss | null = G.boss ?? startAssessor(G);
 
@@ -369,6 +367,7 @@ export function createRaid(G: Game): RaidApi {
       due: [],
       grabs: [],
     };
+    guard("radio", () => channel.reset()); // lines the last raid queued and the HUD dropped must not hold the radio
     guard("finish", () => finish(p.weapon));
     if (!signed) {
       if (G.v2) (G.v2 as V2).raid = null;
@@ -939,7 +938,7 @@ export function createRaid(G: Game): RaidApi {
       world.clear();
       hud.dispose();
       briefing.dispose();
-      ownChannel?.dispose();
+      radio.dispose();
     },
   };
   return api;
