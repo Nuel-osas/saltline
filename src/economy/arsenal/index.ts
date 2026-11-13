@@ -125,6 +125,8 @@ export function createArsenal(G: Game, opts: ArsenalOptions = {}): Arsenal {
   };
   const emit = (name: string, e: unknown) => guard(`emit ${name}`, () => G.events?.emit?.(name, e));
   const playing = () => G.game?.state === "playing";
+  /** Nothing is thrown or swung with empty hands: v2's raid starts before the rifle is out of its crate. */
+  const unarmed = () => !!G.ext?.unarmed;
   const player = () => {
     const p = G.player;
     return p && p.alive !== false && p.pos ? p : null;
@@ -244,7 +246,7 @@ export function createArsenal(G: Game, opts: ArsenalOptions = {}): Arsenal {
   // ---- the throw ----
   function throwCharge(): boolean {
     const p = player();
-    if (!p || !playing() || !throwCd.ready()) return false;
+    if (!p || !playing() || unarmed() || !throwCd.ready()) return false;
     if (charges <= 0) {
       hud.pulse("empty");
       sfx("ui_click", { gain: 0.5, pitch: 0.7 });
@@ -317,7 +319,7 @@ export function createArsenal(G: Game, opts: ArsenalOptions = {}): Arsenal {
   // ---- the rifle butt ----
   function swing(): boolean {
     const p = player();
-    if (!p || !playing() || !swingCd.ready()) return false;
+    if (!p || !playing() || unarmed() || !swingCd.ready()) return false;
     swingCd.fire();
     const yaw = p.yaw || 0;
     const flat = { x: -Math.sin(yaw), y: 0, z: -Math.cos(yaw) };
