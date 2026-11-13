@@ -51666,6 +51666,7 @@ void main() {
     return (
       Object.assign(Re, {
         ctx: e,
+        ext: { music: H.music, bed: Xe }, // ext: the score (src/economy/score) plays into the music bus and fades these baked loops out under it
         resume: yr,
         play: ze,
         loop: Be,
