@@ -3,18 +3,17 @@
 // the camera comes down from the crane over the three uplinks to what waits in the shed, and the title lands.
 //
 // It plays on a player's first DEPLOY in v2 in place of the text briefing (raid/index.ts asks G.intro.film before the
-// sign-on), and again from INTRO on the title. The drop point (the open crate, the supply crate with the lamp on
-// it, the coiled line) stays at the player's start afterwards: DROP says where.
+// sign-on), and again from INTRO on the title. Nothing of its set stays in the level: the rifle crate Moss kicks open
+// is the coach's own (../coach/crate.ts), built by the film while it plays and by the coach when the raid starts, at
+// the same spot, so the cut from the film to play lands on the same crate.
 //
 // URL: ?intro=0 never plays it on DEPLOY (scripts that drive the title), ?intro=1 plays it on every first DEPLOY of
 // a page load, seen or not.
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
 import { type Film, createFilm } from "./film";
 import "./intro.css";
-import { DROP } from "./props";
 import { type FilmStage, createStage } from "./stage";
 
-export { DROP } from "./props";
 export { FILM_SECONDS, SHOTS } from "./timeline";
 
 type Game = any;
@@ -24,8 +23,6 @@ export const INTRO_KEY = "saltline.intro.v1";
 export interface Intro {
   readonly film: Film;
   readonly stage: FilmStage;
-  /** Where the drop point is (the long crate, its yaw, the rifle in it). */
-  readonly drop: typeof DROP;
   /** Play it now, as the title's INTRO button does. */
   play(): void;
   dispose(): void;
@@ -137,7 +134,6 @@ export function startIntro(G: Game): Intro | null {
   const intro: Intro = {
     film,
     stage,
-    drop: DROP,
     play: () => film.play(),
     dispose() {
       if (ext.camera) delete ext.camera;

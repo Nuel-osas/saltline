@@ -50,6 +50,10 @@ export interface CrateWorld {
   update(dt: number): void;
   /** Whether the rifle is still lying there. */
   readonly full: boolean;
+  /** For the opening film, which shoves this same crate across the concrete: the standing crate, to move. */
+  readonly root?: Obj | null;
+  /** For the opening film, which kicks it open: the lid, from 0 (shut) to 1 (thrown back, as every raid finds it). */
+  setLid?(k: number): void;
 }
 
 export const STUB_CRATE: CrateWorld = { build() {}, take() {}, clear() {}, update() {}, full: false };
@@ -97,6 +101,7 @@ export function createCrateWorld(G: any): CrateWorld {
   let rifle: Obj | null = null;
   let lamp: Obj | null = null;
   let body: Obj | null = null;
+  let lidOf: Obj | null = null;
   /** One of the renderer's pooled point lights, held while the rifle lies there: the crate stands in a container's shadow. */
   let glow: { light: Obj; release(): void } | null = null;
   let clock = 0;
@@ -169,7 +174,7 @@ export function createCrateWorld(G: any): CrateWorld {
     M.lamp?.dispose?.();
     M.lamp = null;
     dark();
-    root = rifle = lamp = body = null;
+    root = rifle = lamp = body = lidOf = null;
   }
 
   return {
@@ -205,6 +210,7 @@ export function createCrateWorld(G: any): CrateWorld {
           lid.add(name);
         }
         shell.add(lid);
+        lidOf = lid;
         root.add(shell);
         try {
           root.updateWorldMatrix(true, true);
@@ -258,6 +264,12 @@ export function createCrateWorld(G: any): CrateWorld {
     },
     get full() {
       return !!rifle;
+    },
+    get root() {
+      return root;
+    },
+    setLid(k) {
+      if (lidOf) lidOf.rotation.x = -1.92 * Math.min(1.2, Math.max(0, k));
     },
   };
 }

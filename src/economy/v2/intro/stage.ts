@@ -8,12 +8,18 @@
 // How the people are staged: between the camera and the dawn, never nearer than about eight metres in a wide shot
 // and never cut by the frame's edge, so they stay near-silhouette with the light on their shoulders. The crate shot
 // is the one close shot, and it shows boots, shins and hands only.
+//
+// The long rifle crate is the coach's own (../coach/crate.ts), the one every raid starts at: the film builds it with
+// the same builder, shut, at the same spot, and strikes the whole set as the raid starts, so the cut from the film
+// to play lands on one crate in one place.
 /* eslint-disable @typescript-eslint/no-explicit-any -- three.js and the game context come from the untyped bundle */
 import { createModel } from "../../bailiff/model";
 import type { Body, Pose as BailiffPose } from "../../bailiff/types";
+import { crateGun } from "../coach/copy";
+import { CRATE_AHEAD, type CrateWorld, createCrateWorld, placeCrate } from "../coach/crate";
 import { type Figure, createFigure } from "./figure";
 import type { Stage } from "./film";
-import { DROP, createProps } from "./props";
+import { createProps } from "./props";
 import { LENS_AT, MARKS, MARKS_OFF, SHOTS, locate } from "./timeline";
 
 type Obj = any;
@@ -79,49 +85,59 @@ export function createStage(G: Obj): FilmStage {
     }
   };
 
-  // ---- the drop point: built once, kept after the film ----
+  // ---- the set at the drop point: the rifle crate (the coach's builder) and the film's own props. None of it
+  // outlives the film: `strike` takes it all away as the raid starts and builds its own crate on the same spot. ----
   const drop = new T.Group();
   drop.name = "intro-drop";
-  G.scene.add(drop);
-  const crate = props.longCrate();
   const supply = props.supply();
   const lamp = props.lamp();
   const coil = props.coil();
-  drop.add(crate.root, supply, lamp.root, coil);
-  const CRATE_YAW = face(-1, 0) + 0.05;
+  drop.add(supply, lamp.root, coil);
+  const crateWorld: CrateWorld = createCrateWorld(G);
+  /** Where every raid's crate stands (the coach's own rule), on the start's ground. */
+  const PLACE = placeCrate(start, undefined, () => O.y);
   const CRATE_FROM = { f: 5.2, r: 0.05 },
-    CRATE_TO = { f: 2, r: 0 };
+    CRATE_TO = { f: CRATE_AHEAD, r: 0 };
   const SUPPLY_AT = { f: 9.2, r: -3.4 };
   const COILER_AT = { f: 7.4, r: -3.7 };
   const COIL_AT = { f: 7.6, r: -3.2 };
-  const colliders: Obj[] = [];
+  let onSet = false;
+  /** Rifle crates already standing in the scene (the last raid's), out of sight while the film has its own. */
+  let hidden: Obj[] = [];
   function settle() {
-    at(CRATE_TO.f, CRATE_TO.r, 0, crate.root.position);
-    crate.root.rotation.set(0, CRATE_YAW, 0);
-    crate.setLid(1);
+    const cr = crateWorld.root;
+    if (cr) {
+      cr.position.set(PLACE.x, PLACE.y, PLACE.z);
+      cr.rotation.set(0, PLACE.yaw, 0);
+    }
+    crateWorld.setLid?.(1);
     at(SUPPLY_AT.f, SUPPLY_AT.r, 0, supply.position);
     supply.rotation.set(0, face(-0.21, -1), 0);
     at(SUPPLY_AT.f, SUPPLY_AT.r, 0.5 + 0.196, lamp.root.position);
     lamp.root.rotation.set(0, 0, 0);
     at(COIL_AT.f, COIL_AT.r, 0, coil.position);
     drop.visible = true;
+    if (cr) cr.visible = true;
   }
-  settle();
-  DROP.crate = { x: crate.root.position.x, y: crate.root.position.y, z: crate.root.position.z };
-  DROP.yaw = CRATE_YAW;
-  DROP.rifle = crate.rifle;
-  DROP.ready = true;
-  try {
-    for (const o of [crate.root, supply]) {
-      o.updateWorldMatrix(true, true);
-      const b = new T.Box3().setFromObject(o);
-      if (o === crate.root) b.max.y = O.y + DROP.size.high; // the shut height: the open lid is no wall
-      const c = G.physics?.addBox?.(b.min, b.max, { surface: "wood", tag: "intro", noNav: true });
-      if (c) colliders.push(c);
-    }
-  } catch {
-    /* without colliders the props are scenery */
+  function dress() {
+    strike();
+    for (const o of G.scene.children) if (o.name === "coach-crate" && o.visible) ((o.visible = false), hidden.push(o));
+    crateWorld.build(PLACE, crateGun(null)); // the issue rifle: the one Moss is talking about
+    crateWorld.setLid?.(0);
+    G.scene.add(drop);
+    onSet = true;
   }
+  /** The film's crate and props leave the scene, and anything hidden for them comes back. */
+  function strike() {
+    if (!onSet) return;
+    onSet = false;
+    crateWorld.clear();
+    drop.removeFromParent();
+    for (const o of hidden) o.visible = true;
+    hidden = [];
+  }
+  // Registered before the coach's own run:start, so its crate is built on bare ground, not on the film's.
+  const offRun = G.events?.on?.("run:start", strike);
 
   // ---- the cast and the film's own props: made in begin(), gone in end() ----
   interface Cast {
@@ -225,6 +241,7 @@ export function createStage(G: Obj): FilmStage {
     shot = -1;
     fired = new Set();
     parkT = 0;
+    dress();
     const boat = G.backdrop?.boat;
     const exposure = typeof G.render?.exposure === "number" ? G.render.exposure : null;
     saved = { fov: cam.fov, boat: boat ? boat.position.clone() : null, boatRot: boat ? boat.rotation.clone() : null, exposure };
@@ -331,7 +348,7 @@ export function createStage(G: Obj): FilmStage {
       /* the title's music plays on */
     }
     if (!offState) {
-      const off = G.events?.on?.("game:state", (e: Obj) => e?.state !== "title" && (parkT = 0));
+      const off = G.events?.on?.("game:state", (e: Obj) => e?.state !== "title" && ((parkT = 0), !cast && strike()));
       offState = typeof off === "function" ? off : null;
     }
   }
@@ -347,6 +364,7 @@ export function createStage(G: Obj): FilmStage {
     cast.helm.root.visible = cast.bow.root.visible = cast.wake.visible = id === "water";
     cast.glints.visible = id === "objective";
     drop.visible = id !== "water";
+    if (crateWorld.root) crateWorld.root.visible = id !== "water";
     const boat = G.backdrop?.boat;
     if (boat && id !== "water" && saved.boat) (boat.position.copy(saved.boat), boat.rotation.copy(saved.boatRot));
     if (!dropScene) {
@@ -432,13 +450,17 @@ export function createStage(G: Obj): FilmStage {
     // The long crate: where Moss's boot leaves it, then a slide across the wet concrete that dies away.
     const slide = clamp01((t3 - SHOVE) / 2.3);
     const e = 1 - Math.pow(1 - slide, 3);
-    at(lerp(CRATE_FROM.f, CRATE_TO.f, e), lerp(CRATE_FROM.r, CRATE_TO.r, e), 0, crate.root.position);
-    crate.root.rotation.y = CRATE_YAW - 0.05 + 0.05 * e + Math.sin(slide * 9) * 0.012 * (1 - slide);
+    const cr = crateWorld.root;
+    if (cr) {
+      at(lerp(CRATE_FROM.f, CRATE_TO.f, e), lerp(CRATE_FROM.r, CRATE_TO.r, e), PLACE.y - O.y, cr.position);
+      cr.rotation.y = PLACE.yaw - 0.05 * (1 - e) + Math.sin(slide * 9) * 0.012 * (1 - slide);
+    }
     const x = t3 - KICK;
-    crate.setLid(x <= 0 ? 0 : 1 - Math.exp(-5.5 * x) * Math.cos(8.5 * x));
-    if (slide > 0 && slide < 0.85 && Math.floor(clock * 14) !== Math.floor((clock - dt) * 14)) {
+    crateWorld.setLid?.(x <= 0 ? 0 : 1 - Math.exp(-5.5 * x) * Math.cos(8.5 * x));
+    if (x > 0) crateWorld.update(dt); // its work light shows as the lid goes up
+    if (cr && slide > 0 && slide < 0.85 && Math.floor(clock * 14) !== Math.floor((clock - dt) * 14)) {
       try {
-        G.fx?.splash?.(A.copy(crate.root.position).add(B.set(-fw.x * 0.25, 0.02, -fw.z * 0.25)), 0.3 * (1 - slide));
+        G.fx?.splash?.(A.copy(cr.position).add(B.set(-fw.x * 0.25, 0.02, -fw.z * 0.25)), 0.3 * (1 - slide));
       } catch {
         /* decoration */
       }
@@ -462,7 +484,7 @@ export function createStage(G: Obj): FilmStage {
         const down = smooth((t3 - (SHOVE + 0.08)) / 0.42);
         p.phase = 0;
         p.walk = 0;
-        p.footR = { x: -0.11, y: lerp(0.36, 0, down) + Math.sin(down * Math.PI) * 0.08, z: lerp(lerp(0.5, 0.95, push), 0.05, down) };
+        p.footR = { x: -0.11, y: lerp(0.31, 0, down) + Math.sin(down * Math.PI) * 0.08, z: lerp(lerp(0.5, 0.95, push), 0.05, down) };
         p.footL = { x: 0.1, y: 0, z: -0.04 };
         p.lean = 0.2 + 0.16 * push - 0.14 * down;
         p.handR = down < 0.3 ? { x: -0.15, y: 0.76, z: 0.36 + 0.1 * push } : null;
@@ -644,14 +666,6 @@ export function createStage(G: Obj): FilmStage {
     at(key(tl, [[0, -0.5], [4.4, -0.35], [7, 0.3], [11.5, 0.86]]), key(tl, [[0, -1.75], [4.4, -1.6], [7, -0.5], [11.5, 0.3]]), key(tl, [[0, 0.3], [4.4, 0.34], [7, 0.9], [11.5, 1.42]]), P);
     at(key(tl, [[0, 2.7], [3, 2.05], [11.5, 2.04]]), key(tl, [[0, -0.5], [4.4, -0.55], [7, -0.1], [11.5, 0]]), key(tl, [[0, 0.28], [4.4, 0.32], [7, 0.22], [11.5, 0.16]]), Lk);
     shoot(P, Lk, key(tl, [[0, 34], [4.4, 34], [11.5, 33]]), 1.1);
-    // The lamp's light is brought over the open crate, so the rifle is lit by something in the scene.
-    const c = cast!;
-    if (c.light?.light) {
-      const over = smooth((tl - 5) / 1.8);
-      at(CRATE_TO.f - 0.25, 0.25, 0.85, A);
-      c.light.light.position.lerp(A, over);
-      c.light.light.intensity *= 1 + 0.9 * over;
-    }
   }
 
   // ---- shot 4: the objective. From crane height, down over the yard from its open south side, to the shed door. ----
@@ -725,6 +739,7 @@ export function createStage(G: Obj): FilmStage {
     clock += dt;
     const w = locate(t);
     if (w.index !== shot) enter(w.index);
+    if (w.index >= 3) crateWorld.update(dt);
     switch (w.shot?.id) {
       case "water":
         return water(w.local, dt);
@@ -793,10 +808,17 @@ export function createStage(G: Obj): FilmStage {
     end,
     park(on) {
       parkT = on ? PARK_SECONDS : 0;
+      if (!on) strike(); // a replay from the title leaves nothing standing
     },
     parked(dt) {
-      if (parkT <= 0 || G.game?.state !== "title") return ((parkT = 0), false);
-      parkT -= dt;
+      if (parkT <= 0) return false;
+      if (G.game?.state !== "title" || (parkT -= dt) <= 0) {
+        // The raid has started (it builds its own crate), or it never came: either way the set goes.
+        parkT = 0;
+        if (!cast) strike();
+        return false;
+      }
+      crateWorld.update(dt);
       playerView();
       return true;
     },
@@ -804,16 +826,8 @@ export function createStage(G: Obj): FilmStage {
       end();
       offState?.();
       offState = null;
-      for (const c of colliders) {
-        try {
-          G.physics?.removeBox?.(c);
-        } catch {
-          /* the physics module went away */
-        }
-      }
-      drop.removeFromParent();
-      DROP.ready = false;
-      DROP.rifle = null;
+      if (typeof offRun === "function") offRun();
+      strike();
     },
   };
 }
