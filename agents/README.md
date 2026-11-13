@@ -174,3 +174,66 @@ The optional repository variables are `CONTRACT_ID`, `NEAR_RPC` and `NEAR_AI_MOD
   account, with its memo on the ledger (the `export` and `stance` events, and `last_memo` in `brokers()`).
 - **The LLM, when on, writes words only.** It can't change an action, an amount or a stance, and a memo that cites
   a number the move doesn't contain is never signed.
+
+## v2: the characters with wallets
+
+Saltline v2 (`docs/GAME.md`) has three characters, each a testnet account that signs its own moves on the v2
+contract (`v2.saltline.testnet`). `agents/v2/characters.ts` holds their rules; `agents/v2/run.ts` runs a round with
+the same runner as above (fail closed, one move a round, refusals logged and never re-sent, keys never printed).
+
+| Who | Account | Calls it may sign | What it can't do |
+|---|---|---|---|
+| **Moss**, the armourer | `moss.saltline.testnet` | `vendor_build` (guns and mods, from her own parts), `vendor_price` (her own guns), `export` (her own stock) | Build without the parts, touch a player's gun, change what she pays for parts (the contract's curve does), mint scrip any way but the export desk |
+| **Ines**, the quartermaster | `ines.saltline.testnet` | `vendor_build` (plates, charges, magazines), `export` | The same; and she can't build guns or mods (`E_DOESNT_SELL`) |
+| **The Harbormaster** | `harbormaster.saltline.testnet` | `hm_posture` (`patrols` or `pursuit`) | Anything else. It can't bill, fine, mint or take. Its strength is its balance, which only players' payments fill and which halves every 12 hours |
+
+### Their rules
+
+One move a round each, the first rule that fits. A move that doesn't add up against the board is a hold.
+
+**Moss** (blunt, measures everything in tonnes, hates waste):
+
+1. A fresh A or B still at the default price (125% of appraisal) is priced up: A at 150%, B at 135%.
+2. With fewer than 4 guns for sale and the parts for one, she builds the frame her rack lacks. With every frame
+   racked, she builds the one with the most sales on the market (`economy().lastSales`; none, no build).
+3. A gun unsold over 6 hours is marked down 10%, once for each 6 hours it has sat, never under 90% of appraisal.
+4. With 3 or more guns racked, she makes a mod she has fewer than 2 of.
+5. Materials held over twice their target go to the freighter, at most 6 units a round.
+
+**Ines** (warm, a ruthless haggler, careful with the clinic's money):
+
+1. A shelf under 6 plates, 8 charges or 24 magazines is restocked when she has the parts, the shortest shelf first.
+2. With under 600 scrip, fuel or electronics held over twice their target go to the freighter, at most 6 a round.
+3. Otherwise she holds.
+
+Neither ships while the desk pays under half the book price for that material (`EXPORT_MIN_PCT`).
+
+**The Harbormaster** (polite, procedural, sincere):
+
+1. It reads the last 20 raid endings in `recent`: `extract` lines against `wreck` and `impound` lines.
+2. `pursuit` when extractions are more than twice the deaths and its strength is at least 25; otherwise `patrols`.
+3. It signs only when the posture changes: "Recoveries are below forecast. Collections have been prioritised."
+
+### Running them
+
+```
+node --import ./agents/ts-hook.mjs agents/v2/run.ts --once --dry-run    # decide and print, sign nothing
+node --import ./agents/ts-hook.mjs agents/v2/run.ts --once              # one round
+node --import ./agents/ts-hook.mjs agents/v2/run.ts --loop 10           # a round every 10 minutes
+```
+
+| Variable | What |
+|---|---|
+| `BROKER_MOSS_KEY`, `BROKER_INES_KEY` | The same accounts and secrets as v1's Moss and Ines |
+| `HARBORMASTER_KEY` | ed25519 secret key for `harbormaster.saltline.testnet` |
+| `CONTRACT_ID_V2` | default `v2.saltline.testnet` |
+| `NEAR_RPC`, `NEAR_NETWORK`, `NEAR_AI_API_KEY`, `NEAR_AI_MODEL` | as above |
+
+- Without an env key, the keychain file `~/.near-credentials/testnet/<account>.json` is used. A character with no
+  key is skipped; the others still run.
+- A character moves only when every view its rules read came back: `vendors` and `export_prices` for both vendors,
+  `economy` for Moss too, `harbormaster` and `recent` for the Harbormaster.
+- `export` takes no memo on the contract, so an export's memo is in the agent's log line only.
+- On the live site, `POST /api/tick?game=v2` (`server/tick.ts`) runs one v2 round when people play, at most every
+  10 minutes, on a clock separate from v1's. It answers 503 when none of the three keys is set.
+- A leaked key can do only what the table above lists for that account, plus spend its gas.
