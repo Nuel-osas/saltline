@@ -10,7 +10,9 @@ import {
   MATERIALS,
   RAID,
   STAT_KEYS,
+  VENDOR_PRICING,
   appraise,
+  goodsPrice as itemsGoodsPrice,
   gradeOf,
   invoiceStart,
   invoiceTotal,
@@ -25,12 +27,15 @@ import {
   createMockChain2,
   createMockWallet2,
   exportPrice,
-  goodsPrice,
   gunPrice,
   mockStashParam,
+  rulesWire,
   vendorBid,
 } from "../src/economy/v2/mock";
-import type { Amounts, MaterialId, Raid, RaidReport, Weapon } from "../src/economy/v2/types";
+import type { Amounts, ConsumableId, MaterialId, ModId, Raid, RaidReport, Weapon } from "../src/economy/v2/types";
+
+// items.ts types `stock` as the literal 5 (its default comes from an `as const` table); see the note in mock.ts.
+const goodsPrice = itemsGoodsPrice as (id: ModId | ConsumableId, stock?: number) => number;
 
 const T0 = 1_800_000_000_000;
 const HOUR = 3_600_000;
@@ -87,7 +92,7 @@ describe("v2 mock: init and registration", () => {
     expect([moss.id, ines.id]).toEqual(["moss", "ines"]);
     expect([moss.scrip, ines.scrip]).toEqual([1500, 1500]);
     expect(moss.stock).toEqual({ copper: 15, chips: 12, servo: 6, rotor: 6, core: 4 });
-    expect(ines.stock).toEqual({ meds: 7, fuel: 6, chips: 12 });
+    expect(ines.stock).toEqual({ meds: 7, fuel: 6, chips: 12, copper: 15 });
     expect(moss.guns.map((g) => [g.weapon.frame, g.weapon.state, g.weapon.serial])).toEqual([
       ["longshore", "vendor", "S-000001"],
       ["stevedore", "vendor", "S-000002"],
@@ -783,7 +788,9 @@ describe("v2 mock: vendors", () => {
     const { m } = await joined();
     m.debug.give({ meds: 2, copper: 1 });
     expect(await m.sell("moss", "meds", 1)).toMatchObject({ ok: false, code: "E_DOESNT_BUY" });
-    expect(await m.sell("ines", "copper", 1)).toMatchObject({ ok: false, code: "E_DOESNT_BUY" });
+    expect(await m.sell("ines", "core", 1)).toMatchObject({ ok: false, code: "E_DOESNT_BUY" });
+    // Ines takes copper as well as meds, fuel and electronics: plates and magazines are made of it.
+    expect(await m.sell("ines", "copper", 1)).toMatchObject({ ok: true, paid: vendorBid("copper", 15) });
     expect(await m.sell("ines", "meds", 3)).toMatchObject({ ok: false, code: "E_FUNDS" });
     expect(await m.sell("ines", "meds", 0)).toMatchObject({ ok: false, code: "E_BAD_AMOUNT" });
     expect((await m.sell("ines", "meds", 2)).ok).toBe(true);
@@ -797,28 +804,48 @@ describe("v2 mock: vendors", () => {
     while ((await m.sell("moss", "core", 1)).ok) sold++;
     const [moss] = await m.vendors();
     expect(sold).toBeGreaterThan(5);
-    expect(moss.scrip).toBeGreaterThanOrEqual(MOCK2.vendorFloat);
-    expect(moss.scrip - vendorBid("core", moss.stock.core ?? 0)).toBeLessThan(MOCK2.vendorFloat);
+    expect(VENDOR_PRICING.float).toBe(100);
+    expect(moss.scrip).toBeGreaterThanOrEqual(VENDOR_PRICING.float);
+    expect(moss.scrip - vendorBid("core", moss.stock.core ?? 0)).toBeLessThan(VENDOR_PRICING.float);
     // She can still afford cheaper things, so she is open until nothing fits.
-    expect(moss.open).toBe(moss.bids.some((b) => moss.scrip - b.price >= MOCK2.vendorFloat));
+    expect(moss.open).toBe(moss.bids.some((b) => moss.scrip - b.price >= VENDOR_PRICING.float));
     expect(await m.sell("moss", "core", 1)).toMatchObject({ ok: false, code: "E_VENDOR_BROKE" });
   });
 
-  it("goods cost their inputs at base bids × 135%, and more when the vendor holds few", async () => {
+  it("goods cost items.ts's goodsPrice per unit (plate 54, charge 30, magazine 13), and more when the vendor holds few", async () => {
     const { m, me } = await joined();
     m.debug.give({ scrip: 5000 });
-    expect(goodsPrice("plate", 10)).toBe(Math.floor(((2 * 40 + 80) * 135) / 100));
-    expect(goodsPrice("ammo", 40)).toBe(Math.floor((40 * 135) / 400));
-    expect(goodsPrice("plate", 4)).toBeGreaterThan(goodsPrice("plate", 5));
     const [, ines] = await m.vendors();
-    expect(ines.goods.find((g) => g.tokenId === "plate")?.price).toBe(216);
-    expect(await m.buy("ines", "plate", 2)).toMatchObject({ ok: true, cost: 432 });
-    expect(await m.balances(me)).toMatchObject({ scrip: 5150 - 432, plate: 2 });
-    expect((await m.vendors())[1]).toMatchObject({ scrip: 1932 });
-    // Six more take her from 8 to 2: the last two cost more than the first.
+    expect(Object.fromEntries(ines.goods.map((g) => [g.tokenId, g.price]))).toEqual({ plate: 54, charge: 30, ammo: 13 });
+    for (const g of ines.goods) expect(g.price).toBe(goodsPrice(g.tokenId, g.stock));
+    expect(await m.buy("ines", "plate", 2)).toMatchObject({ ok: true, cost: 108 });
+    expect(await m.balances(me)).toMatchObject({ scrip: 5150 - 108, plate: 2 });
+    expect((await m.vendors())[1]).toMatchObject({ scrip: 1608 });
+    // Six more take her from 8 to 2: each is priced at the stock it leaves, 8% dearer for each unit under 5.
     const cost = [8, 7, 6, 5, 4, 3].reduce((s, stock) => s + goodsPrice("plate", stock), 0);
+    expect(cost).toBe(54 * 4 + 58 + 62);
     expect(await m.buy("ines", "plate", 6)).toMatchObject({ ok: true, cost });
-    expect(cost).toBeGreaterThan(6 * 216);
+    expect((await m.vendors())[1].goods.find((g) => g.tokenId === "plate")).toMatchObject({ stock: 2, price: goodsPrice("plate", 2) });
+  });
+
+  it("Ines's meds stock halves every 12 hours, so her bid for meds recovers; nothing else of hers decays", async () => {
+    const { m } = await joined();
+    m.debug.give({ meds: 13 });
+    expect((await m.sell("ines", "meds", 13)).ok).toBe(true);
+    const ines = async () => (await m.vendors())[1];
+    const bid = async () => (await ines()).bids.find((b) => b.tokenId === "meds")?.price;
+    expect((await ines()).stock.meds).toBe(20);
+    expect(await bid()).toBe(vendorBid("meds", 20));
+    m.debug.advance(VENDOR_PRICING.medsHalfLifeHours);
+    expect((await ines()).stock).toEqual({ meds: 10, fuel: 6, chips: 12, copper: 15 });
+    expect(await bid()).toBe(vendorBid("meds", 10));
+    expect(await bid()).toBe(MATERIALS.meds.bid);
+    m.debug.advance(VENDOR_PRICING.medsHalfLifeHours);
+    expect((await ines()).stock.meds).toBe(5);
+    m.debug.advance(6);
+    expect((await ines()).stock.meds).toBe(Math.floor(5 * 0.707107));
+    // Moss's shelves are untouched by any of it.
+    expect((await m.vendors())[0].stock).toEqual({ copper: 15, chips: 12, servo: 6, rotor: 6, core: 4 });
   });
 
   it("buy refuses what the vendor doesn't sell, what it has run out of, and what the player can't pay for", async () => {
@@ -827,7 +854,7 @@ describe("v2 mock: vendors", () => {
     expect(await m.buy("moss", "plate", 1)).toMatchObject({ ok: false, code: "E_DOESNT_SELL" });
     expect(await m.buy("moss", "mag2", 1)).toMatchObject({ ok: false, code: "E_NO_STOCK" });
     expect(await m.buy("ines", "ammo", 41)).toMatchObject({ ok: false, code: "E_NO_STOCK" });
-    expect(await m.buy("ines", "plate", 1)).toMatchObject({ ok: false, code: "E_FUNDS" });
+    expect(await m.buy("ines", "plate", 10)).toMatchObject({ ok: false, code: "E_FUNDS" });
     expect(await m.buy("ines", "ammo", 0)).toMatchObject({ ok: false, code: "E_BAD_AMOUNT" });
   });
 
@@ -879,11 +906,18 @@ describe("v2 mock: vendors", () => {
     expect(a.guns[2].price).toBe(gunPrice(r.weapon!.value));
     expect(await moss.vendorBuild("comp", "Muzzles.")).toMatchObject({ ok: true, minted: { comp: 1 } });
     expect((await m.vendors())[0].goods.find((g) => g.tokenId === "comp")?.stock).toBe(1);
-    expect(await ines.vendorBuild("charge", "Charges.")).toMatchObject({ ok: true, minted: { charge: 1 } });
+    // A blueprint makes its yield: six charges, three plates, four magazines.
+    expect(await ines.vendorBuild("charge", "Charges.")).toMatchObject({ ok: true, minted: { charge: 6 } });
+    expect(await ines.vendorBuild("plate", "Plates.")).toMatchObject({ ok: true, minted: { plate: 3 } });
+    expect(await ines.vendorBuild("ammo", "Magazines.")).toMatchObject({ ok: true, minted: { ammo: 4 } });
+    const b = (await m.vendors())[1];
+    expect(Object.fromEntries(b.goods.map((g) => [g.tokenId, g.stock]))).toEqual({ plate: 13, charge: 16, ammo: 44 });
+    expect(b).toMatchObject({ scrip: 1500, stock: { fuel: 4, chips: 11, copper: 13 } });
     expect(await ines.vendorBuild("longshore", "x")).toMatchObject({ ok: false, code: "E_DOESNT_SELL" });
     expect(await moss.vendorBuild("ammo", "x")).toMatchObject({ ok: false, code: "E_DOESNT_SELL" });
-    // Ines holds no copper, so a plate is beyond her (see the lane report: nothing she buys makes one).
-    expect(await ines.vendorBuild("plate", "x")).toMatchObject({ ok: false, code: "E_NO_STOCK" });
+    // A second Pilot leaves Moss 2 boxes of electronics; a third needs 5.
+    expect((await moss.vendorBuild("pilot", "Another.")).ok).toBe(true);
+    expect(await moss.vendorBuild("pilot", "x")).toMatchObject({ ok: false, code: "E_NO_STOCK" });
     const player = await joined();
     expect(await player.m.vendorBuild("comp", "x")).toMatchObject({ ok: false, code: "E_NOT_VENDOR" });
   });
@@ -1170,7 +1204,7 @@ describe("v2 mock: determinism, ambient play and persistence", () => {
     // 42 hours on: wrecks have expired with guns in them.
     expect(eco.weaponsDestroyed).toBeGreaterThan(0);
     for (const a of Object.values(s.accounts)) for (const v of Object.values(a.balances)) expect(v).toBeGreaterThan(0);
-    for (const v of Object.values(s.vendors)) expect(v.scrip).toBeGreaterThanOrEqual(MOCK2.vendorFloat);
+    for (const v of Object.values(s.vendors)) expect(v.scrip).toBeGreaterThanOrEqual(VENDOR_PRICING.float);
     const listed = new Set(s.listings.map((l) => l.serial).filter(Boolean));
     const wrecked = new Set(s.wrecks.map((w) => w.serial).filter(Boolean));
     const impounded = new Set(s.impound.map((x) => x.serial));
@@ -1303,5 +1337,51 @@ describe("v2 mock: debug", () => {
     m.debug.advance(25);
     expect(m.now() - t).toBe(25 * HOUR);
     expect(await m.wrecks()).toEqual([]);
+  });
+});
+
+describe("v2 mock: the numbers the spec settled on 13 Nov", () => {
+  it("a plate blueprint makes 3 and a charge blueprint 6, for a player as for a vendor", async () => {
+    const { m, me } = await joined();
+    m.debug.give({ copper: 1, chips: 1, fuel: 2 });
+    expect(await m.build("plate")).toMatchObject({ ok: true, minted: { plate: BLUEPRINTS.plate.yields } });
+    expect(await m.build("charge")).toMatchObject({ ok: true, minted: { charge: BLUEPRINTS.charge.yields } });
+    expect(await m.balances(me)).toEqual({ scrip: 150 - 20 - 15, plate: 3, charge: 6 });
+  });
+
+  it("the entry charge counts 14 past extractions at most, so it tops out at 500", async () => {
+    const { m, tick } = await joined();
+    for (let i = 0; i < 16; i++) {
+      m.debug.setArrears(0);
+      const raid = (await m.startRaid(BARE)).raid as Raid;
+      expect(raid.invoiceStart).toBe(INVOICE.entry + INVOICE.perExtraction * Math.min(i, INVOICE.maxExtractionsCounted));
+      expect(raid.invoiceStart).toBe(invoiceStart(i, 0));
+      tick(60);
+      expect((await m.extract(raid.raidId, rep())).ok).toBe(true);
+    }
+    expect((await m.profile(m.me()))?.extractions).toBe(16);
+    expect(invoiceStart(16, 0)).toBe(500);
+  });
+
+  it("the uplink cap is RAID.maxUplinks", async () => {
+    const { m, tick } = await joined();
+    const raid = (await m.startRaid(BARE)).raid as Raid;
+    tick(60);
+    expect(await m.extract(raid.raidId, rep({ uplinks: RAID.maxUplinks + 1 }))).toMatchObject({ ok: false, code: "E_BAD_REPORT" });
+    expect((await m.extract(raid.raidId, rep({ uplinks: RAID.maxUplinks }))).ok).toBe(true);
+  });
+
+  it("the rules view is the six constants of items.ts in snake_case, every number a number", async () => {
+    const { m } = world();
+    const rules = (await m.rules()) as Record<string, Record<string, unknown>>;
+    expect(rules).toEqual(rulesWire());
+    expect(Object.keys(rules)).toEqual(["raid", "invoice", "harbormaster", "market", "condition", "vendor_pricing"]);
+    expect(rules.raid).toMatchObject({ carry_limit: 6, max_uplinks: 3, max_kills: { gull: 30, hound: 15 }, seconds_between_raids: 30, buy_back_pct: 40 });
+    expect(rules.invoice).toMatchObject({ entry: 150, per_extraction: 25, max_extractions_counted: 14, arrears_on_extract: 25, bonded_at: 1000 });
+    expect(rules.harbormaster).toEqual({ scrip_per_strength: 20, half_life_hours: 12, strength_per_drone: 25, bailiff_drop_per_strength: 4 });
+    expect(rules.market).toEqual({ fee_pct: 4, maker_pct: 2, max_listings: 200 });
+    expect(rules.condition).toMatchObject({ per_raid: 5, recovered: 15, scrap: { copper: 2, chips: 1 } });
+    expect(rules.vendor_pricing).toEqual({ goods_pct: 135, scarce_pct: 8, scarce_under: 5, gun_pct: 125, float: 100, meds_half_life_hours: 12 });
+    expect(JSON.stringify(rules)).not.toMatch(/"\d+"/);
   });
 });

@@ -20,40 +20,34 @@ export const snake = (k) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 /** A JSON number or a U128 string as a number; anything else as it is. */
 const value = (v) => (typeof v === "string" && /^\d+$/.test(v) ? Number(v) : v);
 
-/** `{ a: { bC: 1 }, d: [2, 3] }` → `{ "a.b_c": 1, "d[0]": 2, "d[1]": 3 }`. */
-export function flatten(o, prefix = "", out = {}) {
-  if (Array.isArray(o)) o.forEach((x, i) => flatten(x, `${prefix}[${i}]`, out));
-  else if (o && typeof o === "object") for (const [k, v] of Object.entries(o)) flatten(v, prefix ? `${prefix}.${snake(k)}` : snake(k), out);
-  else out[prefix] = value(o);
+/** `{ a: { bC: 1 }, d: [2, 3] }` → `{ "a.b_c": 1, "d[0]": 2, "d[1]": 3 }`. `raw` leaves U128 strings as strings. */
+export function flatten(o, prefix = "", out = {}, raw = false) {
+  if (Array.isArray(o)) o.forEach((x, i) => flatten(x, `${prefix}[${i}]`, out, raw));
+  else if (o && typeof o === "object") for (const [k, v] of Object.entries(o)) flatten(v, prefix ? `${prefix}.${snake(k)}` : snake(k), out, raw);
+  else out[prefix] = raw ? o : value(o);
   return out;
 }
 
-/** Numbers only the game client uses; the contract needn't send them. */
+/** Numbers only the game client uses; a contract that leaves them out is noted, not failed. */
 const CLIENT_ONLY = new Set(["raid.slow_per_weight", "raid.plate_health", "raid.issued_mags"]);
 
 /**
- * `rules` against items.ts. The doc doesn't say whether the view nests its five groups, so both are read: nested
- * (`{ raid: { carry_limit } }`), flat (`{ carry_limit }`) and flat with the group in front (`{ raid_carry_limit }`).
+ * `rules` against items.ts (docs/CONTRACT_V2.md → Views): `{ raid, invoice, harbormaster, market, condition,
+ * vendor_pricing }`, each the snake_case of the same-named constant, every number a JSON number. A number sent as a
+ * string is a mismatch here, unlike the U128 amounts of the other views.
  */
 export function compareRules(wire, items) {
-  const want = flatten({ raid: items.RAID, invoice: items.INVOICE, harbormaster: items.HARBORMASTER, market: items.MARKET, condition: items.CONDITION });
-  const got = flatten(wire);
-  const used = new Set();
+  const want = flatten({ raid: items.RAID, invoice: items.INVOICE, harbormaster: items.HARBORMASTER, market: items.MARKET, condition: items.CONDITION, vendorPricing: items.VENDOR_PRICING });
+  const got = flatten(wire, "", {}, true);
   const problems = [];
   const notes = [];
   for (const [path, expected] of Object.entries(want)) {
-    const [group, ...rest] = path.split(".");
-    const tail = rest.join(".");
-    const key = [path, tail, `${group}_${tail}`].find((k) => k in got);
-    if (key === undefined) {
+    if (!(path in got)) {
       if (CLIENT_ONLY.has(path)) notes.push(`rules.${path}: not sent (the client's own number, ${expected})`);
       else problems.push(`rules.${path}: missing on the contract (items.ts has ${expected})`);
-      continue;
-    }
-    used.add(key);
-    if (got[key] !== expected) problems.push(`rules.${path}: contract ${JSON.stringify(got[key])}, items.ts ${JSON.stringify(expected)}`);
+    } else if (got[path] !== expected) problems.push(`rules.${path}: contract ${JSON.stringify(got[path])}, items.ts ${JSON.stringify(expected)}`);
   }
-  for (const k of Object.keys(got)) if (!used.has(k)) notes.push(`rules.${k}: on the contract (${JSON.stringify(got[k])}), not in items.ts`);
+  for (const k of Object.keys(got)) if (!(k in want)) notes.push(`rules.${k}: on the contract (${JSON.stringify(got[k])}), not in items.ts`);
   return { problems, notes };
 }
 
@@ -107,7 +101,7 @@ export function toWire(items) {
   const amounts = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, u(v)]));
   const sn = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [snake(k), v && typeof v === "object" ? sn(v) : v]));
   return {
-    rules: { raid: sn(items.RAID), invoice: sn(items.INVOICE), harbormaster: sn(items.HARBORMASTER), market: sn(items.MARKET), condition: sn(items.CONDITION) },
+    rules: { raid: sn(items.RAID), invoice: sn(items.INVOICE), harbormaster: sn(items.HARBORMASTER), market: sn(items.MARKET), condition: sn(items.CONDITION), vendor_pricing: sn(items.VENDOR_PRICING) },
     materials: Object.values(items.MATERIALS).map((m) => ({ id: m.id, name: m.name, weight: m.weight, bid: u(m.bid), export: u(m.export), target: m.target })),
     frames: Object.values(items.FRAMES).map((f) => ({ id: f.id, name: f.name, bands: f.bands, base: u(f.base) })),
     blueprints: Object.entries(items.BLUEPRINTS).map(([id, b]) => ({ id, kind: b.kind, inputs: amounts(b.inputs), fee: u(b.fee), yields: b.yields })),

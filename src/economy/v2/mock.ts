@@ -7,7 +7,7 @@
 // listed here so the contract can be matched against them:
 //
 //  1. A gun that isn't the caller's is refused with E_NOT_OWNER; one that doesn't exist with E_NO_WEAPON. Someone
-//     else's listing can't be cancelled (E_NOT_OWNER) and your own can't be bought (E_NO_LISTING).
+//     else's listing can't be cancelled (E_NOT_OWNER).
 //  2. Stats are rolled uniformly on whole numbers inside the band, ends included.
 //  3. `start_raid`'s 30 s count from the last raid's START. A loadout over 1 plate, 3 charges or 8 magazines is
 //     E_BAD_AMOUNT; gear the caller doesn't hold is E_FUNDS.
@@ -27,14 +27,14 @@
 // 12. The Harbormaster starts on `patrols`. Pursuit moves only the Bailiff's threshold. Its balance and the export
 //     desk's "recently" decay with v1's 16-step halving table (../mock.ts decayMilli), kept in thousandths.
 // 13. Vendors start with 75% of target (rounded down) of each material they buy. Each unit sold to a vendor is
-//     priced at the stock then, rounded down. `open` is false when no bid can be paid without going under 100.
-// 14. Goods cost ⌊inputs at base bids × 135% ÷ yields⌋, and 8% more for each unit of stock under 5. Each unit bought
-//     is priced at the stock then. A price set by `vendor_price` is flat until it is set again.
-// 15. A vendor short of materials is E_NO_STOCK; a blueprint it doesn't make is E_DOESNT_SELL. A vendor's gun has
-//     the vendor as maker and first owner, so a buyer is its second.
+//     priced at the stock then, rounded down. `open` is false when no bid can be paid without going under the float.
+//     Ines's meds decay lazily in thousandths with the same table as the Harbormaster's balance; what the clinic
+//     uses is gone, not exported.
+// 14. Each unit of goods bought is priced at the stock then (items.ts `goodsPrice`). A price set by `vendor_price`
+//     is flat until it is set again.
+// 15. A vendor's gun has the vendor as maker and first owner, so a buyer is its second.
 // 16. Export prices each unit at ⌊export × 100 ÷ (100 + 4 × recent)⌋, one counter per material shared by everyone.
-// 17. Market: the maker gets ⌊2%⌋ and ⌊2%⌋ is burned, the seller the rest; for items both parts are burned. Only
-//     market sales enter `last_sales`, oldest first.
+// 17. Market: for items both ⌊2%⌋ parts are burned. Only market sales enter `last_sales`, oldest first.
 // 18. The 5,000-gun limit counts guns alive. `net_worth` is scrip plus guns in state `held`. Leaderboards leave out
 //     zero rows. Genesis scrip is in `scrip_supply` and not in `minted_24h`.
 // 19. Registration and a death that leaves nothing behind write no `recent` line (there is no kind for them).
@@ -60,7 +60,9 @@ import {
   RAID,
   STAT_KEYS,
   VENDORS,
+  VENDOR_PRICING,
   appraise,
+  goodsPrice,
   gradeOf,
   invoiceStart,
   invoiceTotal,
@@ -110,16 +112,8 @@ export const MOCK2_HARBORMASTER = "harbormaster.saltline.mock";
 export const MOCK2 = {
   vendorScrip: 1500,
   vendorStockPct: 75,
-  /** A vendor refuses a sale that would take its scrip under this. */
-  vendorFloat: 100,
-  goodsMarkupPct: 135,
-  /** Mock's reading of "more when it holds few": under this many in stock, each unit short adds `fewStepPct`. */
-  fewGoods: 5,
-  fewStepPct: 8,
-  gunMarkupPct: 125,
   /** Export: each unit exported recently takes this many percent off the divisor's base of 100. */
   exportStepPct: 4,
-  maxUplinks: 3,
   maxRecent: 64,
   keptSales: 5,
   keptRaids: 30,
@@ -145,17 +139,22 @@ type GoodId = ModId | ConsumableId;
 /** What a vendor pays for the next unit: `bid × 2 × target ÷ (target + stock)`, rounded down. */
 export const vendorBid = (m: MaterialId, stock: number) => Math.floor((MATERIALS[m].bid * 2 * MATERIALS[m].target) / (MATERIALS[m].target + stock));
 
-/** A blueprint's inputs at the vendors' base bids. */
-export const inputsValue = (id: BlueprintId) => MATERIAL_IDS.reduce((s, m) => s + (BLUEPRINTS[id].inputs[m] ?? 0) * MATERIALS[m].bid, 0);
+// items.ts declares `stock = VENDOR_PRICING.scarceUnder`, which TypeScript reads as the literal type 5 (the constant
+// is `as const`), so no other stock type-checks. Until items.ts says `stock: number`, the mock calls it through this.
+const unitPrice = goodsPrice as (id: ModId | ConsumableId, stock?: number) => number;
 
-/** A vendor's default price for one unit of goods at this stock (reading 14). */
-export function goodsPrice(id: GoodId, stock: number): number {
-  const pct = MOCK2.goodsMarkupPct + MOCK2.fewStepPct * Math.max(0, MOCK2.fewGoods - stock);
-  return Math.max(1, Math.floor((inputsValue(id) * pct) / (100 * BLUEPRINTS[id].yields)));
+/** A vendor's default price for a gun: its appraisal × VENDOR_PRICING.gunPct. (Goods: `goodsPrice` in items.ts.) */
+export const gunPrice = (value: number) => Math.floor((value * VENDOR_PRICING.gunPct) / 100);
+
+const snake = (k: string) => k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+function snakeKeys(o: unknown): unknown {
+  if (!o || typeof o !== "object" || Array.isArray(o)) return o;
+  return Object.fromEntries(Object.entries(o).map(([k, v]) => [snake(k), snakeKeys(v)]));
 }
 
-/** A vendor's default price for a gun: its appraisal × 125%. */
-export const gunPrice = (value: number) => Math.floor((value * MOCK2.gunMarkupPct) / 100);
+/** The `rules` view as the contract sends it: each group the snake_case of the same-named constant in items.ts. */
+export const rulesWire = (): Record<string, unknown> =>
+  snakeKeys({ raid: RAID, invoice: INVOICE, harbormaster: HARBORMASTER, market: MARKET, condition: CONDITION, vendorPricing: VENDOR_PRICING }) as Record<string, unknown>;
 
 /** What the export desk pays for the next unit, with `recentMilli` thousandths of a unit exported recently. */
 export const exportPrice = (m: MaterialId, recentMilli: number) =>
@@ -230,6 +229,9 @@ interface VendorState {
   goods: Partial<Record<GoodId, number>>;
   /** Prices set by `vendor_price`, by token id or serial. */
   prices: Record<string, number>;
+  /** Ines only: when her meds were last decayed, and the thousandths of a unit left over then. */
+  medsAt?: number;
+  medsMilli?: number;
   lastMemo: string | null;
   lastActAt: number;
 }
@@ -393,6 +395,7 @@ function freshState(seed: number, at: number): MockState2 {
     vendors[id] = { id, accountId: `${id}.saltline.mock`, name: VENDORS[id].name, scrip: MOCK2.vendorScrip, stock, goods: {}, prices: {}, lastMemo: null, lastActAt: at };
   }
   vendors.ines.goods = { ...MOCK2.genesisGoods };
+  vendors.ines.medsAt = at;
   const S: MockState2 = {
     v: 1,
     seed,
@@ -543,6 +546,8 @@ export interface MockChain2 extends Chain2, AgentCalls {
   vendorAccount(id: VendorId): string;
   /** Other players raid, die, build, trade and settle, and the vendors' and the Harbormaster's agents act, over `seconds`. */
   ambient(seconds: number): void;
+  /** The contract's `rules` view: items.ts's numbers, in the shape the contract sends them. */
+  rules(): Promise<Record<string, unknown>>;
   /** Wipes the saved mock and starts again from the seed. */
   reset(): void;
   /** A copy of the whole state, for tests and the debug console. */
@@ -755,7 +760,21 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
     if (w.serial) destroy(w.serial);
     S.wrecks.splice(i, 1);
   }
+  /**
+   * Ines's meds go to the clinic: her stock halves every VENDOR_PRICING.medsHalfLifeHours, decayed lazily like the
+   * Harbormaster's balance (thousandths, the same table), so her bid for meds recovers. What is used is simply gone.
+   */
+  function useMeds(at: number) {
+    const v = S.vendors.ines;
+    const since = v.medsAt ?? at;
+    const milli = (v.stock.meds ?? 0) * 1000 + (v.medsMilli ?? 0);
+    const left = at > since ? decayMilli(milli, at - since, VENDOR_PRICING.medsHalfLifeHours * HOUR) : milli;
+    v.stock.meds = Math.floor(left / 1000);
+    v.medsMilli = left % 1000;
+    v.medsAt = Math.max(since, at);
+  }
   function sweep(at: number) {
+    useMeds(at);
     // Reading 4: a wreck on offer to an open raid waits for that raid.
     for (let i = S.wrecks.length - 1; i >= 0; i--) if (S.wrecks[i].expiresAt <= at && !raidOpen(S.wrecks[i].reservedBy)) burnWreck(i);
     for (let i = S.impound.length - 1; i >= 0; i--) {
@@ -995,7 +1014,7 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
     });
     const seconds = Math.max(0, Math.floor((at - r.startedAt) / 1000));
     const { kills, parts, used } = report;
-    if (report.uplinks > MOCK2.maxUplinks) refuse("E_BAD_REPORT", `There are only ${MOCK2.maxUplinks} uplinks.`);
+    if (report.uplinks > RAID.maxUplinks) refuse("E_BAD_REPORT", `There are only ${RAID.maxUplinks} uplinks.`);
     if (kills.gull > RAID.maxKills.gull || kills.hound > RAID.maxKills.hound) refuse("E_BAD_REPORT", "More machines than the yard holds.");
     if (kills.gull + kills.hound > Math.floor(seconds / RAID.secondsPerKill)) refuse("E_BAD_REPORT", "More machines than the time allows.");
     if (parts.servo > kills.hound || parts.rotor > kills.gull) refuse("E_BAD_REPORT", "More parts than machines destroyed.");
@@ -1134,10 +1153,10 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
   // --- vendors
 
   const goodsOf = (id: VendorId) => (VENDORS[id].builds as BlueprintId[]).filter((b) => BLUEPRINTS[b].kind !== "weapon") as GoodId[];
-  const goodPrice = (v: VendorState, g: GoodId, stock: number) => v.prices[g] ?? goodsPrice(g, stock);
+  const goodPrice = (v: VendorState, g: GoodId, stock: number) => v.prices[g] ?? unitPrice(g, stock);
   const gunAsk = (v: VendorState, w: Weapon) => v.prices[w.serial] ?? gunPrice(w.value);
   const vendorGuns = (v: VendorState) => gunsOf(v.accountId).filter((w) => w.state === "vendor");
-  const vendorOpen = (v: VendorState) => VENDORS[v.id].buys.some((m) => v.scrip - vendorBid(m, v.stock[m] ?? 0) >= MOCK2.vendorFloat);
+  const vendorOpen = (v: VendorState) => VENDORS[v.id].buys.some((m) => v.scrip - vendorBid(m, v.stock[m] ?? 0) >= VENDOR_PRICING.float);
 
   /** What `amount` units fetch, each priced at the stock it meets (reading 13). */
   function sellQuote(v: VendorState, m: MaterialId, amount: number): number {
@@ -1154,7 +1173,7 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
     if (!(VENDORS[id].buys as readonly string[]).includes(token)) refuse("E_DOESNT_BUY", `${v.name} doesn't buy that.`);
     if (bal(a, token) < amount) refuse("E_FUNDS", `You've got ${units2(token, bal(a, token))}.`);
     const paid = sellQuote(v, token, amount);
-    if (v.scrip - paid < MOCK2.vendorFloat) refuse("E_VENDOR_BROKE", `${v.name} can't cover that. Her till is at ${v.scrip}.`);
+    if (v.scrip - paid < VENDOR_PRICING.float) refuse("E_VENDOR_BROKE", `${v.name} can't cover that. Her till is at ${v.scrip}.`);
     debit(a, token, amount);
     v.scrip -= paid;
     v.stock[token] = (v.stock[token] ?? 0) + amount;
@@ -1401,7 +1420,7 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
     const goods = goodsOf(v.id).map((g) => {
       const stock = v.goods[g] ?? 0;
       const set = v.prices[g] !== undefined;
-      const reason = stock === 0 ? "Out of stock." : set ? `${she}'s own price.` : stock < MOCK2.fewGoods ? `Only ${stock} left, so it costs more.` : "Parts at book, plus her 35%.";
+      const reason = stock === 0 ? "Out of stock." : set ? `${she}'s own price.` : stock < VENDOR_PRICING.scarceUnder ? `Only ${stock} left, so it costs more.` : `Parts at book, plus her ${VENDOR_PRICING.goodsPct - 100}%.`;
       return { tokenId: g, price: goodPrice(v, g, stock), stock, reason };
     });
     const stock: Amounts<MaterialId> = {};
@@ -1606,7 +1625,7 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
     if (!lots.length) return false;
     const t = pickOne(S, lots);
     const n = 1 + below(S, Math.min(3, bal(a, t) - ((KEEP as Amounts)[t] ?? 0)));
-    const each = Object.hasOwn(MATERIALS, t) ? MATERIALS[t as MaterialId].bid : goodsPrice(t as GoodId, MOCK2.fewGoods);
+    const each = Object.hasOwn(MATERIALS, t) ? MATERIALS[t as MaterialId].bid : goodsPrice(t as GoodId);
     return attempt(() => void doListItem(a.accountId, t, n, Math.max(1, Math.floor((n * each * (95 + below(S, 35))) / 100)), at));
   }
 
@@ -1620,7 +1639,7 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
         if (w && guns < 2 && l.price <= Math.floor(w.value * 1.2)) return attempt(() => void doBuyListing(a.accountId, l.id, at));
       } else if (l.item) {
         const { tokenId, amount } = l.item;
-        const each = Object.hasOwn(MATERIALS, tokenId) ? MATERIALS[tokenId as MaterialId].bid : goodsPrice(tokenId as GoodId, MOCK2.fewGoods);
+        const each = Object.hasOwn(MATERIALS, tokenId) ? MATERIALS[tokenId as MaterialId].bid : goodsPrice(tokenId as GoodId);
         if (scrip - l.price >= 100 && l.price <= amount * each * 1.25) return attempt(() => void doBuyListing(a.accountId, l.id, at));
       }
     }
@@ -1629,8 +1648,7 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
       const cheapest = vendorGuns(moss).sort((x, y) => gunAsk(moss, x) - gunAsk(moss, y))[0];
       if (cheapest && gunAsk(moss, cheapest) <= scrip) return attempt(() => void doBuyGun(a.accountId, "moss", cheapest.serial, at));
     }
-    // Sparingly: Ines can't remake plates or magazines (she buys no copper), so what she starts with has to last.
-    if (scrip >= 500 && rand(S) < 0.25) {
+    if (scrip >= 260 && rand(S) < 0.5) {
       const ines = S.vendors.ines;
       const want = pickOne(S, CONSUMABLE_IDS);
       const n = want === "ammo" ? 2 : 1;
@@ -1938,6 +1956,7 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
     ambient,
     debug,
     as: (accountId) => callsFor(() => accountId),
+    rules: async () => rulesWire(),
 
     profile: (accountId) => read(() => (S.accounts[accountId] ? profileOf(S.accounts[accountId]) : null)),
     balances: (accountId) =>
