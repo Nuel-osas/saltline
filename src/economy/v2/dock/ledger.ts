@@ -6,6 +6,7 @@ import { fmt, UNKNOWN } from "../../dockside/format";
 import { HARBORMASTER, INVOICE } from "../items";
 import type { HarbormasterView, Impounded, Profile } from "../types";
 import { frameWord, gunCard } from "./guncard";
+import { carryShare, invoiceParts } from "./loadout";
 import { actBtn, countdown, emptyLine, head, numOr, okv, painter, plural, type Ctx } from "./store";
 
 /** The most a settle can take: half the arrears (rounded up), and no more than the scrip in hand. */
@@ -30,7 +31,8 @@ export function createLedger(ctx: Ctx) {
         head("Your account"),
         emptyLine(ctx.reads.profile.s === "loading" ? "Pulling your file…" : `What you owe: ${UNKNOWN}. The Harbormaster's office isn't answering. Nothing has been charged.`, ctx.reads.profile.s === "unknown"),
       );
-    const carried = Math.min(INVOICE.carryInMax, Math.floor((p.arrears * INVOICE.carryInPct) / 100));
+    // Read off items.ts's invoiceStart, so the share and its cap are whatever the rule says today.
+    const carried = invoiceParts(p.extractions, p.arrears).carried;
     const bonded = p.arrears >= INVOICE.bondedAt;
     const max = scrip == null ? null : maxSettle(p.arrears, scrip);
     const amount = max == null ? null : Math.max(0, Math.min(pay ?? max, max));
@@ -45,7 +47,7 @@ export function createLedger(ctx: Ctx) {
       h(
         "ul",
         { class: "d2-does" },
-        h("li", { "data-on": carried > 0 ? "1" : "0" }, h("b", null, `+${fmt(carried)}`), h("span", null, `already on the invoice when your next raid starts (half your arrears, up to ${fmt(INVOICE.carryInMax)})`)),
+        h("li", { "data-on": carried > 0 ? "1" : "0" }, h("b", null, `+${fmt(carried)}`), h("span", null, `already on the invoice when your next raid starts (${carryShare()}, up to ${fmt(INVOICE.carryInMax)})`)),
         h(
           "li",
           { "data-on": bonded ? "1" : "0", class: "bonded" },

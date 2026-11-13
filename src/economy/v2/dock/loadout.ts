@@ -29,6 +29,19 @@ export function clampLoadout(l: Loadout, weapons: Weapon[] | null, balances: Amo
   return out;
 }
 
+/** What makes up the invoice at the fence. Every part is read off items.ts's `invoiceStart` as it stands, so a
+ *  change to the rule there (a cap on the entry charge, another share of arrears) shows here without this file
+ *  repeating the arithmetic. `capped`: one more extraction would add nothing. */
+export function invoiceParts(extractions: number, arrears: number): { entry: number; history: number; carried: number; total: number; capped: boolean } {
+  const entry = invoiceStart(0, 0);
+  const history = invoiceStart(extractions, 0) - entry;
+  const total = invoiceStart(extractions, arrears);
+  return { entry, history, carried: total - entry - history, total, capped: extractions > 0 && invoiceStart(extractions + 1, 0) === invoiceStart(extractions, 0) };
+}
+
+/** "half your arrears", or the percentage when the rule isn't a half. */
+export const carryShare = () => (INVOICE.carryInPct === 50 ? "half your arrears" : `${INVOICE.carryInPct}% of your arrears`);
+
 export function createLoadout(ctx: Ctx, deploy: () => void) {
   const el = h("div", { class: "d2-loadout" });
 
@@ -102,12 +115,12 @@ export function createLoadout(ctx: Ctx, deploy: () => void) {
     const p = ctx.reads.profile;
     const hm = okv(ctx.reads.harbormaster);
     const prof = okv(p);
-    const start = prof ? invoiceStart(prof.extractions, prof.arrears) : null;
+    const parts = prof ? invoiceParts(prof.extractions, prof.arrears) : null;
+    const start = parts ? parts.total : null;
     const bailiff = hm?.bailiffAt ?? null;
     const gap = start != null && bailiff != null ? bailiff - start : null;
     const scale = Math.max((bailiff ?? INVOICE.bailiff) * 1.12, (start ?? 0) * 1.05);
     const at = (n: number) => `${Math.min(100, (n / scale) * 100).toFixed(1)}%`;
-    const carried = prof ? Math.min(INVOICE.carryInMax, Math.floor((prof.arrears * INVOICE.carryInPct) / 100)) : null;
     return h(
       "div",
       { class: "d2-fence", "data-start": start, "data-gap": gap },
@@ -129,13 +142,13 @@ export function createLoadout(ctx: Ctx, deploy: () => void) {
         hm ? h("i", { class: "d2-meter-mark", style: `left:${at(hm.secondNoticeAt)}`, "data-l": "2nd notice" }) : null,
         bailiff != null ? h("i", { class: "d2-meter-mark bailiff", style: `left:${at(bailiff)}`, "data-l": `Bailiff ${fmt(bailiff)}` }) : null,
       ),
-      prof
+      prof && parts
         ? h(
             "p",
-            { class: "d2-fence-rows" },
-            h("span", null, h("b", null, fmt(INVOICE.entry)), " entry"),
-            h("span", null, h("b", null, `+${fmt(INVOICE.perExtraction * prof.extractions)}`), ` ${plural(prof.extractions, "extraction")} on file`),
-            h("span", null, h("b", null, `+${fmt(carried ?? 0)}`), ` half your arrears`),
+            { class: "d2-fence-rows", "data-entry": parts.entry, "data-history": parts.history, "data-carried": parts.carried },
+            h("span", null, h("b", null, fmt(parts.entry)), " entry"),
+            h("span", null, h("b", null, `+${fmt(parts.history)}`), ` ${plural(prof.extractions, "extraction")} on file${parts.capped ? " (capped)" : ""}`),
+            h("span", null, h("b", null, `+${fmt(parts.carried)}`), ` ${carryShare()}`),
           )
         : null,
     );
