@@ -1,6 +1,10 @@
 // The dock-pass faucet (docs/ECONOMY.md → Wallets and accounts). POST { accountId, callsign }: the faucet account
 // registers the callsign on the game contract and sends a new guest account 0.1 testnet NEAR, which creates it.
 //
+// POST { accountId, callsign, game: "v2" } does the same on v2's contract (docs/CONTRACT_V2.md), named by
+// CONTRACT_ID_V2. Without that variable a v2 claim answers 503; a claim without `game` is untouched by any of it.
+// An account the first game already funded is registered on v2 and not funded again.
+//
 // A pure handler, `(request, env, deps) => Response`, so it can be tested; api/faucet.ts (Vercel) and the dev
 // middleware in vite.config.js both call it.
 //
@@ -28,8 +32,20 @@ export type FaucetEnv = Record<string, string | undefined>;
 export interface FaucetConfig {
   faucetId: string;
   privateKey: `ed25519:${string}`;
+  /** The contract this claim registers on: the first game's, or v2's when the request said `game: "v2"`. */
   contractId: string;
   rpcUrls: string[];
+  /** Set only for a v2 claim. */
+  game?: "v2";
+}
+
+/**
+ * v2's contract, from CONTRACT_ID_V2 alone: server env, no VITE_ fallback and no default, so a v2 dock pass is never
+ * registered on a contract nobody named. Null when it is missing or malformed.
+ */
+export function v2ContractId(env: FaucetEnv): string | null {
+  const id = (env.CONTRACT_ID_V2 ?? "").trim();
+  return id && ACCOUNT_ID(id) ? id : null;
 }
 
 /** What the handler needs from the chain; the default is near-kit, tests pass a stub. */
@@ -116,12 +132,22 @@ export function redact(text: string, secret: string | undefined): string {
   return out;
 }
 
-let cached: { sig: string; key: string; chain: FaucetChain } | null = null;
+// One per contract, so the two games' claims don't rebuild each other's connection.
+const cached = new Map<string, { key: string; chain: FaucetChain }>();
+
+/** v2's profile view, read only for "is there one": null, or an object naming the account. Anything else rejects. */
+function v2Profile(raw: unknown): unknown | null {
+  if (raw === null) return null;
+  if (raw && typeof raw === "object" && typeof (raw as { account_id?: unknown }).account_id === "string") return raw;
+  throw new Error("profile: unexpected reply from the v2 contract");
+}
 
 /** The real chain: near-kit, signing as the faucet account, through chain.ts's tested retry rules. */
 function nearFaucetChain(cfg: FaucetConfig): FaucetChain {
-  const sig = `${cfg.faucetId}|${cfg.contractId}|${cfg.rpcUrls.join(",")}`;
-  if (cached && cached.sig === sig && cached.key === cfg.privateKey) return cached.chain;
+  const sig = `${cfg.faucetId}|${cfg.contractId}|${cfg.game ?? "v1"}|${cfg.rpcUrls.join(",")}`;
+  const hit = cached.get(sig);
+  if (hit && hit.key === cfg.privateKey) return hit.chain;
+  const profileOf = cfg.game === "v2" ? v2Profile : decodeProfile;
   const port = nearKitPort({ rpcUrls: cfg.rpcUrls });
   const read = async <T>(fn: (attempt: number) => Promise<T>): Promise<T> => {
     for (let attempt = 0; ; attempt++) {
@@ -134,7 +160,7 @@ function nearFaucetChain(cfg: FaucetConfig): FaucetChain {
     }
   };
   const chain: FaucetChain = {
-    profile: async (id) => decodeProfile(await read((a) => port.view(cfg.contractId, "profile", { account_id: id }, a))),
+    profile: async (id) => profileOf(await read((a) => port.view(cfg.contractId, "profile", { account_id: id }, a))),
     accountExists: (id) => read((a) => port.accountExists(id, a)),
     fund: (id, yocto) => executeTx(port.prepare({ kind: "transfer", signerId: cfg.faucetId, privateKey: cfg.privateKey, receiverId: id, yocto })),
     register: (id, callsign) =>
@@ -150,7 +176,7 @@ function nearFaucetChain(cfg: FaucetConfig): FaucetChain {
         }),
       ),
   };
-  cached = { sig, key: cfg.privateKey, chain };
+  cached.set(sig, { key: cfg.privateKey, chain });
   return chain;
 }
 
@@ -182,7 +208,7 @@ export async function handleFaucet(request: Request, env: FaucetEnv, deps: Fauce
       log("not configured", { problems: conf.problems });
       return reply(503, { ok: false, error: "The dock office is closed: the faucet isn't configured." });
     }
-    const { cfg } = conf;
+    let cfg = conf.cfg;
 
     let body: unknown;
     try {
@@ -192,10 +218,21 @@ export async function handleFaucet(request: Request, env: FaucetEnv, deps: Fauce
     } catch {
       return reply(400, { ok: false, error: "Send JSON: { accountId, callsign }." });
     }
-    const { accountId, callsign } = (body && typeof body === "object" ? body : {}) as { accountId?: unknown; callsign?: unknown };
+    const { accountId, callsign, game } = (body && typeof body === "object" ? body : {}) as { accountId?: unknown; callsign?: unknown; game?: unknown };
     if (typeof accountId !== "string" || !isAccountId(accountId)) return reply(400, { ok: false, error: "That isn't a NEAR account id." });
     const cs = normalizeCallsign(callsign);
     if (!cs) return reply(400, { ok: false, error: "Callsigns are 3–16 letters, digits, spaces, dashes, dots or underscores." });
+    // No `game` (or "v1") is the first game, exactly as before. "v2" registers on CONTRACT_ID_V2 and nowhere else.
+    if (game !== undefined && game !== "v1" && game !== "v2") return reply(400, { ok: false, error: "No such game." });
+    if (game === "v2") {
+      const contractId = v2ContractId(env);
+      if (!contractId) {
+        log("not configured", { problems: ["CONTRACT_ID_V2"] });
+        return reply(503, { ok: false, error: "The dock office is closed: the v2 faucet isn't configured." });
+      }
+      cfg = { ...cfg, contractId, game: "v2" };
+    }
+    const tag = cfg.game ? { game: cfg.game } : {};
 
     const ip = (deps.clientIp ?? defaultIp)(request);
     const t = now();
@@ -232,7 +269,7 @@ export async function handleFaucet(request: Request, env: FaucetEnv, deps: Fauce
         return reply(202, { ok: false, pending: true, accountId, txHashes, error: "Registration sent, not confirmed yet. Try again in a minute." });
       }
       if (!reg.ok) {
-        log("register refused", { accountId, code: reg.code, error: reg.error, txHashes });
+        log("register refused", { accountId, code: reg.code, error: reg.error, txHashes, ...tag });
         const status = reg.code === "E_ALREADY_REGISTERED" || reg.code === "E_CALLSIGN_TAKEN" ? 409 : reg.code === "E_BAD_CALLSIGN" ? 400 : 502;
         return reply(status, { ok: false, accountId, txHashes, error: reg.error ?? "Registration failed. Nothing was sent." });
       }
@@ -251,7 +288,7 @@ export async function handleFaucet(request: Request, env: FaucetEnv, deps: Fauce
       }
     }
 
-    log("claimed", { accountId, callsign: cs, txHashes });
+    log("claimed", { accountId, callsign: cs, txHashes, ...tag });
     return reply(200, { ok: true, accountId, callsign: cs, txHashes });
   } catch (e) {
     log("error", { error: (e as Error)?.message ?? String(e) });

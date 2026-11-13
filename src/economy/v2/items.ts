@@ -198,7 +198,7 @@ export const BLUEPRINTS: Record<BlueprintId, { kind: "weapon" | "mod" | "consuma
 export const BLUEPRINT_IDS = Object.keys(BLUEPRINTS) as BlueprintId[];
 
 /** A vendor's default price for one unit of a mod or consumable: plate 54, charge 30, magazine 13. */
-export function goodsPrice(id: ModId | ConsumableId, stock = VENDOR_PRICING.scarceUnder): number {
+export function goodsPrice(id: ModId | ConsumableId, stock: number = VENDOR_PRICING.scarceUnder): number {
   const b = BLUEPRINTS[id];
   const inputs = MATERIAL_IDS.reduce((sum, m) => sum + (b.inputs[m] ?? 0) * MATERIALS[m].bid, 0);
   const base = Math.floor((inputs * VENDOR_PRICING.goodsPct) / (100 * b.yields));
