@@ -1,4 +1,4 @@
-// The story in the game (docs/STORY.md): the opening briefing, Control's lines that
+// The story in the game (docs/STORY.md): the opening briefing, the chapter card that opens a run, Control's lines that
 // follow the town's arc, the Harbormaster billing the player on its own channel from Chapter 1 (and counting its
 // strength in Chapter 3), its extra drones, and the town's lights across the water.
 //
@@ -9,13 +9,14 @@
 import "./story.css";
 import type { Economy, Profile } from "../types";
 import { createBriefing, type Briefing } from "./briefing";
+import { createChapterCard, type ChapterCard } from "./card";
 import { HARBORMASTER, cleanCallsign, trespassFee } from "./copy";
 import { coresSold24h, evidenceLine, harbormasterAwake, invoiceLine, relayLine, runStartLines, type Line } from "./lines";
 import { createTownLights, lightsOf, type TownLights } from "./lights";
 import { defaultStore, loadMemory, saveMemory } from "./memory";
 import { createPacer, type Pacer } from "./pacing";
 import { createChannel, type TimedChannel } from "./radio";
-import { bonusOf, createTownReader, type TownRead, type TownReader } from "./town";
+import { actOf, bonusOf, createTownReader, type TownRead, type TownReader } from "./town";
 import { NO_BONUS, waveBonus } from "./waves";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
@@ -38,6 +39,7 @@ export interface Story {
   readonly channel: TimedChannel;
   /** The Harbormaster's turn on the radio (pacing.ts). */
   readonly pacer: Pacer;
+  readonly card: ChapterCard;
   /** The dock pass callsign once read this session, else null (Control says "Breacher"). */
   readonly callsign: string | null;
   /** For tests and screenshots: the read this run plays on. */
@@ -59,6 +61,7 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     lastHarbormasterEnd: () => channel.lastHarbormasterEnd(),
     say: (line, seconds) => channel.say(line, seconds),
   });
+  const card = createChapterCard();
 
   const warned = new Set<string>();
   function guard<T>(where: string, fn: () => T): T | undefined {
@@ -183,9 +186,13 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     weight = null;
     pacer.clear();
     channel.reset();
+    // The chapter card shows half a second into the intro: fill it now from the last read (unknown is Chapter 1),
+    // and again below if this run's read lands before it shows.
+    guard("card", () => card.set(actOf(town.last)));
     const [read, profile] = await Promise.all([town.read(RUN_READ), readProfile().catch(() => undefined)]);
     if (t !== token) return;
     runRead = read;
+    if (!card.showing && G.game?.state === "intro") guard("card", () => card.set(actOf(read)));
     apply(read);
     setBonus(read); // the waves of this run; the patrol already took the last known bonus at the reset
     let cores24h: number | null = null;
@@ -284,6 +291,7 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     town,
     channel,
     pacer,
+    card,
     get callsign() {
       return callsign;
     },
@@ -306,6 +314,7 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
       ext.waveBonus = { ...NO_BONUS };
       if (ext.callsign === callsign) delete ext.callsign;
       pacer.clear();
+      card.dispose();
       briefing.dispose();
       channel.dispose();
       lights?.dispose();

@@ -8,6 +8,16 @@
 /** What Control calls a player with no dock pass (STORY.md → Radio). */
 export const CALLSIGN_FALLBACK = "Breacher";
 
+/** The chapters, each named after a shipping document (STORY.md → Chapters). */
+export const CHAPTERS = [
+  { n: 1, title: "Proof of Delivery", line: "The town needs its cargo. The Harbormaster needs a signature." },
+  { n: 2, title: "Bill of Lading", line: "The lights are back. The Harbormaster has noticed the discrepancy." },
+  { n: 3, title: "Final Notice", line: "The client has been identified. The client would like its cores back." },
+] as const;
+
+/** The last line of the chapter card that opens every run (it replaces the location card). */
+export const CARD_PLACE = "Saltline Terminal · Berth 4 · 05:42";
+
 /** Control, with the town's state (STORY.md → Radio → Control, with the town's state). */
 export const CONTROL = {
   act1: "Clinic's down to its last crates of meds. Ines will pay for every box. She'll complain about it.",
@@ -79,4 +89,15 @@ export const callsignOr = (callsign: string | null | undefined): string =>
 export function trespassFee(profile: { extractions?: unknown } | null | undefined): number | null {
   const n = profile?.extractions;
   return typeof n === "number" && Number.isSafeInteger(n) && n >= 0 ? 150 + 25 * n : null;
+}
+
+/** The chapter for an act; anything unknown is Chapter 1, the start of the story. */
+export function chapterOf(act: unknown) {
+  return CHAPTERS.find((c) => c.n === act) ?? CHAPTERS[0];
+}
+
+/** The chapter card's three lines (STORY.md → Chapters): kicker, the chapter's line, and the place. */
+export function chapterCard(act: unknown): { kicker: string; line: string; place: string } {
+  const c = chapterOf(act);
+  return { kicker: `Chapter ${c.n} · ${c.title}`, line: c.line, place: CARD_PLACE };
 }
