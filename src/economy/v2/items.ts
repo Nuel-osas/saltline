@@ -44,7 +44,22 @@ export const BONDED_LOOT: MaterialId[] = ["core", "servo", "core", "chips"];
 
 export const VENDORS = {
   moss: { name: "Moss", role: "Armourer", buys: ["copper", "chips", "servo", "rotor", "core"] as MaterialId[], builds: ["longshore", "stevedore", "pilot", "mag2", "barrel2", "comp", "optic"] as BlueprintId[] },
-  ines: { name: "Ines", role: "Quartermaster", buys: ["meds", "fuel", "chips"] as MaterialId[], builds: ["plate", "charge", "ammo"] as BlueprintId[] },
+  ines: { name: "Ines", role: "Quartermaster", buys: ["meds", "fuel", "chips", "copper"] as MaterialId[], builds: ["plate", "charge", "ammo"] as BlueprintId[] },
+} as const;
+
+/** How vendors price what they sell, unless their agent set a price. */
+export const VENDOR_PRICING = {
+  /** Goods: the inputs' value at base bids, per unit made, times this percent (rounded down). */
+  goodsPct: 135,
+  /** …plus this percent for each unit under `scarceUnder` in stock. */
+  scarcePct: 8,
+  scarceUnder: 5,
+  /** Guns: the appraisal times this percent. */
+  gunPct: 125,
+  /** A vendor refuses to buy when paying would leave it under this much scrip. */
+  float: 100,
+  /** Ines's meds go to the clinic: her meds stock halves this often, so her bid for them recovers. */
+  medsHalfLifeHours: 12,
 } as const;
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -92,7 +107,7 @@ export const ISSUE: { name: string; stats: Stats } = {
 };
 
 /** Lower is better for these; higher is better for the rest. */
-const LOWER_IS_BETTER: (keyof Stats)[] = ["recoil", "reload"];
+export const LOWER_IS_BETTER: (keyof Stats)[] = ["recoil", "reload"];
 export const STAT_KEYS: (keyof Stats)[] = ["damage", "rpm", "mag", "recoil", "reload", "range"];
 
 /** 0–100: where each stat landed in its band, averaged (whole number, rounded down). */
@@ -176,11 +191,20 @@ export const BLUEPRINTS: Record<BlueprintId, { kind: "weapon" | "mod" | "consuma
   barrel2: { kind: "mod", inputs: { copper: 3, servo: 1 }, fee: 40, yields: 1 },
   comp: { kind: "mod", inputs: { copper: 2, rotor: 1 }, fee: 30, yields: 1 },
   optic: { kind: "mod", inputs: { chips: 3, rotor: 1 }, fee: 50, yields: 1 },
-  plate: { kind: "consumable", inputs: { copper: 2, fuel: 1 }, fee: 20, yields: 1 },
-  charge: { kind: "consumable", inputs: { chips: 1, fuel: 1 }, fee: 15, yields: 1 },
+  plate: { kind: "consumable", inputs: { copper: 1, fuel: 1 }, fee: 20, yields: 3 },
+  charge: { kind: "consumable", inputs: { chips: 1, fuel: 1 }, fee: 15, yields: 6 },
   ammo: { kind: "consumable", inputs: { copper: 1 }, fee: 10, yields: 4 },
 };
 export const BLUEPRINT_IDS = Object.keys(BLUEPRINTS) as BlueprintId[];
+
+/** A vendor's default price for one unit of a mod or consumable: plate 54, charge 30, magazine 13. */
+export function goodsPrice(id: ModId | ConsumableId, stock: number = VENDOR_PRICING.scarceUnder): number {
+  const b = BLUEPRINTS[id];
+  const inputs = MATERIAL_IDS.reduce((sum, m) => sum + (b.inputs[m] ?? 0) * MATERIALS[m].bid, 0);
+  const base = Math.floor((inputs * VENDOR_PRICING.goodsPct) / (100 * b.yields));
+  const short = Math.max(0, VENDOR_PRICING.scarceUnder - stock);
+  return Math.floor((base * (100 + VENDOR_PRICING.scarcePct * short)) / 100);
+}
 
 export const CONSUMABLES: Record<ConsumableId, { name: string; line: string }> = {
   plate: { name: "Armour plate", line: "+40 health for one raid" },
@@ -221,6 +245,7 @@ export const RAID = {
   plateHealth: 40,
   /** Caps on what a report may claim. */
   maxKills: { gull: 30, hound: 15 },
+  maxUplinks: 3,
   secondsPerKill: 4,
   wreckHours: 24,
   impoundHours: 48,
@@ -232,6 +257,8 @@ export const RAID = {
 export const INVOICE = {
   entry: 150,
   perExtraction: 25,
+  /** Past extractions counted toward the entry charge, so it tops out at 500. */
+  maxExtractionsCounted: 14,
   perMinute: 60,
   seal: 80,
   perWeight: 40,
@@ -256,7 +283,7 @@ export const INVOICE = {
 
 /** What is on the invoice at the fence. */
 export const invoiceStart = (extractions: number, arrears: number) =>
-  INVOICE.entry + INVOICE.perExtraction * extractions + Math.min(INVOICE.carryInMax, Math.floor((arrears * INVOICE.carryInPct) / 100));
+  INVOICE.entry + INVOICE.perExtraction * Math.min(extractions, INVOICE.maxExtractionsCounted) + Math.min(INVOICE.carryInMax, Math.floor((arrears * INVOICE.carryInPct) / 100));
 
 /** The invoice from a raid's facts. The contract computes the same from the report and block time. */
 export function invoiceTotal(f: { start: number; seconds: number; seals: number; weight: number; uplinks: number; gulls: number; hounds: number }): number {
