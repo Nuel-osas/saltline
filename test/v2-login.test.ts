@@ -155,6 +155,40 @@ describe("the sign-in gate", () => {
     expect(w.reload).toHaveBeenCalledTimes(1);
   });
 
+  it("offers no way round: the form has no link to play without signing in", async () => {
+    const w = world();
+    await settle(w.login, "out");
+    expect(w.panel().querySelector("a")).toBeNull();
+    expect(w.panel().textContent).toContain("Sign in to play");
+  });
+
+  it("in Practice there is no wallet to fetch: a sign-in opens the door, and the lock is the same", async () => {
+    document.body.innerHTML = `<div id="app"><section class="m-screen" data-s="title"><div class="m-actions"><button data-act="deploy">Deploy</button></div></section></div>`;
+    let signedIn: Who | null = null;
+    const auth: Auth = { start: async () => signedIn, sendCode: async () => {}, signIn: async () => (signedIn = ALICE), google: async () => {}, token: async () => (signedIn ? "tok" : null), signOut: async () => void (signedIn = null) };
+    const asked: string[] = [];
+    const reload = vi.fn();
+    const G: any = { ext: { beforeRun: () => false }, events: { emit: () => {} } };
+    const store = new Map<string, string>([[WALLET_STORAGE_KEY, "{mock}"]]);
+    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) };
+    const login = startLogin(G, { appId: "cmtestappid0000000000000a", auth, storage, reload, fetch: (async (u: string) => (asked.push(u), json(500, {}))) as typeof fetch });
+    await settle(login, "out");
+    expect(G.ext.beforeRun(() => {})).toBe(true); // held
+    const panel = document.querySelector<HTMLElement>(".lg")!;
+    panel.querySelector<HTMLInputElement>("input")!.value = "marlowe@example.com";
+    panel.querySelector<HTMLFormElement>("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle(login, "code");
+    panel.querySelector<HTMLInputElement>("input")!.value = "123456";
+    panel.querySelector<HTMLFormElement>("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle(login, "in");
+    expect(asked).toEqual([]);
+    expect(reload).not.toHaveBeenCalled();
+    expect(G.ext.beforeRun(() => {})).toBe(false);
+    await login.signOut();
+    expect(store.has(WALLET_STORAGE_KEY)).toBe(true); // Practice's own save isn't the sign-in's to remove
+    login.stop();
+  });
+
   it("stop() takes the lock and the panel away", async () => {
     const w = world();
     await settle(w.login, "out");

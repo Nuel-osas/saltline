@@ -52,14 +52,20 @@ export interface Action {
   do: Do;
 }
 
-/** The one big button, for the mode picked. Its label is always the next step, as on a shooter's lobby. */
+/**
+ * The one big button, for the mode picked. Its label is always the next step, as on a shooter's lobby. Where sign-in
+ * is on, that step is Sign in for every mode until the player has: nobody plays before signing in, Practice included.
+ */
 export function actionFor(mode: Mode, f: Facts): Action {
+  if (f.loginOn && !f.signedIn) {
+    const what = mode === "raid" ? "Raid" : mode === "practice" ? "Practice" : "The opening";
+    return { label: "Sign in", caption: `${what} · sign in first`, do: "signin" };
+  }
   if (mode === "film") return { label: "Watch", caption: "The opening · 48 seconds", do: "film" };
   if (mode === "practice") {
     return f.offline ? { label: "Deploy", caption: `Practice · with the ${f.gun}`, do: "deploy" } : { label: "Play practice", caption: "Offline · nothing at stake", do: "practice" };
   }
   if (f.offline) return { label: "Go on chain", caption: "Raid · leave practice", do: "online" };
-  if (f.loginOn && !f.signedIn) return { label: "Sign in", caption: "Raid · sign in first", do: "signin" };
   return { label: "Deploy", caption: `Raid · with the ${f.gun}`, do: "deploy" };
 }
 
@@ -70,17 +76,18 @@ export interface Step {
   do: Do;
 }
 
-/** "Start here": four steps, one at a time. Null when there is nothing left to point at. */
+/**
+ * "Start here": four steps, one at a time. Null when there is nothing left to point at.
+ * 1 sign in · 2 a practice raid · 3 the first real raid · 4 the dock.
+ */
 export function startStep(f: Facts): Step | null {
+  if (f.loginOn && !f.signedIn) return { n: 1, text: "Sign in to play. An email is enough.", button: "Sign in", do: "signin" };
   if (f.offline) {
-    if ((f.extractions ?? 0) < 1) return { n: 3, text: "Take the rifle over the fence. Nothing here is at stake.", button: "Deploy", do: "deploy" };
-    return { n: 4, text: "You got out. Sell what you carried at the dock.", button: "Open vendors", do: "vendors" };
-  }
-  if (f.loginOn && !f.signedIn) {
-    if (!f.practised) return { n: 1, text: "Start with Practice: free, no sign-in.", button: "Play practice", do: "practice" };
-    return { n: 2, text: "Sign in for your dock pass. An email is enough.", button: "Sign in", do: "signin" };
+    if ((f.extractions ?? 0) < 1) return { n: 2, text: "Take the rifle over the fence. Nothing here is at stake.", button: "Deploy", do: "deploy" };
+    return { n: 3, text: "You got out. Now do it for real: go on chain.", button: "Go on chain", do: "online" };
   }
   if (f.extractions == null) return null; // unknown: say nothing rather than guess
+  if (f.extractions < 1 && !f.practised) return { n: 2, text: "Start with Practice: the whole port, with nothing at stake.", button: "Play practice", do: "practice" };
   if (f.extractions < 1) return { n: 3, text: "Take the rifle over the fence, and reach the boat.", button: "Deploy", do: "deploy" };
   if (f.extractions < 3) return { n: 4, text: "Sell what you carried out, then build a gun of your own.", button: "Open vendors", do: "vendors" };
   return null;

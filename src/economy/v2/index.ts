@@ -53,8 +53,8 @@ export function buildV2(cfg: EconomyConfig, token?: () => Promise<string | null>
 
 export function startV2(G: Game): void {
   const cfg = resolveV2Config(import.meta.env as Record<string, unknown>, typeof location === "undefined" ? "" : location.search);
-  // Sign-in is on when the build names a Privy app (VITE_PRIVY_APP_ID) and the game is on testnet. The offline mock
-  // never asks: it has no chain to hold a pass on.
+  // Sign-in is on when the build names a Privy app (VITE_PRIVY_APP_ID). Everyone signs in before they play, Practice
+  // (the offline mock) included; there the sign-in only opens the door, because there is no wallet to fetch.
   const privyAppId = typeof import.meta.env.VITE_PRIVY_APP_ID === "string" ? import.meta.env.VITE_PRIVY_APP_ID.trim() : "";
   let login: Login | null = null;
   const { v2, mock, guest } = buildV2(cfg, async () => login?.token() ?? null);
@@ -79,7 +79,7 @@ export function startV2(G: Game): void {
   guard("coach", () => startCoach(G)); // the rifle in its crate, the first raid's checklist, the once-ever moments (G.coach)
 
   // Last, so its lock wraps the raid's own start: nobody deploys or opens the dock before signing on (G.login).
-  if (guest && privyAppId) guard("login", () => void (login = startLogin(G, { appId: privyAppId, sessionUrl: sessionUrlFor(cfg.faucetUrl), wallet: guest, sheet: true })));
+  if (privyAppId) guard("login", () => void (login = startLogin(G, { appId: privyAppId, sheet: true, ...(guest ? { sessionUrl: sessionUrlFor(cfg.faucetUrl), wallet: guest } : {}) })));
   // The start screen: a lobby over the title card (G.home). Its buttons press the title's own, so everything above
   // starts as it did.
   guard("home", () => startHome(G, { v2, offline: !!mock, login: () => login, dock: () => dock }));

@@ -1,5 +1,5 @@
-// v2's sign-in gate (G.login). On a build where sign-in is switched on (VITE_PRIVY_APP_ID, testnet), nobody deploys
-// or opens the dock before signing in: the title shows a sign-on panel where Deploy was. Signing in fetches the
+// v2's sign-in gate (G.login). On a build where sign-in is switched on (VITE_PRIVY_APP_ID), nobody deploys or opens
+// the dock before signing in, in the chain game and in Practice alike: the title shows a sign-on panel where Deploy was. Signing in fetches the
 // player's wallet from the dock office (session.ts) and puts it where the guest key was, so the same sign-in is the
 // same account on any device.
 //
@@ -22,8 +22,12 @@ export interface LoginWallet {
 
 export interface LoginOptions {
   appId: string;
-  sessionUrl: string;
-  wallet: LoginWallet;
+  /**
+   * The chain game gives both: signing in fetches the player's wallet from `sessionUrl` and puts it in `wallet`.
+   * The offline game (Practice) gives neither: there a sign-in only opens the door, and there is no wallet to fetch.
+   */
+  sessionUrl?: string;
+  wallet?: LoginWallet;
   /**
    * Where the sign-on form lives. Absent, it stands on the title where Deploy was. True (the lobby, home/), it is a
    * sheet over the game that `open()` shows: the lobby's own Sign in buttons call that.
@@ -170,15 +174,13 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
     form.onsubmit = (e) => (e.preventDefault(), void sendCode(input.value));
     const google = h("button", { class: "btn lg-google", type: "button" }, "Continue with Google");
     google.onclick = () => void withGoogle();
-    const offline = h("a", { class: "lg-link", href: `${location.pathname}?game=v2&mock=1` }, "Or try it offline, without an account");
     fill(
       panel,
       h("p", { class: "lg-k" }, "Sign on"),
-      h("p", { class: "lg-line" }, "One sign-in, one dock pass. No wallet to install, and it follows you to any device."),
+      h("p", { class: "lg-line" }, "Sign in to play. One sign-in, one dock pass: no wallet to install, and it follows you to any device."),
       form,
       h("div", { class: "lg-row" }, google),
       noteEl(),
-      offline,
     );
   }
 
@@ -222,6 +224,8 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
   /** Signed in: make sure this browser holds that sign-in's wallet, then open the game. */
   async function enter() {
     if (!who || !auth) return set("out");
+    const { wallet: mine, sessionUrl } = opts;
+    if (!mine || !sessionUrl) return set("in"); // Practice: signed in is all it asks
     const known = (() => {
       try {
         return JSON.parse(storage.getItem(LOGIN_STORAGE_KEY) ?? "null") as { id?: string; accountId?: string } | null;
@@ -229,14 +233,14 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
         return null;
       }
     })();
-    if (known?.id === who.id && known.accountId === opts.wallet.accountId()) return set("in");
+    if (known?.id === who.id && known.accountId === mine.accountId()) return set("in");
     set("working");
     try {
       const token = await auth.token();
       if (!token) throw new Error("Your sign-in has expired. Sign in again.");
-      const wallet = await fetchWallet(opts.sessionUrl, token, opts.fetch);
-      const before = opts.wallet.accountId();
-      opts.wallet.importKey(wallet.privateKey); // the key it replaces is kept (wallet.ts REPLACED_STORAGE_KEY)
+      const wallet = await fetchWallet(sessionUrl, token, opts.fetch);
+      const before = mine.accountId();
+      mine.importKey(wallet.privateKey); // the key it replaces is kept (wallet.ts REPLACED_STORAGE_KEY)
       storage.setItem(LOGIN_STORAGE_KEY, JSON.stringify({ id: who.id, accountId: wallet.accountId }));
       // The rest of the game started with the guest account. A fresh page starts with the right one.
       if (before !== wallet.accountId) return reload();
@@ -255,7 +259,7 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
     }
     // The key comes back from the dock office at the next sign-in; it shouldn't stay on a shared computer.
     storage.removeItem(LOGIN_STORAGE_KEY);
-    storage.removeItem(WALLET_STORAGE_KEY);
+    if (opts.wallet) storage.removeItem(WALLET_STORAGE_KEY);
     reload();
   }
 

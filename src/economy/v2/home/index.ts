@@ -111,7 +111,7 @@ export function startHome(G: Game, opts: HomeOptions): Home {
       "aside",
       { class: "hm-modes" },
       h("p", { class: "hm-eye" }, "Select mode"),
-      h("p", { class: "hm-lede" }, opts.offline ? "You are in Practice: the port runs in this browser and nothing is kept. Go on chain to own what you carry out." : "Practice is free and needs no sign-in. A raid is the real thing: your gun, your haul and your invoice are on NEAR."),
+      h("p", { class: "hm-lede" }, opts.offline ? "You are in Practice: the port runs in this browser and nothing is kept. Go on chain to own what you carry out." : "Sign in once to play. Practice risks nothing. A raid is the real thing: your gun, your haul and your invoice are on NEAR."),
       tiles,
     ),
     start,
@@ -220,7 +220,8 @@ export function startHome(G: Game, opts: HomeOptions): Home {
     fill(
       tiles,
       ...MODES.map((m) => {
-        const note = m.id === "raid" ? (f.offline ? "Leave practice" : f.loginOn && !f.signedIn ? "Sign in" : "") : m.id === "practice" ? (f.offline ? "You are here" : "Free") : "48 s";
+        const needsSignIn = f.loginOn && !f.signedIn;
+        const note = needsSignIn ? "Sign in" : m.id === "raid" ? (f.offline ? "Leave practice" : "") : m.id === "practice" ? (f.offline ? "You are here" : "No stake") : "48 s";
         const tileArt = m.id === "film" ? svg(ICON.film, "hm-tile-art") : svg(gunSvg(m.id === "practice" ? "issue" : g.frame), "hm-tile-art d2-art");
         if (m.id !== "film") tileArt.dataset.frame = m.id === "practice" ? "issue" : g.frame;
         const t = h(

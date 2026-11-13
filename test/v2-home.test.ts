@@ -26,30 +26,38 @@ describe("the one big button", () => {
     expect(actionFor("raid", facts({ signedIn: true, gun: "Longshore" }))).toEqual({ label: "Deploy", caption: "Raid · with the Longshore", do: "deploy" });
     expect(actionFor("raid", facts({ loginOn: false }))).toMatchObject({ label: "Deploy", do: "deploy" });
   });
-  it("opens Practice from the chain game, and plays it from inside Practice", () => {
-    expect(actionFor("practice", facts())).toMatchObject({ label: "Play practice", do: "practice" });
-    expect(actionFor("practice", facts({ offline: true }))).toMatchObject({ label: "Deploy", do: "deploy" });
-    expect(actionFor("raid", facts({ offline: true }))).toMatchObject({ label: "Go on chain", do: "online" });
-    expect(actionFor("film", facts())).toMatchObject({ label: "Watch", do: "film" });
+  it("is Sign in for every mode until the player has signed in, Practice and the opening included", () => {
+    expect(actionFor("practice", facts())).toEqual({ label: "Sign in", caption: "Practice · sign in first", do: "signin" });
+    expect(actionFor("film", facts())).toEqual({ label: "Sign in", caption: "The opening · sign in first", do: "signin" });
+    for (const mode of ["raid", "practice", "film"] as const) expect(actionFor(mode, facts({ offline: true })).do).toBe("signin");
+  });
+  it("signed in: opens Practice from the chain game, and plays it from inside Practice", () => {
+    const inn = { signedIn: true };
+    expect(actionFor("practice", facts(inn))).toMatchObject({ label: "Play practice", do: "practice" });
+    expect(actionFor("practice", facts({ ...inn, offline: true }))).toMatchObject({ label: "Deploy", do: "deploy" });
+    expect(actionFor("raid", facts({ ...inn, offline: true }))).toMatchObject({ label: "Go on chain", do: "online" });
+    expect(actionFor("film", facts(inn))).toMatchObject({ label: "Watch", do: "film" });
     expect(defaultMode(true)).toBe("practice");
     expect(defaultMode(false)).toBe("raid");
   });
 });
 
 describe("start here", () => {
-  it("walks a new player through four steps, one at a time", () => {
-    expect(startStep(facts())).toMatchObject({ n: 1, do: "practice" });
-    expect(startStep(facts({ practised: true }))).toMatchObject({ n: 2, do: "signin" });
-    expect(startStep(facts({ signedIn: true, extractions: 0 }))).toMatchObject({ n: 3, do: "deploy" });
+  it("walks a new player through four steps, one at a time, and the first is to sign in", () => {
+    expect(startStep(facts())).toMatchObject({ n: 1, do: "signin" });
+    expect(startStep(facts({ practised: true }))).toMatchObject({ n: 1, do: "signin" });
+    expect(startStep(facts({ signedIn: true, extractions: 0 }))).toMatchObject({ n: 2, do: "practice" });
+    expect(startStep(facts({ signedIn: true, extractions: 0, practised: true }))).toMatchObject({ n: 3, do: "deploy" });
     expect(startStep(facts({ signedIn: true, extractions: 1 }))).toMatchObject({ n: 4, do: "vendors" });
     expect(startStep(facts({ signedIn: true, extractions: 3 }))).toBeNull();
   });
   it("says nothing when the record couldn't be read, rather than guess", () => {
     expect(startStep(facts({ signedIn: true, extractions: null }))).toBeNull();
   });
-  it("in Practice, points at the raid and then the dock", () => {
-    expect(startStep(facts({ offline: true, extractions: 0 }))).toMatchObject({ n: 3, do: "deploy" });
-    expect(startStep(facts({ offline: true, extractions: 2 }))).toMatchObject({ n: 4, do: "vendors" });
+  it("in Practice: sign in, then the practice raid, then go on chain", () => {
+    expect(startStep(facts({ offline: true, extractions: 0 }))).toMatchObject({ n: 1, do: "signin" });
+    expect(startStep(facts({ offline: true, signedIn: true, extractions: 0 }))).toMatchObject({ n: 2, do: "deploy" });
+    expect(startStep(facts({ offline: true, signedIn: true, extractions: 2 }))).toMatchObject({ n: 3, do: "online" });
   });
 });
 
@@ -98,7 +106,7 @@ describe("the lobby", () => {
     expect(w.home.root.querySelectorAll(".hm-tab")).toHaveLength(4);
   });
 
-  it("signed out: a guest card, Sign in on the bar and on the big button, and the first step is Practice", async () => {
+  it("signed out: a guest card, and every way in asks for a sign-in, Practice included", async () => {
     const w = world();
     await settle();
     expect(w.text(".hm-card")).toContain("Guest");
@@ -107,11 +115,14 @@ describe("the lobby", () => {
     w.home.root.querySelector<HTMLElement>(".hm-play")!.click();
     w.home.root.querySelector<HTMLElement>(".hm-signin")!.click();
     w.home.root.querySelector<HTMLElement>(".hm-tab")!.click(); // the dock needs a sign-in too
-    expect(w.opened).toEqual(["signin", "signin", "signin"]);
-    expect(w.pressed).toEqual([]);
     w.home.root.querySelector<HTMLElement>(".hm-start-b")!.click();
-    expect(w.went).toEqual(["/?game=v2&mock=1&stash=rich"]);
-    expect(w.store.get(PRACTISED_KEY)).toBe("1");
+    w.home.root.querySelector<HTMLElement>('.hm-tile[data-mode="practice"]')!.click();
+    expect(w.text(".hm-play")).toContain("Practice · sign in first");
+    w.home.root.querySelector<HTMLElement>(".hm-play")!.click();
+    expect(w.opened).toEqual(["signin", "signin", "signin", "signin", "signin"]);
+    expect(w.pressed).toEqual([]);
+    expect(w.went).toEqual([]);
+    expect(w.store.has(PRACTISED_KEY)).toBe(false);
   });
 
   it("signed in: the record, the gun going over the fence, and Deploy presses the title's own button", async () => {
@@ -132,6 +143,25 @@ describe("the lobby", () => {
     expect(w.docked).toEqual(["open", "market"]);
   });
 
+  it("signed in, Practice opens the offline game and remembers it was tried", async () => {
+    const w = world({ login: { state: () => "in" }, profile: { callsign: "ROOK", extractions: 0, arrears: 0 } });
+    await settle();
+    expect(w.text(".hm-start")).toContain("2 of 4");
+    w.home.root.querySelector<HTMLElement>('.hm-tile[data-mode="practice"]')!.click();
+    w.home.root.querySelector<HTMLElement>(".hm-play")!.click();
+    expect(w.went).toEqual(["/?game=v2&mock=1&stash=rich"]);
+    expect(w.store.get(PRACTISED_KEY)).toBe("1");
+  });
+
+  it("inside Practice, a signed-out player still has to sign in before the raid starts", async () => {
+    const w = world({ offline: true, profile: { callsign: "BREACHER", extractions: 0, arrears: 0 } });
+    await settle();
+    expect(w.text(".hm-play")).toContain("Sign in");
+    w.home.root.querySelector<HTMLElement>(".hm-play")!.click();
+    expect(w.opened).toEqual(["signin"]);
+    expect(w.pressed).toEqual([]);
+  });
+
   it("picking a mode changes the big button; the opening plays the film", async () => {
     const w = world({ login: { state: () => "in" }, profile: { callsign: "ROOK", extractions: 0, arrears: 0 } });
     await settle();
@@ -150,7 +180,7 @@ describe("the lobby", () => {
     expect(w.home.root.querySelector<HTMLElement>(".hm-start")!.hidden).toBe(true);
   });
 
-  it("the guide can be put away for good, and Practice has no sign-in at all", async () => {
+  it("the guide can be put away for good; a build with sign-in off plays Practice straight away", async () => {
     const w = world({ offline: true, login: null, profile: { callsign: "BREACHER", extractions: 0, arrears: 0 } });
     await settle();
     expect(w.home.root.querySelector(".hm-signin")).toBeNull();
