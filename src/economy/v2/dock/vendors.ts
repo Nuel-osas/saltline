@@ -64,7 +64,7 @@ export function createVendors(ctx: Ctx) {
       "li",
       { class: "d2-bid", "data-tok": id, "data-to": to },
       h("div", { class: "d2-bid-n" }, h("b", null, TOKEN_NAMES[id]), h("i", { class: held == null ? "unk" : "", "data-unknown": held == null ? "1" : null }, held == null ? `you hold ${UNKNOWN}` : `you hold ${fmt(held)}`)),
-      h("div", { class: "d2-bid-p", "data-dir": q.price > base ? "up" : q.price < base ? "down" : "flat" }, scripEl(q.price), h("em", null, q.price === base ? "her usual" : q.price > base ? `${fmt(q.price - base)} over ${to === "export" ? "list" : "her usual"}` : `${fmt(base - q.price)} under ${to === "export" ? "list" : "her usual"}`)),
+      h("div", { class: "d2-bid-p", "data-dir": q.price > base ? "up" : q.price < base ? "down" : "flat" }, scripEl(q.price), h("em", null, q.price === base ? (to === "export" ? "at list" : "her usual") : q.price > base ? `${fmt(q.price - base)} over ${to === "export" ? "list" : "her usual"}` : `${fmt(base - q.price)} under ${to === "export" ? "list" : "her usual"}`)),
       h("p", { class: "d2-bid-why" }, to === "export" ? q.reason : `“${q.reason}”`),
       h(
         "div",
