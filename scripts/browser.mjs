@@ -12,9 +12,10 @@ const DEFAULTS = {
   win32: ["C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"],
 };
 
-export function launch() {
+/** `extra`: more Chrome flags for one script (the score's smoke test lets audio start without a click). */
+export function launch(extra = []) {
   const executablePath = process.env.CHROME_PATH || (DEFAULTS[process.platform] || []).find((p) => existsSync(p));
   // WebGL needs a GPU path in headless mode: Metal through ANGLE on macOS, SwiftShader elsewhere.
   const gl = process.platform === "darwin" ? ["--use-angle=metal"] : ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
-  return chromium.launch({ executablePath, headless: true, args: [...gl, "--ignore-gpu-blocklist", "--enable-gpu"] });
+  return chromium.launch({ executablePath, headless: true, args: [...gl, "--ignore-gpu-blocklist", "--enable-gpu", ...extra] });
 }

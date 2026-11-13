@@ -102,7 +102,7 @@ The Harbormaster bills you for everything, and the bill is the danger.
 
 | Action | Added |
 | --- | --- |
-| Entering | 150, plus 25 for each raid you have extracted from before |
+| Entering | 150, plus 25 for each raid you have extracted from before (500 at most) |
 | Each minute on site | 60 |
 | Cutting a container seal | 80 |
 | Each unit of cargo taken | 40 per unit of weight |
@@ -138,7 +138,7 @@ Scrip has value only if it is hard to make and easy to spend.
 | --- | --- |
 | **Exports.** The export desk buys materials for the freighter and pays in new scrip. Each material's price falls as more of it is exported that day and recovers overnight. | **Build fees** (burned) |
 | **The dock pass.** 150 scrip, once per player. | **Ammunition** (burned) |
-| | **Repairs** (burned) |
+| | **Repairs**: the scrip goes to Moss, the copper is burned |
 | | **Market fee**: 4% of every sale (2% to the gun's maker, 2% burned) |
 | | **The invoice** (to the Harbormaster, which spends it on machines) |
 | | **Impound buy-backs** (to the Harbormaster) |
@@ -155,7 +155,7 @@ Scrip has value only if it is hard to make and easy to spend.
 | Loot from a careful raid (4–6 weight) | 250–450 |
 | Ammunition (4 magazines) | −48 |
 | Repair after a raid | −20 to −40 |
-| A plate and two charges | −110 |
+| A plate and two charges | −114 |
 | Building a Longshore (parts plus fee) | about 750 |
 | Dying with a C-grade Longshore | −750, and someone else gains it |
 
@@ -177,7 +177,7 @@ out of money.
 | Who | Business | What its agent decides |
 | --- | --- | --- |
 | **Moss, the armourer** | Buys parts. **Builds guns and mods from her own stock** and sells them. Repairs. | Which frame to build next from what she holds and what has been selling; her prices |
-| **Ines, the quartermaster** | Sells plates, charges, ammunition and med injectors, made from meds, fuel and electronics she buys | What to stock; her prices |
+| **Ines, the quartermaster** | Sells plates, charges and ammunition, made from the fuel, electronics and copper she buys. Buys meds for the clinic, which uses them up. | What to stock; her prices |
 | **The export desk** | Buys materials for the freighter. The only source of new scrip. | Nothing: its prices are the fixed curve in the contract |
 | **The Harbormaster** | Collects invoices and impound fees. Spends them on machines. | How to spend its wallet: more patrol units, a faster Bailiff dispatch, or saving toward the Assessor |
 
