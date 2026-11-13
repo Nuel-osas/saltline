@@ -1,4 +1,4 @@
-//! The read-only tables and boards (docs/CONTRACT_V2.md → Views). Views that belong to one part of the game live
+//! The read-only tables and boards (docs/CONTRACT_V2.md → Views), `economy` and `leaderboard` among them. Views that belong to one part of the game live
 //! with it: `vendors` in vendors.rs, `export_prices` in export.rs, `listings` in market.rs, `wrecks` and `raid` in
 //! raids.rs, `harbormaster` in harbormaster.rs, the NEP-245 and NEP-171 views in mt.rs and nft.rs.
 
@@ -10,7 +10,7 @@ use near_sdk::{AccountId, near};
 
 use crate::items::*;
 use crate::nft::WeaponView;
-use crate::{IMPOUNDED, ProfileView, Saltline, SaltlineExt, now_ms};
+use crate::{HELD, IMPOUNDED, ProfileView, Saltline, SaltlineExt, now_ms};
 
 #[near(serializers = [json])]
 pub struct MaterialView {
@@ -260,5 +260,128 @@ impl Saltline {
             i = (i + len - 1) % len;
         }
         out
+    }
+}
+
+// -----------------------------------------------------------------------------------------------------------------
+// The public economy
+// -----------------------------------------------------------------------------------------------------------------
+
+#[near(serializers = [json])]
+pub struct SalesView {
+    pub frame: String,
+    pub grade: String,
+    /// The last five market prices, oldest first.
+    pub prices: Vec<U128>,
+}
+
+#[near(serializers = [json])]
+pub struct EconomyView {
+    pub scrip_supply: U128,
+    pub minted_24h: U128,
+    pub burned_24h: U128,
+    pub players: u32,
+    pub weapons_built: u32,
+    pub weapons_alive: u32,
+    pub weapons_destroyed: u32,
+    pub last_sales: Vec<SalesView>,
+}
+
+#[near(serializers = [json])]
+pub struct LeaderRow {
+    pub account_id: AccountId,
+    pub callsign: String,
+    pub value: U128,
+}
+
+#[near(serializers = [json])]
+pub struct Leaderboard {
+    /// Scrip plus the appraised value of the guns in hand (`held`).
+    pub net_worth: Vec<LeaderRow>,
+    pub extractions: Vec<LeaderRow>,
+    /// Royalties earned as a maker.
+    pub makers: Vec<LeaderRow>,
+    /// How many players the boards were drawn from, out of how many there are. They differ only past the bound on
+    /// this view's work (items::LEADER_SCAN_PLAYERS and LEADER_SCAN_GUNS).
+    pub scanned: u32,
+    pub players: u32,
+}
+
+/// The top rows by value, zero left out; ties go to whoever registered first.
+fn top(mut rows: Vec<(u128, AccountId, String)>) -> Vec<LeaderRow> {
+    rows.retain(|r| r.0 > 0);
+    rows.sort_by(|a, b| b.0.cmp(&a.0));
+    rows.truncate(LEADER_ROWS);
+    rows.into_iter()
+        .map(|(value, account_id, callsign)| LeaderRow { account_id, callsign, value: U128(value) })
+        .collect()
+}
+
+#[near]
+impl Saltline {
+    /// The economy in public: the scrip that exists, what was minted and burned in the last day, the guns built,
+    /// alive and destroyed, and the last sale prices of each frame and grade that has sold.
+    ///
+    /// - `scrip_supply` counts the Harbormaster's decay up to now as burned (as `mt_supply` does).
+    /// - `minted_24h` and `burned_24h` sum the hourly totals of the current hour and the 23 before it, from the
+    ///   mints and burns the ledger has logged. The Harbormaster's decay is logged when its wallet is next paid.
+    pub fn economy(&self) -> EconomyView {
+        let hour = now_ms() / HOUR_MS;
+        let (mut minted, mut burned) = (0u128, 0u128);
+        for i in 0..24 {
+            if self.flow.hour[i].saturating_add(24) > hour {
+                minted = minted.saturating_add(self.flow.minted[i]);
+                burned = burned.saturating_add(self.flow.burned[i]);
+            }
+        }
+        let mut last_sales = Vec::new();
+        for frame in 0..FRAME_COUNT {
+            for grade in 0..GRADE_COUNT {
+                let prices = &self.last_sales[frame * GRADE_COUNT + grade];
+                if !prices.is_empty() {
+                    last_sales.push(SalesView {
+                        frame: FRAMES[frame].id.to_string(),
+                        grade: GRADES[grade].0.to_string(),
+                        prices: prices.iter().map(|&p| U128(p)).collect(),
+                    });
+                }
+            }
+        }
+        EconomyView {
+            scrip_supply: U128(self.shown_supply(SCRIP)),
+            minted_24h: U128(minted),
+            burned_24h: U128(burned),
+            players: self.players.len(),
+            weapons_built: self.guns_built,
+            weapons_alive: self.guns.len(),
+            weapons_destroyed: self.guns_destroyed,
+            last_sales,
+        }
+    }
+
+    /// The top ten by net worth, by extractions and by maker's royalties.
+    ///
+    /// Bounded work: it reads players in the order they registered, and stops after LEADER_SCAN_PLAYERS of them or
+    /// when the next player's locker would take it past LEADER_SCAN_GUNS guns appraised. `scanned` and `players`
+    /// say whether that happened. A dock bigger than that needs an indexer reading the events.
+    pub fn leaderboard(&self) -> Leaderboard {
+        let players = self.players.len();
+        let mut guns_left = LEADER_SCAN_GUNS;
+        let (mut worth, mut extractions, mut makers) = (Vec::new(), Vec::new(), Vec::new());
+        let mut scanned = 0;
+        for ix in 0..players.min(LEADER_SCAN_PLAYERS) {
+            let p = self.player(ix);
+            if p.guns.len() > guns_left {
+                break;
+            }
+            guns_left -= p.guns.len();
+            let in_hand: u128 =
+                p.guns.iter().filter_map(|n| self.guns.get(n)).filter(|g| g.state == HELD).map(|g| g.value()).sum();
+            worth.push((p.bal[SCRIP].saturating_add(in_hand), p.account_id.clone(), p.callsign.clone()));
+            extractions.push((p.extractions as u128, p.account_id.clone(), p.callsign.clone()));
+            makers.push((p.royalties, p.account_id.clone(), p.callsign.clone()));
+            scanned += 1;
+        }
+        Leaderboard { net_worth: top(worth), extractions: top(extractions), makers: top(makers), scanned, players }
     }
 }

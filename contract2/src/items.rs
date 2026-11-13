@@ -478,6 +478,14 @@ pub const MAX_BATCH: u128 = 50;
 pub const MAX_PRICE: u128 = 1_000_000_000;
 pub const MAX_MEMO: usize = 140;
 pub const RECENT_KEPT: u32 = 64;
+/// The leaderboard reads at most this many players, and appraises at most this many of their guns, in one call.
+pub const LEADER_SCAN_PLAYERS: u32 = 300;
+pub const LEADER_SCAN_GUNS: usize = 600;
+pub const LEADER_ROWS: usize = 10;
+/// `nft_tokens` returns at most this many tokens a page.
+pub const NFT_PAGE: u64 = 50;
+/// The maker's share `nft_payout` reports, in percent: the same 2% the contract's own market pays.
+pub const PAYOUT_MAKER_PCT: u128 = MAKER_PCT;
 /// Lazy expiry burns at most this many wrecks, and this many impounded guns, in one call.
 pub const SWEEP_PER_CALL: usize = 3;
 
