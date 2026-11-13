@@ -538,7 +538,8 @@ describe("VENDORS", () => {
     const { root } = await vendors();
     expect(q(root, ".d2-person-name").textContent).toBe("Moss");
     expect(q(root, ".d2-memo p").textContent).toContain("Servos are short");
-    expect(q(root, '.d2-bid[data-tok="servo"] .d2-bid-why').textContent).toBe("“No servos, no Longshores. I'm paying over the odds.”");
+    // Her reason is printed as the chain gives it, with no quotation marks added (the agents write in the third person).
+    expect(q(root, '.d2-bid[data-tok="servo"] .d2-bid-why').textContent).toBe("No servos, no Longshores. I'm paying over the odds.");
     expect(root.querySelectorAll(".d2-shop-guns .d2-gun").length).toBe(2);
     expect(q(root, ".d2-shop-guns .d2-history").textContent).toContain("Built by MOSS");
   });
