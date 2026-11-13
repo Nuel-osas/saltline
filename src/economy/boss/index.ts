@@ -14,7 +14,7 @@ import { createBolts } from "./bolts";
 import { LINES, type LineId } from "./copy";
 import { createFight, type Fight } from "./fight";
 import { createModel } from "./model";
-import { TUNE, assessorFor } from "./rules";
+import { MAX_CORES, MIN_CORES, TUNE, assessorFor } from "./rules";
 import type { Bar, Body, Bolts } from "./types";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
@@ -50,6 +50,13 @@ export interface Boss {
   readonly fight: Fight | null;
   /** This run's town read, once it's in. */
   readonly read: TownRead | null;
+  /**
+   * Stands the Assessor up now with `cores` relay cores, whatever the town says (v2: the invoice reached
+   * foreclosure). False if one already stands, the run isn't being played, or it couldn't be built.
+   */
+  summon(cores: number): boolean;
+  /** Removes it and lets the boat back in (the raid is over). */
+  dismiss(): void;
   update(dt: number): void;
   dispose(): void;
 }
@@ -69,10 +76,13 @@ export function callsignOf(G: Game): string | null {
   return typeof c === "string" && c.trim() ? c.trim() : null;
 }
 
-export function createBoss(G: Game, economy: Economy, opts: BossOptions = {}): Boss {
+/** v2 has no town: every read is "missing", so only summon() ever builds the Assessor. */
+const NO_TOWN: TownReader = { last: null, read: async () => ({ status: "missing", at: 0 }) };
+
+export function createBoss(G: Game, economy: Economy | null, opts: BossOptions = {}): Boss {
   G.ext ??= { speedScale: 1, gear: {} };
   const build = opts.build ?? defaultParts;
-  const town = opts.town ?? G.story?.town ?? createTownReader(economy.chain);
+  const town = opts.town ?? G.story?.town ?? (economy ? createTownReader(economy.chain) : NO_TOWN);
   // One channel for both voices: a second one would relabel the story's lines as Control's (radio.ts).
   const own: Channel | null = G.story?.channel ? null : createChannel(G);
   const channel: Channel & Partial<TimedChannel> = G.story?.channel ?? own!;
@@ -177,9 +187,15 @@ export function createBoss(G: Game, economy: Economy, opts: BossOptions = {}): B
 
   function arrive() {
     const boss = assessorFor(read);
-    if (!boss || fight || G.game?.state !== "playing") return;
+    if (boss) stand(boss.cores);
+  }
+
+  /** Builds the Assessor with `cores` cores and starts its walk in. */
+  function stand(cores: number): boolean {
+    const boss = { cores: Math.max(MIN_CORES, Math.min(MAX_CORES, Math.floor(Number.isFinite(cores) ? cores : MIN_CORES))) };
+    if (fight || G.game?.state !== "playing") return false;
     const parts = guard("build", () => build(G, boss.cores));
-    if (!parts) return;
+    if (!parts) return false;
     fight =
       guard("start", () =>
         createFight(
@@ -200,13 +216,14 @@ export function createBoss(G: Game, economy: Economy, opts: BossOptions = {}): B
       ) ?? null;
     if (!fight) {
       guard("cleanup", () => (parts.body.dispose(), parts.bolts.dispose(), parts.bar.dispose()));
-      return;
+      return false;
     }
     // A full reserve for the fight: the run's rounds went on the drones.
     guard("ammo", () => {
       const w = G.weapon;
       if (w && typeof w.addAmmo === "function" && typeof w.reserve === "number" && w.reserve < TUNE.reserve) w.addAmmo(TUNE.reserve - w.reserve);
     });
+    return true;
   }
 
   const offs: (() => void)[] = [];
@@ -235,6 +252,11 @@ export function createBoss(G: Game, economy: Economy, opts: BossOptions = {}): B
     get read() {
       return read;
     },
+    summon: (cores: number) => guard("summon", () => stand(cores)) ?? false,
+    dismiss() {
+      end();
+      resetBoat();
+    },
     update(dt: number) {
       const st = G.game?.state;
       if (st === "paused" || st === "title") return;
@@ -260,19 +282,35 @@ export function startBoss(G: Game): Boss | null {
   try {
     const economy: Economy | undefined = G.economy;
     if (!economy) return null; // ?noeconomy: the baseline game
-    const b = createBoss(G, economy);
-    G.boss = b;
-    let last = performance.now();
-    const loop = (now: number) => {
-      const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
-      last = now;
-      b.update(dt);
-      requestAnimationFrame(loop);
-    };
-    requestAnimationFrame(loop);
-    return b;
+    return drive(G, createBoss(G, economy));
   } catch (e) {
     console.warn("[boss] off:", e);
     return null;
   }
+}
+
+/**
+ * Starts the Assessor for v2 (src/economy/v2/raid), which has no town to read: it stands only when summoned
+ * (`G.boss.summon(cores)`, at foreclosure).
+ */
+export function startAssessor(G: Game): Boss | null {
+  try {
+    return drive(G, createBoss(G, null));
+  } catch (e) {
+    console.warn("[boss] off:", e);
+    return null;
+  }
+}
+
+function drive(G: Game, b: Boss): Boss {
+  G.boss = b;
+  let last = performance.now();
+  const loop = (now: number) => {
+    const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+    last = now;
+    b.update(dt);
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+  return b;
 }
