@@ -20,20 +20,25 @@ export const GEAR: GearId[] = ["plate", "mag", "cutter"];
 
 /** The brokers, with their blurbs from docs/STORY.md → Copy across the game. */
 export const BROKERS: Record<BrokerId, { name: string; buys: CargoId[]; sells: GearId[]; blurb: string; blurbRevealed?: string }> = {
-  moss: { name: "Moss", buys: ["copper", "chips"], sells: ["cutter"], blurb: "Rebuilding the sea wall from what you drag out. Thinks in tonnes, hates waste." },
+  moss: {
+    name: "Moss",
+    buys: ["copper", "chips"],
+    sells: ["cutter"],
+    blurb: "Rebuilding the sea wall from what you drag out. Measures everything in tonnes, including you.",
+  },
   ines: {
     name: "Ines",
     buys: ["meds", "fuel"],
     sells: ["plate"],
-    blurb: "Runs the clinic's stores and keeps the generators turning. Spends the clinic's money like it's hers to lose.",
+    blurb: "Runs the clinic's stores and the generators. Will cry at your story and still pay two scrip less.",
   },
   qm: {
     name: "Quartermaster",
     buys: ["core", "fuel"],
     sells: ["mag"],
-    blurb: "Buys relay cores for a client he won't name. Pays better than anyone.",
+    blurb: "Buys relay cores for a client he won't name. Pays better than anyone. Smiles a lot.",
     // once the town's ledger has named his client (TownView.client.revealed)
-    blurbRevealed: "Buying for the Harbormaster. Still pays better than anyone.",
+    blurbRevealed: "Buying for the Harbormaster. Still pays better than anyone. Still smiling.",
   },
 };
 

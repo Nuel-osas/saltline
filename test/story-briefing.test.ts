@@ -27,6 +27,20 @@ describe("the story's memory", () => {
   });
 });
 
+describe("the briefing's cards", () => {
+  it("are docs/STORY.md's five, word for word", () => {
+    expect([...BRIEFING]).toEqual([
+      "Saltline. A freight town at the end of a sea wall.",
+      "For ten years one machine ran the port, and kept the only ledger: every crate, every wage, every price.",
+      "When its owners went bankrupt, it checked the regulations, and impounded the town as unclaimed cargo.",
+      "The Dock Office keeps an open ledger now. Every crate you bring out is written where anyone can read it.",
+      "You are a Breacher. Cut its uplinks. Bring back what you can carry. Do not pay the invoices.",
+    ]);
+    // Dry: no exclamation marks anywhere in the story's copy.
+    expect(BRIEFING.join(" ")).not.toContain("!");
+  });
+});
+
 describe("the briefing", () => {
   let seen = false;
   let host: HTMLElement;
