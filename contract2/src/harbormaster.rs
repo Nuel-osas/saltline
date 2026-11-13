@@ -5,7 +5,10 @@
 //! - **Out:** the balance halves every 12 hours. The lost part is burned: that is the scrip it spent on machines.
 //! - `strength` = min(100, balance ÷ 20).
 //! - `patrols`: `bonus_drones` = strength ÷ 25, and the thresholds are 600 / 1,200 / 2,400 / 4,000.
-//! - `pursuit`: no bonus drones, and the Bailiff's threshold is 1,200 − 4 × strength.
+//! - `pursuit`: no bonus drones, and the Bailiff's threshold is 1,200 − 4 × strength. The other three thresholds
+//!   don't move.
+//! - `hm_posture` is the Harbormaster's own call (its agent's): it picks where the strength goes. It can't change
+//!   the balance, the strength or any number above.
 //!
 //! ## How the decay is kept honest
 //! The balance is stored with the time it was last brought up to date, and decayed lazily: every view computes it
@@ -19,12 +22,12 @@
 //! decays about 1.5% slow over the same 12 hours (a half-life near 12 h 15 min). A test pins that bound.
 
 use near_sdk::json_types::U128;
-use near_sdk::{AccountId, near};
+use near_sdk::{AccountId, env, near};
 
 use crate::items::*;
 use crate::mt::{self, BurnLog, TransferLog};
 use crate::nft::WeaponView;
-use crate::{HELD, Holder, IMPOUNDED, Saltline, SaltlineExt, amount_in, err, fail, now_ms};
+use crate::{HELD, Holder, IMPOUNDED, Saltline, SaltlineExt, amount_in, check_memo, err, fail, now_ms};
 
 #[near(serializers = [json])]
 pub struct HarbormasterView {
@@ -180,5 +183,41 @@ impl Saltline {
     /// The Harbormaster, with its balance decayed to now.
     pub fn harbormaster(&self) -> HarbormasterView {
         self.hm_view(now_ms())
+    }
+}
+
+#[near]
+impl Saltline {
+    /// The Harbormaster's own account puts its strength into `patrols` or `pursuit`.
+    pub fn hm_posture(&mut self, posture: String, memo: String) -> HarbormasterView {
+        self.guard();
+        if env::predecessor_account_id() != self.hm.account_id {
+            fail(err::NOT_HARBORMASTER, "Only the Harbormaster's own account can call this");
+        }
+        check_memo(&memo);
+        let p = POSTURES
+            .iter()
+            .position(|x| *x == posture)
+            .unwrap_or_else(|| fail(err::BAD_AMOUNT, "posture is 'patrols' or 'pursuit'"));
+        self.hm.posture = p as u8;
+        self.hm.last_memo = Some(memo.clone());
+        let view = self.hm_view(now_ms());
+        let text = if p as u8 == PURSUIT {
+            format!("The Harbormaster turned to pursuit. The Bailiff is sent at {}.", view.bailiff_at.0)
+        } else {
+            format!("The Harbormaster turned to patrols: {} more Inspection Units on every raid.", view.bonus_drones)
+        };
+        let account = self.hm.account_id.clone();
+        self.record(
+            "posture",
+            &account,
+            None,
+            text,
+            near_sdk::serde_json::json!({
+                "posture": posture, "strength": view.strength, "bonus_drones": view.bonus_drones,
+                "bailiff_at": view.bailiff_at, "memo": memo
+            }),
+        );
+        view
     }
 }

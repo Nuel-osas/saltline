@@ -5,7 +5,9 @@
 //! near-contract-standards' NonFungibleToken keeps its own owner maps that would have to be kept in step with it.
 //!
 //! - core: `nft_transfer`, `nft_token`;
-//! - enumeration: `nft_total_supply`, `nft_tokens_for_owner`, `nft_supply_for_owner`;
+//! - enumeration: `nft_total_supply`, `nft_tokens`, `nft_tokens_for_owner`, `nft_supply_for_owner`;
+//! - metadata (NEP-177): `nft_metadata`, and each token's `metadata` with its picture drawn by the contract;
+//! - payout (NEP-199): `nft_payout`, so an outside marketplace can pay the maker's 2%;
 //! - the NEP-297 `nep171` events `nft_mint`, `nft_transfer` and `nft_burn`, version 1.0.0.
 //!
 //! What is left out, and why:
@@ -15,6 +17,9 @@
 //!   showing it and no transfer event is logged for a lock.
 //! - Receivers are registered players with room in their locker: the contract pays for storage.
 
+use std::collections::BTreeMap;
+
+use near_sdk::base64::Engine;
 use near_sdk::json_types::U128;
 use near_sdk::{AccountId, NearToken, env, near};
 
@@ -62,7 +67,8 @@ pub struct WeaponView {
     pub value: U128,
 }
 
-/// NEP-177 token metadata. `media` (the drawing) comes with the metadata upgrade; `extra` is the Weapon as JSON.
+/// NEP-177 token metadata. `media` is an SVG data URI drawn from the gun's record at the time it is read
+/// (`drawing`); nothing is stored for it. `extra` is the Weapon as JSON.
 #[near(serializers = [json])]
 pub struct TokenMetadata {
     pub title: Option<String>,
@@ -331,7 +337,7 @@ impl Saltline {
                     "Built by {} · {} extractions · {} owners · recovered {} times · condition {}",
                     g.maker_callsign, g.extractions, g.owners, g.recovered, g.condition
                 )),
-                media: None,
+                media: Some(drawing(g)),
                 media_hash: None,
                 copies: Some(1),
                 issued_at: Some(g.built_at.to_string()),
@@ -423,4 +429,118 @@ impl Saltline {
 /// A vendor's rack: its guns in state `vendor`.
 pub(crate) fn on_rack(g: &Gun) -> bool {
     g.state == AT_VENDOR
+}
+
+// -----------------------------------------------------------------------------------------------------------------
+// Metadata, the drawing, enumeration of every gun, and the maker's payout
+// -----------------------------------------------------------------------------------------------------------------
+
+#[near(serializers = [json])]
+pub struct NftContractMetadata {
+    pub spec: String,
+    pub name: String,
+    pub symbol: String,
+    pub icon: Option<String>,
+    pub base_uri: Option<String>,
+    pub reference: Option<String>,
+    pub reference_hash: Option<String>,
+}
+
+#[near(serializers = [json])]
+pub struct Payout {
+    pub payout: BTreeMap<AccountId, U128>,
+}
+
+/// The gun's card as an SVG: frame, serial, maker, grade, a silhouette whose barrel and magazine follow the frame,
+/// a condition bar and its history. Plain ASCII, under 1 kB before encoding.
+pub(crate) fn card(g: &Gun) -> String {
+    let frame = &FRAMES[g.frame as usize];
+    let grade = GRADES[g.grade()].0;
+    let ink = ["#f2c14e", "#5ec8e5", "#9fb3bd", "#8a7460"][g.grade()];
+    // (barrel length, magazine depth) per frame: the carbine, the short one, the marksman's.
+    let (barrel, mag) = [(150, 34), (96, 46), (214, 22)][g.frame as usize];
+    let bar = g.condition as u32 * 280 / 100;
+    format!(
+        concat!(
+            "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 200' font-family='monospace'>",
+            "<rect width='320' height='200' fill='#0d1418'/>",
+            "<rect x='5' y='5' width='310' height='190' fill='none' stroke='{ink}' stroke-width='2'/>",
+            "<text x='20' y='36' fill='#e6edf0' font-size='19'>{name}</text>",
+            "<text x='20' y='56' fill='#8aa0aa' font-size='12'>{serial} | built by {maker}</text>",
+            "<text x='300' y='62' fill='{ink}' font-size='54' text-anchor='end'>{grade}</text>",
+            "<g fill='{ink}'><rect x='64' y='98' width='{barrel}' height='9'/>",
+            "<rect x='50' y='92' width='104' height='22'/><rect x='20' y='98' width='36' height='26'/>",
+            "<rect x='112' y='114' width='15' height='{mag}'/></g>",
+            "<rect x='20' y='164' width='280' height='7' fill='#22303a'/>",
+            "<rect x='20' y='164' width='{bar}' height='7' fill='{ink}'/>",
+            "<text x='20' y='188' fill='#8aa0aa' font-size='11'>",
+            "condition {condition} | {extractions} out | {owners} owners | recovered {recovered}</text></svg>"
+        ),
+        ink = ink,
+        name = frame.name,
+        serial = serial_text(g.serial),
+        maker = g.maker_callsign,
+        grade = grade,
+        barrel = barrel,
+        mag = mag,
+        bar = bar,
+        condition = g.condition,
+        extractions = g.extractions,
+        owners = g.owners,
+        recovered = g.recovered,
+    )
+}
+
+/// The card as a data URI a wallet can show without fetching anything.
+pub(crate) fn drawing(g: &Gun) -> String {
+    format!("data:image/svg+xml;base64,{}", near_sdk::base64::engine::general_purpose::STANDARD.encode(card(g)))
+}
+
+#[near]
+impl Saltline {
+    pub fn nft_metadata(&self) -> NftContractMetadata {
+        NftContractMetadata {
+            spec: "nft-1.0.0".to_string(),
+            name: "Saltline Armoury".to_string(),
+            symbol: "PAC9".to_string(),
+            icon: None,
+            base_uri: None,
+            reference: None,
+            reference_hash: None,
+        }
+    }
+
+    /// Every gun alive, in the order the contract holds them, at most NFT_PAGE a page. A gun whose wreck or impound
+    /// has lapsed is left out of its page before the sweep that burns it, so a page can come back short.
+    pub fn nft_tokens(&self, from_index: Option<U128>, limit: Option<u64>) -> Vec<NftToken> {
+        let now = now_ms();
+        let from = from_index.map(|i| i.0).unwrap_or(0).min(u32::MAX as u128) as usize;
+        let limit = limit.unwrap_or(NFT_PAGE).min(NFT_PAGE) as usize;
+        // `iter().skip` jumps by index (the map's iterator has its own `nth`), so a late page costs no more.
+        self.guns
+            .iter()
+            .skip(from)
+            .take(limit)
+            .map(|(_, g)| g)
+            .filter(|g| !self.gone(g, now))
+            .map(|g| self.token_of(g))
+            .collect()
+    }
+
+    /// NEP-199: who is paid what out of a sale of `balance`. The maker gets 2% (rounded down), the owner the rest.
+    pub fn nft_payout(&self, token_id: String, balance: U128, max_len_payout: Option<u32>) -> Payout {
+        let n = self.find_gun(&token_id);
+        let g = self.gun(n);
+        let royalty = balance.0 / 100 * PAYOUT_MAKER_PCT + balance.0 % 100 * PAYOUT_MAKER_PCT / 100;
+        let mut payout = BTreeMap::new();
+        payout.insert(g.owner.clone(), U128(balance.0 - royalty));
+        if royalty > 0 {
+            let to_maker = payout.entry(g.maker.clone()).or_insert(U128(0));
+            to_maker.0 += royalty;
+        }
+        if max_len_payout.is_some_and(|max| payout.len() as u32 > max) {
+            fail(err::BAD_AMOUNT, format!("This gun pays {} accounts", payout.len()));
+        }
+        Payout { payout }
+    }
 }

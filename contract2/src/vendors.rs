@@ -8,6 +8,12 @@
 //!   the default (`items::good_price`), one unit at a time as the shelf empties.
 //! - `buy_gun`: a player buys a gun off the vendor's rack, at the vendor's price or 125% of its appraisal.
 //!
+//! Each vendor's own account (its agent) makes two more calls:
+//! - `vendor_build`: build from its own stock what `items::VENDORS` lists for it. No fee. A gun goes on its rack
+//!   with the vendor as maker; goods go on its shelf.
+//! - `vendor_price`: set its own flat price for a gun on its rack or for a good it sells, in place of the default.
+//!   It can't set what it pays for materials: the bid curve is the contract's.
+//!
 //! Every price is a pure function in items.rs of state anyone can read; the `vendors` view shows the same numbers
 //! with the reason for each.
 //!
@@ -19,12 +25,13 @@
 use std::collections::BTreeMap;
 
 use near_sdk::json_types::U128;
-use near_sdk::{AccountId, near};
+use near_sdk::{AccountId, env, near};
 
 use crate::items::*;
-use crate::mt::{self, BurnLog, TransferLog};
+use crate::mt::{self, BurnLog, MintLog, TransferLog};
 use crate::nft::{WeaponView, on_rack};
-use crate::{HELD, Holder, Saltline, SaltlineExt, amount_in, err, fail, now_ms};
+use crate::weapons::BuildResult;
+use crate::{AT_VENDOR, Empty, HELD, Holder, Saltline, SaltlineExt, amount_in, check_memo, err, fail, now_ms};
 
 #[near(serializers = [json])]
 pub struct Quote {
@@ -345,5 +352,134 @@ impl Saltline {
     /// Both stalls: scrip, stock, what each pays and charges, and why.
     pub fn vendors(&self) -> Vec<VendorView> {
         (0..VENDOR_COUNT).map(|v| self.vendor_view(v)).collect()
+    }
+}
+
+// -----------------------------------------------------------------------------------------------------------------
+// The vendors' own calls
+// -----------------------------------------------------------------------------------------------------------------
+
+impl Saltline {
+    /// The calling vendor, or E_NOT_VENDOR.
+    fn caller_vendor(&self) -> usize {
+        self.guard();
+        let me = env::predecessor_account_id();
+        self.vendors
+            .iter()
+            .position(|v| v.account_id == me)
+            .unwrap_or_else(|| fail(err::NOT_VENDOR, "Only a vendor's own account can call this"))
+    }
+}
+
+#[near]
+impl Saltline {
+    /// A vendor builds from its own stock: the blueprint's inputs are burned, no fee is paid, and the vendor is
+    /// the maker. Only what `items::VENDORS` lists for it.
+    pub fn vendor_build(&mut self, blueprint: String, memo: String) -> BuildResult {
+        let v = self.caller_vendor();
+        check_memo(&memo);
+        let info = &VENDORS[v];
+        let b = blueprint_index(&blueprint)
+            .filter(|b| info.builds.contains(b))
+            .unwrap_or_else(|| fail(err::DOESNT_SELL, format!("{} doesn't make '{blueprint}'", info.name)));
+        let bp = &BLUEPRINTS[b];
+        let h = Holder::Vendor(v);
+        let now = now_ms();
+        for &(t, n) in bp.inputs {
+            // `stock_of`, not the ledger: Ines's meds are what the clinic has left. No blueprint takes meds today.
+            let have = self.stock_of(v, t, now);
+            if have < n {
+                fail(
+                    err::NO_STOCK,
+                    format!("{} is short of {}: a {} takes {n}, {have} in stock", info.name, TOKENS[t].id, bp.id),
+                );
+            }
+        }
+        let vendor_id = self.vendors[v].account_id.clone();
+        let mut burned = BurnLog::new(&vendor_id, Some("built"));
+        for &(t, n) in bp.inputs {
+            if v == INES && t == MEDS {
+                self.meds_decay(now);
+                self.meds_moved(n, false);
+            }
+            self.burn(h, t, n);
+            burned.push(t, n);
+        }
+        mt::emit_burn(vec![burned]);
+
+        let mut minted = BTreeMap::new();
+        let (weapon, text) = match bp.makes {
+            Makes::Gun(frame) => {
+                let n = self.mint_gun(h, frame, &vendor_id, info.callsign, AT_VENDOR);
+                let w = self.weapon_of(n);
+                let text = format!("{} built a {}-grade {}, {}.", info.name, w.grade, FRAMES[frame].short, w.serial);
+                (Some(w), text)
+            }
+            Makes::Token(t) => {
+                let n = bp.yields as u128;
+                self.mint(h, t, n);
+                mt::emit_mint(vec![MintLog::one(&vendor_id, t, n, Some("built"))]);
+                minted.insert(TOKENS[t].id.to_string(), U128(n));
+                (None, format!("{} built {}.", info.name, count(t, n)))
+            }
+        };
+        self.vendors[v].last_memo = Some(memo.clone());
+        self.record(
+            "vendor_build",
+            &vendor_id,
+            None,
+            text,
+            near_sdk::serde_json::json!({
+                "vendor": info.id, "blueprint": bp.id, "serial": weapon.as_ref().map(|w| w.serial.clone()),
+                "minted": minted, "memo": memo
+            }),
+        );
+        BuildResult { weapon, minted }
+    }
+
+    /// A vendor sets its own flat price: for a gun on its rack (`serial`) or for a good it sells (`token_id`).
+    pub fn vendor_price(
+        &mut self,
+        serial: Option<String>,
+        token_id: Option<String>,
+        price: U128,
+        memo: String,
+    ) -> Empty {
+        let v = self.caller_vendor();
+        check_memo(&memo);
+        let price = amount_in(price, MAX_PRICE);
+        let info = &VENDORS[v];
+        let vendor_id = self.vendors[v].account_id.clone();
+        let text = match (&serial, &token_id) {
+            (Some(serial), None) => {
+                let n = self.find_gun(serial);
+                let g = self.gun(n);
+                if g.owner != vendor_id || !on_rack(g) {
+                    fail(err::DOESNT_SELL, format!("{serial} isn't on {}'s rack", info.name));
+                }
+                let label = g.label();
+                self.gun_mut(n).ask = Some(price);
+                format!("{} priced a {label} at {price}.", info.name)
+            }
+            (None, Some(token)) => {
+                let t = token_index(token)
+                    .filter(|&t| blueprint_for(t).is_some_and(|b| info.builds.contains(&b)))
+                    .unwrap_or_else(|| fail(err::DOESNT_SELL, format!("{} doesn't sell {token}", info.name)));
+                self.vendors[v].price[t] = Some(price);
+                format!("{} priced {} at {price} each.", info.name, TOKENS[t].id)
+            }
+            _ => fail(err::BAD_AMOUNT, "Give a serial or a token_id, one of the two"),
+        };
+        self.vendors[v].last_memo = Some(memo.clone());
+        self.record(
+            "vendor_price",
+            &vendor_id,
+            None,
+            text,
+            near_sdk::serde_json::json!({
+                "vendor": info.id, "serial": serial, "token_id": token_id, "price": U128(price), "memo": memo
+            }),
+        );
+        Empty {}
     }
 }
