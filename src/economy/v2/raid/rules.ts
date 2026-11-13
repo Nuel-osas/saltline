@@ -221,8 +221,8 @@ export const zoneOf = (spot: number) => {
 // ---------------------------------------------------------------------------------------------------------------
 // The raid's bookkeeping
 
-/** Uplinks a report may claim: items.ts RAID.maxUplinks (3, the terminal's three relays, until that number lands). */
-export const MAX_UPLINKS: number = (RAID as { maxUplinks?: number }).maxUplinks ?? 3;
+/** Uplinks a report may claim (items.ts). */
+export const MAX_UPLINKS: number = RAID.maxUplinks;
 /** The most extra Inspection Units the Harbormaster's strength buys (items.ts: one per 25 strength, strength 0–100). */
 const MAX_BONUS_DRONES = Math.floor(100 / HARBORMASTER.strengthPerDrone);
 
