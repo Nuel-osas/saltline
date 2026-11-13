@@ -405,7 +405,8 @@ export function createRaid(G: Game): RaidApi {
     refreshMarkers(true);
     emit("raid:started", raid);
     emit("invoice:changed", { total: r.total, added: r.total, why: "AT THE FENCE", next: r.thresholds!.next() });
-    hud.addLine({ added: raid.invoiceStart, why: "TRESPASS · AT THE FENCE" });
+    // One figure from the contract: the entry charge and the share of arrears carried in, not split here.
+    hud.addLine({ added: raid.invoiceStart, why: "AT THE FENCE" });
     if (r.extra) hud.addLine({ added: r.extra, why: "TEST SURCHARGE · ?INVOICE" });
     const greeting = LINES.fence(callsign, raid.invoiceStart);
     r.fence = { text: greeting, until: now() + WAIT.fence };
