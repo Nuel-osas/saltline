@@ -13,7 +13,8 @@ export type SignOn =
   | { kind: "unconfirmed"; why: string };
 
 export interface SignOnDeps {
-  chain: Pick<Chain2, "weapon" | "startRaid">;
+  /** `balances`, when given, is read so gear the stash no longer holds isn't asked for. */
+  chain: Pick<Chain2, "weapon" | "startRaid"> & Partial<Pick<Chain2, "balances">>;
   wallet: Pick<Wallet2, "accountId">;
   loadout: Loadout;
   timeoutMs?: number;
@@ -63,6 +64,20 @@ export async function signOn(deps: SignOnDeps): Promise<SignOn> {
     deps.onGun?.(weapon, fellBack);
   } catch {
     /* the card is a nicety */
+  }
+
+  // Gear the stash no longer holds (used up, or lost with the last raid) can't be brought: the contract would refuse
+  // the whole raid for it. A failed read is unknown, so the loadout goes as named and the contract decides.
+  if (named.plates + named.charges + named.mags > 0 && deps.chain.balances) {
+    try {
+      const bal = await inTime(() => deps.chain.balances!(account));
+      if (bal !== TIMEOUT && bal && typeof bal === "object") {
+        const held = (n: unknown) => (typeof n === "number" && Number.isInteger(n) && n > 0 ? n : 0);
+        named = { ...named, plates: Math.min(named.plates, held(bal.plate)), charges: Math.min(named.charges, held(bal.charge)), mags: Math.min(named.mags, held(bal.ammo)) };
+      }
+    } catch {
+      /* unknown: the contract decides */
+    }
   }
 
   let res: Awaited<ReturnType<Chain2["startRaid"]>> | typeof TIMEOUT;

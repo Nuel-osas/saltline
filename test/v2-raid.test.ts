@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { FRAMES, HARBORMASTER, INVOICE, ISSUE, RAID, invoiceStart, invoiceTotal } from "../src/economy/v2/items";
 import type { Chain2, FrameId, HarbormasterView, Loadout, Raid, Stats, Weapon } from "../src/economy/v2/types";
+import { createMockChain2, createMockWallet2 } from "../src/economy/v2/mock";
 import { createFakeV2 } from "../src/economy/v2/raid/fake";
 import {
   HOLD,
@@ -333,6 +334,61 @@ describe("signing on", () => {
     expect(r).toMatchObject({ kind: "signed", weapon: null, fellBack: true });
     expect(sent).toEqual([{ weapon: null, plates: 1, charges: 2, mags: 2 }]);
     expect(shooterSpec(r.kind === "signed" ? r.weapon : gun("pilot"), 2).name).toBe(ISSUE.name);
+  });
+
+  it("gear the stash no longer holds isn't asked for; an unreadable stash leaves the loadout to the contract", async () => {
+    const sent: Loadout[] = [];
+    const startRaid: Chain2["startRaid"] = async (l) => (sent.push(l), { ok: true, raid: raid({ loadout: l }) });
+    await signOn({ chain: { ...chain({ startRaid }), balances: async () => ({ scrip: 40, charge: 1, ammo: 5 }) }, wallet, loadout, sleep: never });
+    await signOn({ chain: { ...chain({ startRaid }), balances: () => Promise.reject(new Error("rpc down")) }, wallet, loadout, sleep: never });
+    expect(sent).toEqual([
+      { weapon: "S-000041", plates: 0, charges: 1, mags: 2 },
+      { weapon: "S-000041", plates: 1, charges: 2, mags: 2 },
+    ]);
+  });
+
+  it("the raid's report passes the offline mock's checks, as the contract's: a raid to the boat, and a death to the Bailiff", async () => {
+    let t = 1_800_000_000_000;
+    const mock = createMockChain2(7, { storage: null, now: () => t, stash: null });
+    const w2 = createMockWallet2(mock);
+    expect((await w2.claim("SMOKE7")).ok).toBe(true);
+    const mine = mock.debug.giveGun("stevedore", { grade: "B" });
+    mock.debug.give({ plate: 1, charge: 2, ammo: 2 });
+    mock.debug.addWreck({ spot: 1, frame: "pilot", grade: "C" });
+    const lo: Loadout = { weapon: mine.serial, plates: 1, charges: 2, mags: 2 };
+    const a = await signOn({ chain: mock, wallet: w2, loadout: lo, sleep: never });
+    if (a.kind !== "signed") throw new Error(JSON.stringify(a));
+    expect(a.weapon?.serial).toBe(mine.serial);
+    expect(a.raid.invoiceStart).toBe(invoiceStart(0, 0));
+    const L = new RaidLedger(a.raid);
+    // Take what fits: the wreck's gun first, then seals, a hound and its servo.
+    const wreck = a.raid.wrecks.find((w) => w.weapon)!;
+    expect(L.recover(wreck.id).ok).toBe(true);
+    for (const c of a.raid.containers) L.cut(c.spot);
+    L.kill("hound");
+    L.takePart("servo");
+    for (let i = 0; i < 3; i++) L.cutUplink();
+    expect(L.weight()).toBeLessThanOrEqual(RAID.carryLimit);
+    const seconds = RAID.minSeconds + RAID.perContainerSeconds * L.opened.length + 5;
+    t += seconds * 1000;
+    const out = await mock.extract(a.raid.raidId, L.report(seconds, gearUsed(lo, a.weapon!.stats.mag, { chargesLeft: 1, roundsLeft: 0 })));
+    expect(out).toMatchObject({ ok: true });
+    // The live meter and the contract's invoice are the same number.
+    expect(out.invoice).toBe(L.invoice(seconds));
+    expect(out.weapon).toMatchObject({ serial: mine.serial, state: "held", condition: 95 });
+    expect(out.recovered?.map((g) => g.serial)).toEqual([wreck.weapon!.serial]);
+
+    // The next raid ends under the Bailiff's clamp: the gun is impounded, and the loadout falls back.
+    t += RAID.secondsBetweenRaids * 1000;
+    const b = await signOn({ chain: mock, wallet: w2, loadout: lo, sleep: never });
+    if (b.kind !== "signed") throw new Error(JSON.stringify(b));
+    expect(b.loadout).toEqual({ weapon: mine.serial, plates: 0, charges: 1, mags: 0 }); // the plate worn, a charge thrown, every round fired
+    t += 20_000;
+    const d = await mock.die(b.raid.raidId, new RaidLedger(b.raid).report(20, { plates: 0, charges: 0, mags: 0 }), nearestSpot(-22, -26), "bailiff");
+    expect(d).toMatchObject({ ok: true, impounded: true });
+    t += RAID.secondsBetweenRaids * 1000;
+    const c = await signOn({ chain: mock, wallet: w2, loadout: lo, sleep: never });
+    expect(c).toMatchObject({ kind: "signed", weapon: null, fellBack: true, loadout: { weapon: null, plates: 0, charges: 0, mags: 0 } });
   });
 
   it("the dev fake plays the contract's part: a lock, a manifest with a bonded container and a wreck holding a gun, an impound", async () => {
