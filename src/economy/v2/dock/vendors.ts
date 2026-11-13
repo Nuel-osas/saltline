@@ -3,7 +3,7 @@
 // where the freighter pays in new scrip and pays less for every crate already aboard.
 import { h } from "../../dockside/dom";
 import { fmt, UNKNOWN } from "../../dockside/format";
-import { CONSUMABLES, MATERIALS, MODS, TOKEN_NAMES, VENDORS } from "../items";
+import { CONSUMABLES, MATERIALS, MODS, TOKEN_NAMES, VENDOR_PRICING, VENDORS } from "../items";
 import type { ConsumableId, MaterialId, ModId, Quote, Vendor, VendorGood, VendorId } from "../types";
 import { gunCard } from "./guncard";
 import { actBtn, emptyLine, head, okv, painter, scripEl, SHORT, type Ctx } from "./store";
@@ -121,7 +121,7 @@ export function createVendors(ctx: Ctx) {
         h("h3", { class: "d2-person-name" }, p.name),
         h("p", { class: "d2-person-line" }, p.line),
         note ? h("blockquote", { class: "d2-memo" }, h("span", null, w === "export" ? "Posted at the window" : `${p.name}'s last note`), h("p", null, note)) : null,
-        v ? h("p", { class: "d2-till" }, "Her till: ", h("b", null, fmt(v.scrip)), " scrip. She can't pay out below 100.") : null,
+        v ? h("p", { class: "d2-till" }, "Her till: ", h("b", null, fmt(v.scrip)), ` scrip. She can't pay out below ${fmt(VENDOR_PRICING.float)}.`) : null,
       ),
     );
   }
