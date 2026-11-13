@@ -120,7 +120,7 @@ try {
   check(arrived.fight && arrived.phase === "arriving", "the third relay brings the Assessor", JSON.stringify(arrived));
   check(arrived.bar === BAR && arrived.pips === 6, "its HUD bar reads THE ASSESSOR · FINAL NOTICE with a pip per core", `${arrived.bar} · ${arrived.pips} pips`);
   check(arrived.cores === 6, "strength 62 gives 3 + floor(62 / 20) = 6 cores", String(arrived.cores));
-  check(arrived.reserve >= 150, "the reserve is topped up for the fight", String(arrived.reserve));
+  check(arrived.reserve >= 240, "the reserve is topped up for the fight", String(arrived.reserve));
   await page.waitForTimeout(3000);
   await page.evaluate(() => window.__G.enemies.clear());
   await shot(page, "1-arrival");
@@ -215,7 +215,7 @@ try {
     kills: window.__hits.filter((h) => h.killed && h.type === "relay core").length,
   }));
   check(afterShots.hp.every((h) => h <= 0), "every core can be shot out", `${weakShots} core hits, ${missed} not on a core`);
-  check(afterShots.weak >= cores * 6 && afterShots.kills === cores, "core hits land as weak points and each core's last hit as a kill", JSON.stringify(afterShots));
+  check(afterShots.weak >= cores * 7 && afterShots.kills === cores, "core hits land as weak points and each core's last hit as a kill", JSON.stringify(afterShots));
   check(afterShots.calls === 2, "it calls a pair of Inspection Units at each third", String(afterShots.calls));
   const body = await page.evaluate(() => {
     const G = window.__G;

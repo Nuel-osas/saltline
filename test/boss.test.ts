@@ -166,10 +166,10 @@ describe("the damage model", () => {
     expect(damageFor("core", NaN)).toBe(0);
   });
 
-  it("puts a core out in six rifle hits on the weak point", () => {
+  it("puts a core out in seven rifle hits on the weak point", () => {
     const { f, body } = fight();
     arrive(f);
-    expect(breakCore(f, body, 0)).toBe(6);
+    expect(breakCore(f, body, 0)).toBe(7);
     expect(f.hp[0]).toBe(0);
     expect(body.states[0]).toBe("dark");
   });
@@ -182,7 +182,7 @@ describe("the damage model", () => {
     expect(hit.part).toBe("weak");
     expect(hit.enemy.type).toBe("relay core");
     expect(hit.enemy.damage(57.2, hit.point)).toBe(false);
-    for (let i = 0; i < 4; i++) shoot(f, body, 2);
+    for (let i = 0; i < 5; i++) shoot(f, body, 2);
     expect(shoot(f, body, 2)).toBe(true);
     // A dark core is no longer a weak point: the shot lands on the body.
     expect(f.raycast({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }, 300)!.part).toBe("body");
@@ -348,6 +348,54 @@ describe("its attacks", () => {
     run(b.f, 2.6);
     expect(b.body.waves).toBeGreaterThan(0);
     expect(b.G.player.damage).not.toHaveBeenCalled();
+  });
+});
+
+describe("the fight's length", () => {
+  /**
+   * A disciplined solo player at full strength (8 cores): peeks out, takes 0.6 s to aim, fires the rifle (12 rounds
+   * a second) at the lowest live core with `acc` of rounds on it, and breaks line of sight as soon as the assessment
+   * passes 70%, until it has drained. Each call of a pair of Inspection Units costs them `perCall` seconds.
+   */
+  function simulate(acc: number, perCall = 8) {
+    const { f, G, body } = fight(8);
+    let rng = 7;
+    const rand = () => ((rng = (rng * 16807) % 2147483647) / 2147483647);
+    G.player.pos = { x: 23.5, y: 0, z: 2 };
+    G.player.eye = { x: 23.5, y: 1.6, z: 2 };
+    let peeking = false,
+      aim = 0,
+      rounds = 0,
+      fired = 0;
+    G.physics.lineOfSight = () => peeking;
+    const dt = 1 / 30;
+    let t = 0;
+    while (f.phase !== "dying" && t < 600) {
+      if (f.phase === "fighting") {
+        if (!peeking && f.assess === 0 && (f.beam === "sweep" || f.beam === "cool")) ((peeking = true), (aim = 0.6));
+        if (peeking && (f.assess >= 0.7 || f.beam === "lock")) peeking = false;
+        if (peeking && (aim -= dt) <= 0)
+          for (rounds += 12 * dt; rounds >= 1; rounds--) {
+            fired++;
+            const core = f.hp.findIndex((h) => h > 0);
+            if (core >= 0 && rand() < acc) shoot(f, body, core);
+          }
+      }
+      f.update(dt);
+      t += dt;
+    }
+    return { seconds: t + f.calls * perCall, fired };
+  }
+
+  it("takes a sharp player about a minute and an average one well under two at full strength", () => {
+    const sharp = simulate(0.5);
+    const average = simulate(0.3);
+    // About 57 s and 75 s on this tuning (the arrival's walk and the two calls included).
+    expect(sharp.seconds).toBeGreaterThan(55);
+    expect(average.seconds).toBeLessThan(120);
+    expect(average.seconds).toBeGreaterThan(sharp.seconds);
+    // And the rounds it takes fit in the reserve it tops up, with the magazine and the calls' drones besides.
+    expect(average.fired).toBeLessThan(TUNE.reserve + 30 - 40);
   });
 });
 

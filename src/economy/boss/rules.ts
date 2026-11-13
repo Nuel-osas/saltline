@@ -29,14 +29,17 @@ export function assessorFor(read: TownRead | null | undefined): { cores: number;
  * after 4 s, jump apex 1 m.
  */
 export const TUNE = {
-  /** One core: six weak-point hits (6 × 26 × 2.2 = 343). */
-  coreHp: 340,
-  /** The share of a body hit that reaches the nearest live core: 26 → 1.6, about 210 body hits a core. */
+  /** One core: seven weak-point hits (7 × 26 × 2.2 = 400; six make 343). */
+  coreHp: 390,
+  /** The share of a body hit that reaches the nearest live core: 26 → 1.6, about 250 body hits a core. */
   bodyShare: 0.06,
   /** Seconds a core flashes when hit. */
   hitFlash: 0.07,
-  /** The player's reserve is topped up to this when it arrives, so the fight never starves for rounds. */
-  reserve: 150,
+  /**
+   * The player's reserve is topped up to this when it arrives. The game has no ammunition pickups and the run's drones
+   * have had most of the 180 rounds; a player landing 3 rounds in 10 needs about 200 for 8 cores, plus the calls.
+   */
+  reserve: 240,
   arrive: {
     /** Where it comes from (behind the north containers, outside the fence) and where it plants itself. */
     from: { x: 22, z: -38 },
