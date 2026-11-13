@@ -3,6 +3,7 @@
 // leaves the rest, and the shooter itself, running.
 import { startArsenal } from "../arsenal";
 import { startBailiff } from "../bailiff";
+import { startRaid } from "./raid";
 import { startScore } from "../score";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
@@ -17,6 +18,7 @@ const guard = (what: string, fn: () => void) => {
 };
 
 export function startV2(G: Game): void {
+  guard("raid", () => startRaid(G)); // sign-on, loot, the invoice (G.raid). First: it opens the radio channel the Bailiff speaks on
   guard("arsenal", () => startArsenal(G)); // breaker charge, rifle butt, pickups (G.arsenal)
   guard("bailiff", () => startBailiff(G)); // the hunter (G.bailiff)
   guard("score", () => startScore(G)); // the music (G.score)

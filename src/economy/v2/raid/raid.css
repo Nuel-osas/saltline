@@ -1,0 +1,252 @@
+/* The raid: the invoice meter and its line items (h- look), the sign-on card (the briefing's look), and the rows on
+   the debrief and dead cards (m- look, with salvage.css's sv- rows). Uses the game's tokens from src/ui.css. */
+
+/* ---- the invoice: top right, under nothing else ---- */
+.rd-inv {
+  position: absolute;
+  top: calc(16px + var(--sat));
+  right: var(--gr);
+  min-width: 214px;
+  padding-right: 12px;
+  border-right: 2px solid var(--st-cold, #8fd3ff);
+  text-align: right;
+  opacity: 0;
+  transition: opacity 0.3s, border-color 0.3s;
+}
+.rd-inv.on {
+  opacity: 1;
+}
+.rd-inv-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.rd-inv-n {
+  font: 700 34px/0.9 var(--f-display);
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--bone);
+  text-shadow: var(--shadow);
+}
+.rd-inv-bar {
+  height: 3px;
+  margin: 7px 0 6px;
+  background: var(--bone-faint);
+  overflow: hidden;
+}
+.rd-inv-bar i {
+  display: block;
+  height: 100%;
+  background: var(--st-cold, #8fd3ff);
+  transform-origin: right center;
+  transform: scaleX(0);
+  transition: transform 0.4s ease, background 0.3s;
+}
+.rd-inv-next {
+  font: 500 11px/1 var(--f-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+  white-space: nowrap;
+}
+.rd-inv.near {
+  border-right-color: var(--signal);
+}
+.rd-inv.near .rd-inv-bar i {
+  background: var(--signal);
+}
+.rd-inv.near .rd-inv-next {
+  color: var(--signal);
+}
+.rd-inv.past {
+  border-right-color: var(--alarm);
+}
+.rd-inv.past .rd-inv-bar i {
+  background: var(--alarm);
+}
+.rd-inv.past .rd-inv-next {
+  color: var(--alarm);
+}
+@keyframes rd-flag {
+  0%,
+  30%,
+  60% {
+    color: var(--alarm);
+  }
+  15%,
+  45% {
+    color: var(--bone);
+  }
+  100% {
+    color: var(--alarm);
+  }
+}
+.rd-inv.flag .h-k {
+  color: var(--alarm);
+  animation: rd-flag 1.2s linear;
+}
+.rd-inv.flag .rd-inv-n {
+  color: var(--alarm);
+}
+.rd-inv-lines {
+  margin-top: 9px;
+  min-height: 0;
+}
+@keyframes rd-line-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rd-line {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  font: 500 12px/1.55 var(--f-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+  white-space: nowrap;
+  text-shadow: var(--shadow);
+  animation: rd-line-in 0.25s ease both;
+  transition: opacity 0.5s;
+}
+.rd-line b {
+  font-weight: 600;
+  color: var(--signal);
+}
+.rd-line.out {
+  opacity: 0;
+}
+/* The kill feed sits under the meter's line items. */
+.hud:has(.rd-inv.on) .h-feed {
+  top: 38%;
+}
+@media (max-width: 760px) {
+  .rd-inv {
+    min-width: 0;
+  }
+  .rd-inv-n {
+    font-size: 24px;
+  }
+  .rd-inv-lines {
+    display: none;
+  }
+}
+
+/* ---- markers: a bonded container's is the Harbormaster's cold blue ---- */
+.h-cm.cargo.bonded,
+.h-wm.cargo.bonded {
+  color: var(--st-cold, #8fd3ff);
+}
+
+/* ---- the sign-on card ---- */
+.rd-sign {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+.rd-sign[hidden] {
+  display: none;
+}
+.rd-sign-veil {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 8, 10, 0.9);
+}
+.rd-sign-card {
+  position: relative;
+  width: min(560px, calc(100vw - 48px));
+  padding: 4px 0 4px 22px;
+  border-left: 2px solid var(--signal);
+}
+.rd-sign-k {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 11px/1 var(--f-label);
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+}
+.rd-sign-tag {
+  padding: 3px 5px 2px;
+  color: var(--ink);
+  background: var(--signal);
+  letter-spacing: 0.12em;
+}
+.rd-sign-t {
+  margin: 16px 0 10px;
+  font: 800 clamp(30px, 5vw, 54px) / 1 var(--f-display);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bone);
+}
+.rd-sign-s {
+  max-width: 34em;
+  font: 500 15px/1.5 var(--f-mono);
+  letter-spacing: 0.02em;
+  color: var(--bone-dim);
+}
+.rd-sign-acts,
+.rd-sign-n {
+  display: none;
+}
+.rd-sign.offer .rd-sign-card {
+  border-left-color: var(--alarm);
+}
+.rd-sign.offer .rd-sign-acts {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+}
+.rd-sign.offer .rd-sign-n {
+  display: block;
+  margin-top: 12px;
+  font: 400 11px/1.4 var(--f-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bone-dim);
+}
+.rd-btn {
+  padding: 11px 18px 10px;
+  font: 600 14px/1 var(--f-label);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--bone);
+  background: transparent;
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.rd-btn.rd-yes {
+  color: var(--ink);
+  background: var(--signal);
+  border-color: var(--signal);
+}
+.rd-btn:hover {
+  border-color: var(--bone);
+}
+.rd-btn:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 3px;
+}
+
+/* ---- cards ---- */
+.rd-row dt {
+  white-space: nowrap;
+}
+.rd-row dd {
+  max-width: 26em;
+}
+.rd-sec .rd-row.sv-refused dd {
+  font-size: 13px;
+}
