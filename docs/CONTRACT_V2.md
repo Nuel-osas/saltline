@@ -53,7 +53,7 @@ contract's `items.rs` must match exactly. Change both sides and this file togeth
 
 | Method | Args | Returns |
 | --- | --- | --- |
-| `rules` | – | The `RAID`, `INVOICE`, `HARBORMASTER`, `MARKET` and `CONDITION` numbers of items.ts, snake_case, amounts as U128 |
+| `rules` | – | `{ raid: {…}, invoice: {…}, harbormaster: {…}, market: {…}, condition: {…}, vendor_pricing: {…} }`: each the snake_case of the same-named constant in items.ts, every number a JSON number |
 | `materials` | – | `[{ id, name, weight: u32, bid: U128, export: U128, target: u32 }]` |
 | `frames` | – | `[{ id, name, bands: { damage: [lo, hi], … }, base: U128 }]` |
 | `blueprints` | – | `[{ id, kind, inputs: { "<material>": U128 }, fee: U128, yields: u32 }]` |
@@ -120,7 +120,7 @@ contract's `items.rs` must match exactly. Change both sides and this file togeth
   gear is lost.
 - The loadout's gun must be `held` by the caller with condition above 0; it becomes `raid`. Plates (0–1), charges
   (0–3) and magazines (0–8) are taken from the caller's balance.
-- `invoice_start` = 150 + 25 × extractions + min(1,500, arrears ÷ 2).
+- `invoice_start` = 150 + 25 × min(extractions, 14) + min(1,500, arrears ÷ 2).
 - The manifest: 8 of the 16 spots, each a material from the loot table. If arrears ≥ 1,000, 2 more spots are
   bonded containers (2 units of core, servo or electronics). Up to 3 live wrecks that aren't the caller's and aren't
   reserved by another open raid are attached and reserved.
@@ -167,19 +167,21 @@ is on (lazy, bounded work per call). At most 40 wrecks are kept; the oldest is b
 - `sell`: the vendor pays its bid per unit, priced one unit at a time as its stock rises: `bid × 2 × target ÷
   (target + stock)`. It refuses (`E_VENDOR_BROKE`) a sale that would take its scrip under 100.
 - `buy` and `buy_gun`: the player pays the vendor's price.
-  - Default price for goods: the inputs' value at base bids × 135%, more when it holds few.
+  - Default price for goods, per unit: the blueprint's inputs at base bids ÷ its yield × 135%, rounded down (plate
+    54, charge 30, magazine 13), plus 8% for each unit under 5 in stock (`goodsPrice` in items.ts).
   - Default price for a gun: its appraisal × 125%.
   - `vendor_price` overrides either.
 - `vendor_build` uses the vendor's own materials, pays no fee, and can build only what `VENDORS` in items.ts lists
-  for it.
+  for it (`E_DOESNT_SELL` otherwise; `E_NO_STOCK` when it is short of parts).
+- Ines buys meds, fuel, electronics and copper. Her meds stock halves every 12 hours (the clinic uses them).
 
 **Export.** `export` burns the material and mints scrip at `export × 100 ÷ (100 + 4 × units of that material
 exported recently)`, one unit at a time. "Recently" halves every 12 hours.
 
 **Market.**
 - A listed gun is `listed` (held by the contract); listed items are held in escrow.
-- `buy_listing` moves the price from the buyer: 96% to the seller, 2% to the gun's maker (burned for items), 2%
-  burned.
+- `buy_listing` moves the price from the buyer: ⌊2%⌋ to the gun's maker (burned for items), ⌊2%⌋ burned, and the
+  rest to the seller. Buying your own listing is refused (`E_NO_LISTING`).
 - The last five sale prices per frame and grade are kept.
 - At most 200 listings (`E_FULL`).
 
