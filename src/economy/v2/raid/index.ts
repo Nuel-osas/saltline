@@ -323,7 +323,8 @@ export function createRaid(G: Game): RaidApi {
         },
       );
     };
-    if (guard("briefing", () => briefing.beforeRun(start, G.game?.state))) return true;
+    // The opening film (../intro) plays before the first sign-on; without it, the text briefing does.
+    if (guard("briefing", () => (G.intro?.film ?? briefing).beforeRun(start, G.game?.state))) return true;
     start();
     return true;
   }

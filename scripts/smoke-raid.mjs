@@ -48,6 +48,7 @@ async function open(query, setup = {}) {
   await page.addInitScript(() => {
     localStorage.clear();
     localStorage.setItem("saltline.story.v1", JSON.stringify({ v: 1, briefed: true, heard: [], peak: 0 }));
+    localStorage.setItem("saltline.intro.v1", "1"); // the opening film has been seen: DEPLOY goes to the sign-on
   });
   await page.goto(`${base}/?game=v2&mock=1&noaudio=1${query}`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });

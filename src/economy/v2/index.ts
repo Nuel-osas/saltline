@@ -8,6 +8,7 @@ import { startScore } from "../score";
 import { createTestnetChain2 } from "./chain";
 import { resolveV2Config } from "./config";
 import { mountDock } from "./dock";
+import { startIntro } from "./intro";
 import { MOCK2_WARMUP_SECONDS, type MockChain2, createMockChain2, createMockWallet2 } from "./mock";
 import { startRaid } from "./raid";
 import { startTicksV2 } from "./tick";
@@ -59,6 +60,7 @@ export function startV2(G: Game): void {
   guard("arsenal", () => startArsenal(G)); // breaker charge, rifle butt, pickups (G.arsenal)
   guard("bailiff", () => startBailiff(G)); // the hunter (G.bailiff)
   guard("score", () => startScore(G)); // the music (G.score)
+  guard("intro", () => startIntro(G)); // the opening film on the first DEPLOY, and the drop point it leaves (G.intro)
   guard("raid", () => startRaid(G)); // sign-on, the owned gun in the shooter, loot, the invoice and its thresholds (G.raid)
   guard("dock", () => mountDock(G)); // the hub: loadout, armoury, market, vendors, the ledger
 
