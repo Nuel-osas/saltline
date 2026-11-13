@@ -160,6 +160,12 @@ deploying the contract, and `agents/README.md` covers running the brokers.
 - **Run results come from the client.** The contract enforces the manifest, the carry limit, minimum run times
   (45 s + 8 s a box) and one run at a time, but it can't see the fight. A launch would need a server that checks runs.
 - **The guest wallet's key lives in this browser's storage.** Clearing it loses the account. This is testnet only.
+- **With sign-in on (v2), the studio holds the keys.** A player signs in with an email code or Google (Privy). Their
+  NEAR key is derived on the server from that sign-in and one server secret, which is what lets the same sign-in open
+  the same account on any device, and lets the faucet give one dock pass per sign-in. It also means whoever holds
+  that secret could sign as any player. That is acceptable on testnet only; a launch would move the key to the login
+  provider's own custody. Sign-in is off unless the deployment sets `VITE_PRIVY_APP_ID`, `PRIVY_APP_ID` and
+  `WALLET_SECRET` (see `.env.example`), and the offline game never asks for it.
 - **The faucet's per-IP limits are kept in memory** on each serverless instance. The lasting guards are one
   registration per account and never funding an account that already exists.
 - **Not tested:** Safari, Firefox, touch devices, gamepads, and more than a handful of players at once (the contract
