@@ -234,7 +234,7 @@ export function createModel(G: Game, cores: number, start: { x: number; z: numbe
   const GIRDER = { y0: 0.35, y1: 1.6, z: 0.58, half: 5.7 };
   const coreY = (GIRDER.y0 + GIRDER.y1) / 2;
   const lampPivot = new T.Group();
-  lampPivot.position.set(0, -2.35, 1.55);
+  lampPivot.position.set(0, -1.2, 2.62);
   upper.add(lampPivot);
   const lensMat = new T.MeshBasicMaterial({ color: new T.Color(1, 1, 1), toneMapped: true });
   const sideLensMat = mats.emissive(0xdff0ff, 5);
@@ -264,15 +264,15 @@ export function createModel(G: Game, cores: number, start: { x: number; z: numbe
     k.cyl(M.worn, 0.05, 0.05, 2.4, -1.25, GIRDER.y1 + 3.0, -0.75, "y", 6);
     k.add(beaconMat, new T.SphereGeometry(0.11, 10, 8).translate(-1.25, GIRDER.y1 + 4.25, -0.75));
     // The cab hangs under the girder's front, on four struts, windows lit from inside: the Harbormaster is in.
-    for (const sx of [-0.75, 0.75]) for (const sz of [0.6, 1.9]) k.bar(M.dark, [sx, GIRDER.y0, Math.min(sz, 0.55)], [sx, -0.55, sz], 0.07);
-    k.box(M.dark, 1.9, 1.45, 1.6, 0, -1.3, 1.25);
-    k.box(M.yellow, 2.0, 0.16, 1.7, 0, -0.52, 1.25);
-    k.box(M.hazard, 2.0, 0.18, 1.7, 0, -2.1, 1.25);
-    k.add(glass, new T.BoxGeometry(1.55, 0.55, 0.04).translate(0, -1.05, 2.06));
-    for (const sx of [-1, 1]) k.add(glass, new T.BoxGeometry(0.04, 0.48, 1.0).translate(sx * 0.96, -1.05, 1.35));
-    // The lamp's yoke, from the cab's floor.
-    for (const sx of [-1, 1]) k.bar(M.worn, [sx * 0.62, -2.19, 1.35], [sx * 0.62, -2.35, 1.55], 0.06);
-    k.bar(M.worn, [-0.62, -2.35, 1.55], [0.62, -2.35, 1.55], 0.05);
+    for (const sx of [-0.75, 0.75]) for (const sz of [0.75, 1.95]) k.bar(M.dark, [sx, GIRDER.y0, Math.min(sz, 0.55)], [sx, -0.3, sz], 0.07);
+    k.box(M.dark, 1.9, 1.3, 1.6, 0, -0.95, 1.45);
+    k.box(M.yellow, 2.0, 0.16, 1.7, 0, -0.27, 1.45);
+    k.box(M.hazard, 2.0, 0.18, 1.7, 0, -1.62, 1.45);
+    k.add(glass, new T.BoxGeometry(1.55, 0.5, 0.04).translate(0, -0.7, 2.26));
+    for (const sx of [-1, 1]) k.add(glass, new T.BoxGeometry(0.04, 0.44, 1.0).translate(sx * 0.96, -0.7, 1.55));
+    // The lamp's yoke, from the cab's front.
+    for (const sx of [-1, 1]) k.bar(M.worn, [sx * 0.62, -1.2, 2.2], [sx * 0.62, -1.2, 2.62], 0.06);
+    k.box(M.dark, 1.4, 0.3, 0.12, 0, -1.2, 2.2);
     // Inspection lamps hung under the girder.
     for (const x of [-4.4, -2.5, 2.5, 4.4]) {
       k.bar(M.dark, [x, GIRDER.y0, 0.2], [x, GIRDER.y0 - 0.55, 0.35], 0.035);
@@ -430,7 +430,7 @@ export function createModel(G: Game, cores: number, start: { x: number; z: numbe
   const vols: Vol[] = [
     { obj: upper, min: [-GIRDER.half, GIRDER.y0, -GIRDER.z], max: [GIRDER.half, GIRDER.y1, GIRDER.z] },
     { obj: upper, min: [-1.75, GIRDER.y1, -1.5], max: [1.75, GIRDER.y1 + 1.85, 1.1] },
-    { obj: upper, min: [-0.95, -2.2, 0.45], max: [0.95, -0.45, 2.08] },
+    { obj: upper, min: [-0.95, -1.7, 0.6], max: [0.95, -0.2, 2.3] },
     { obj: upper, min: [-5.35, GIRDER.y0 - 0.55, 0.25], max: [-4.55, GIRDER.y0, 2.15] },
     { obj: upper, min: [4.55, GIRDER.y0 - 0.55, 0.25], max: [5.35, GIRDER.y0, 2.15] },
     { obj: lampPivot, min: [-0.56, -0.56, -0.45], max: [0.56, 0.56, 0.45] },
