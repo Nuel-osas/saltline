@@ -1,0 +1,361 @@
+/* The coach: the FIRST RAID panel under the objective (h- look: its kicker, its rule, the HUD's own <kbd>), the
+   arrow at the invoice meter, the lead marker, the ammo block held back until the rifle is in hand, HOW TO PLAY on
+   the title, and the one line on the first death card and the first debrief. Uses the game's tokens (src/ui.css). */
+
+/* ---- the panel: hung from the objective block, so it sits under it in every layout ---- */
+.co-panel {
+  position: absolute;
+  left: -2px;
+  top: calc(100% + 18px);
+  width: max-content;
+  max-width: min(300px, 42vw);
+  padding: 1px 0 1px 12px;
+  border-left: 2px solid var(--bone-faint);
+  opacity: 0;
+  transform: translateX(-8px);
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease,
+    border-color 0.3s;
+  pointer-events: none;
+}
+.co-panel.on {
+  opacity: 1;
+  transform: none;
+}
+/* Out of the way in a fight: still there, never between the player and what is shooting at them. */
+.co-panel.on.dim {
+  opacity: 0.18;
+}
+.co-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.co-pips {
+  display: flex;
+  gap: 3px;
+}
+.co-pips i {
+  width: 9px;
+  height: 3px;
+  background: var(--bone-faint);
+  transition: background 0.3s;
+}
+.co-pips i.done {
+  background: var(--signal);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+}
+.co-slot {
+  margin-top: 10px;
+}
+@keyframes co-in {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.co-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  animation: co-in 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.co-box {
+  position: relative;
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-top: 3px;
+  border: 1.5px solid var(--bone);
+  background: rgba(11, 13, 15, 0.45);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.co-box::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: -1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--ink);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.18s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.co-lead {
+  display: block;
+  font: 600 19px/1.08 var(--f-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bone);
+  transition: color 0.2s;
+}
+.co-tail {
+  display: block;
+  margin-top: 6px;
+  font: 500 11px/1.75 var(--f-mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(232, 228, 218, 0.86);
+  transition: opacity 0.3s;
+}
+.co-panel kbd {
+  margin: 0 2px;
+  padding: 3px 5px 2px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--signal);
+  border-color: rgba(255, 179, 71, 0.7);
+  background: rgba(11, 13, 15, 0.55);
+  text-shadow: none;
+  vertical-align: 1px;
+}
+/* A few controls side by side: FIRE left mouse / AIM right mouse / RELOAD R. */
+.co-line.rows .co-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 5px;
+}
+.co-line.rows .co-lead {
+  min-width: 62px;
+  font-size: 16px;
+  line-height: 1.2;
+}
+.co-line.rows .co-tail {
+  margin-top: 0;
+  line-height: 1.2;
+}
+.co-line.rows .co-lead kbd {
+  font-size: 11px;
+  vertical-align: 2px;
+}
+/* Done: the box fills and takes its tick, the line goes amber. */
+.co-line.ticked .co-box {
+  background: var(--signal);
+  border-color: var(--signal);
+}
+.co-line.ticked .co-box::after {
+  transform: rotate(45deg) scale(1);
+}
+.co-line.ticked .co-lead {
+  color: var(--signal);
+}
+.co-line.ticked .co-tail {
+  opacity: 0.5;
+}
+/* A once-ever moment outside the list: the alarm's red rule, no box to tick. */
+.co-panel.moment {
+  border-left-color: var(--alarm);
+}
+.co-panel.moment .h-k {
+  color: var(--alarm);
+}
+.co-panel.moment .co-box {
+  display: none;
+}
+/* A wreck is no threat: it wears the rust its marker does. */
+.co-panel[data-moment="wreck"] {
+  border-left-color: var(--rust);
+}
+.co-panel[data-moment="wreck"] .h-k {
+  color: var(--rust);
+}
+
+/* ---- the invoice step: the meter pulses, and an arrow walks up to it ---- */
+@keyframes co-nudge {
+  0%,
+  100% {
+    transform: translateX(-9px);
+  }
+  50% {
+    transform: none;
+  }
+}
+@keyframes co-pulse {
+  0%,
+  100% {
+    color: var(--bone);
+  }
+  50% {
+    color: var(--signal);
+  }
+}
+.co-arrow {
+  position: relative;
+  flex: none;
+  align-self: center;
+  width: 46px;
+  height: 14px;
+  margin-right: 2px;
+  animation: co-nudge 0.9s ease-in-out infinite;
+}
+.co-arrow::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 2px;
+  top: 6px;
+  height: 2px;
+  background: var(--signal);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.7);
+}
+.co-arrow i {
+  position: absolute;
+  right: 1px;
+  top: 2px;
+  width: 10px;
+  height: 10px;
+  border: solid var(--signal);
+  border-width: 2px 2px 0 0;
+  transform: rotate(45deg);
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.7));
+}
+.rd-inv.co-point {
+  border-right-color: var(--signal);
+}
+.rd-inv.co-point .rd-inv-n,
+.rd-inv.co-point .h-k {
+  animation: co-pulse 0.9s ease-in-out infinite;
+}
+
+/* ---- the lead marker: the one a first raid is sent to ---- */
+@keyframes co-beat {
+  0%,
+  100% {
+    box-shadow:
+      0 0 3px rgba(0, 0, 0, 0.5),
+      0 0 0 0 rgba(255, 179, 71, 0.75);
+  }
+  60% {
+    box-shadow:
+      0 0 3px rgba(0, 0, 0, 0.5),
+      0 0 0 9px rgba(255, 179, 71, 0);
+  }
+}
+.h-cm.cargo.lead,
+.h-wm.cargo.lead {
+  color: var(--signal);
+}
+.h-wm.lead {
+  opacity: 1;
+}
+.h-wm.lead i {
+  animation: co-beat 1.1s ease-out infinite;
+}
+.h-wm.lead.near {
+  opacity: 0;
+}
+
+/* ---- no rifle yet: the ammo block waits, and comes up with the gun ---- */
+.hud.co .h-ammo {
+  transition:
+    opacity 0.45s ease 0.2s,
+    transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) 0.2s;
+}
+.hud.co.co-unarmed .h-ammo {
+  opacity: 0;
+  transform: translateY(10px);
+  transition-duration: 0.01s;
+  transition-delay: 0s;
+}
+
+/* ---- HOW TO PLAY on the title ---- */
+.co-howto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.co-howto-s {
+  font: 500 10px/1 var(--f-mono);
+  letter-spacing: 0.1em;
+  color: var(--signal);
+}
+.co-howto-s:empty {
+  display: none;
+}
+.co-howto.on {
+  border-color: rgba(255, 179, 71, 0.65);
+}
+
+/* ---- the first death card and the first debrief: one line each ---- */
+.menu .co-card {
+  margin-top: 14px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--signal);
+  font: 500 11px/1.6 var(--f-mono);
+  letter-spacing: 0.05em;
+  color: var(--bone);
+}
+.menu .co-dock {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding: 0 2px 0 18px;
+  font: 600 13px/1 var(--f-label);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+@keyframes co-drop {
+  0%,
+  100% {
+    transform: translateY(-3px) rotate(45deg);
+  }
+  50% {
+    transform: translateY(2px) rotate(45deg);
+  }
+}
+.co-dock i {
+  width: 9px;
+  height: 9px;
+  margin-right: 6px;
+  border: solid var(--signal);
+  border-width: 0 2px 2px 0;
+  animation: co-drop 0.9s ease-in-out infinite;
+}
+@keyframes co-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 179, 71, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 7px rgba(255, 179, 71, 0);
+  }
+}
+.btn.co-pointed {
+  border-color: var(--signal);
+  animation: co-ring 1.2s ease-out infinite;
+}
+
+@media (max-width: 760px) {
+  .co-panel {
+    max-width: 62vw;
+  }
+  .co-lead {
+    font-size: 16px;
+  }
+  .co-arrow {
+    width: 30px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .co-arrow,
+  .co-dock i,
+  .btn.co-pointed,
+  .h-wm.lead i,
+  .rd-inv.co-point .rd-inv-n,
+  .rd-inv.co-point .h-k {
+    animation: none;
+  }
+}
