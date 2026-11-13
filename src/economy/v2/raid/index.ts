@@ -24,17 +24,20 @@ import { WRECK_SLOTS, sealPoint, wreckPoint, type Point } from "../../salvage/pl
 import { SALVAGE_SPOTS } from "../../salvage/spots";
 import { CONDITION, INVOICE, MATERIALS, RAID } from "../items";
 import type { DeathBy, Loadout, Raid, V2, Weapon } from "../types";
-import { LINES, SIGN, THRESHOLD_NOTE, THRESHOLD_WARN } from "./copy";
+import { LAPSED, LINES, SIGN, THRESHOLD_NOTE, THRESHOLD_WARN } from "./copy";
 import { createRaidHud, type Marker, type RaidHud, type Row } from "./hud";
 import { openChannel } from "./radio";
 import {
   HOLD,
   PART_OF,
+  RAID_MINUTES,
   RaidLedger,
   SHORT,
   Thresholds,
   deathBy,
+  dieWait,
   dropsPart,
+  extractWait,
   foreclosureCores,
   formatItems,
   gearUsed,
@@ -98,6 +101,8 @@ interface Pending {
   fellBack: boolean;
   /** performance.now() when the contract signed it: the raid's clock starts there, as the contract's does. */
   at: number;
+  /** Something Control says once the raid is on (why this one is off the books). */
+  note: string | null;
 }
 
 interface Live extends Pending {
@@ -118,6 +123,8 @@ interface Live extends Pending {
   /** Thresholds reached before play began (arrears carried in), fired once the player has control. */
   due: Threshold[];
   grabs: number[];
+  /** How far the lapse warnings have got: 0 none, 1 five minutes left, 2 lapsed. */
+  lapse: 0 | 1 | 2;
 }
 
 export interface RaidApi {
@@ -240,7 +247,13 @@ export function createRaid(G: Game): RaidApi {
   let live: Live | null = null;
   let tokens = 0;
 
-  const offBooks = (): Pending => ({ mode: "offbooks", raid: null, weapon: null, loadout: { weapon: null, plates: 0, charges: 0, mags: 0 }, fellBack: false, at: now() });
+  const offBooks = (note: string | null = null): Pending => ({ mode: "offbooks", raid: null, weapon: null, loadout: { weapon: null, plates: 0, charges: 0, mags: 0 }, fellBack: false, at: now(), note });
+  /** A raid nobody signed: the issue rifle, nothing to carry out, nothing sent to the chain. */
+  function goOffBooks(line: string, note: string | null) {
+    pending = offBooks(note);
+    arm(pending);
+    hud.raidCard("Off the books · Saltline Terminal", line, "Berth 4 · 05:42 · " + gunName(null));
+  }
 
   async function sign(): Promise<SignOn | { kind: "closed"; why: string }> {
     hud.signing(closing ? SIGN.settling : SIGN.title, "The Dock Office is writing you into the ledger.");
@@ -262,7 +275,7 @@ export function createRaid(G: Game): RaidApi {
   }
 
   function accept(res: Extract<SignOn, { kind: "signed" }>) {
-    pending = { mode: "signed", raid: res.raid, weapon: res.weapon, loadout: res.loadout, fellBack: res.fellBack, at: now() };
+    pending = { mode: "signed", raid: res.raid, weapon: res.weapon, loadout: res.loadout, fellBack: res.fellBack, at: now(), note: null };
     arm(pending);
     hud.raidCard(`Raid ${res.raid.raidId} · Saltline Terminal`, `On the invoice at the fence: ${money(res.raid.invoiceStart + devExtra())}`, `Berth 4 · 05:42 · ${gunName(res.weapon)}`);
   }
@@ -282,15 +295,19 @@ export function createRaid(G: Game): RaidApi {
               launch(go);
               return;
             }
-            const title = res.kind === "refused" ? SIGN.refused : res.kind === "unconfirmed" ? SIGN.unconfirmed : SIGN.refused;
+            if (res.kind === "passless") {
+              // The dock's gate has already asked for a pass and the player went on without one: no second card.
+              goOffBooks(SIGN.passlessCard, SIGN.passless);
+              launch(go);
+              return;
+            }
+            const title = res.kind === "unconfirmed" ? SIGN.unconfirmed : SIGN.refused;
             console.info(`[raid] sign-on ${res.kind}: ${res.why}`);
             hud.offer(
               title,
               res.why,
               () => {
-                pending = offBooks();
-                arm(pending);
-                hud.raidCard("Off the books · Saltline Terminal", "No raid signed. The issue rifle, and nothing to carry out.", "Berth 4 · 05:42");
+                goOffBooks("No raid signed. The issue rifle, and nothing to carry out.", null);
                 launch(go);
               },
               () => {
@@ -366,6 +383,7 @@ export function createRaid(G: Game): RaidApi {
       fence: null,
       due: [],
       grabs: [],
+      lapse: 0,
     };
     guard("radio", () => channel.reset()); // lines the last raid queued and the HUD dropped must not hold the radio
     guard("finish", () => finish(p.weapon));
@@ -728,8 +746,9 @@ export function createRaid(G: Game): RaidApi {
     const wearing = r.weapon ? `${gunTag(r.weapon)} · wear −${CONDITION.perRaid}, settling…` : "";
     hud.setDebrief(rows({ haul, gun: gunRow(null, wearing), guns: recovered, invoice: `${money(total)} · settling…`, arrears: "settling…", ledger: { k: "Ledger", v: "settling…", state: "pending" }, state: "pending" }));
     pacer.add(LINES.boat(total), { seconds: 5, ttl: WAIT.boat });
-    // The contract won't take an extraction younger than 45 s plus 8 s a container: wait it out, never send early.
-    const wait = Math.max(0, (RAID.minSeconds + RAID.perContainerSeconds * report.opened.length + 2 - seconds) * 1000);
+    // The contract won't take an extraction younger than 45 s plus 8 s a container: wait it out (and two seconds
+    // for its clock), never send early.
+    const wait = extractWait(report.opened.length, seconds - 2) * 1000;
     const sent = new Promise((ok) => setTimeout(ok, wait)).then(() => settle(() => v2.chain.extract(raid.raidId, report)));
     closing = sent.then(
       (res) => {
@@ -755,7 +774,14 @@ export function createRaid(G: Game): RaidApi {
         // Sent but not confirmed is pending, never failed: the haul may have minted.
         const state: Row["state"] = res.pending ? "pending" : "refused";
         emit("raid:extracted", { ok: false, invoice: null, arrears: null });
+        if (!res.pending) emit("stash:changed", {}); // a refusal still moved things: a lapsed raid's gun is back in the stash
         if (live?.token !== r.token) return;
+        if (!res.pending && res.code === "E_RAID_CLOSED") {
+          // The raid ran past the contract's limit: it closed itself, returned the gun and kept nothing else.
+          const gun: Row = r.weapon ? { k: "Your gun", v: `${gunTag(r.weapon)} · ${LAPSED.gun}` } : { k: "Your gun", v: "Issue rifle. Nothing lost." };
+          hud.setDebrief(rows({ haul: [LAPSED.haul], gun, guns: recovered.length ? [LAPSED.haul] : [], invoice: "unknown", arrears: "unknown", ledger: { k: "Ledger", v: LAPSED.ledger(RAID_MINUTES), state: "refused" }, state: "refused" }));
+          return;
+        }
         hud.setDebrief(rows({ haul, gun: gunRow(null, res.pending ? "unconfirmed" : "held by the contract"), guns: recovered, invoice: "unknown", arrears: "unknown", ledger: { k: "Ledger", v: res.pending ? "Unconfirmed. Check the dock." : `Refused: ${res.error || "no reason given"}`, state }, state }));
       },
       () => {
@@ -793,13 +819,23 @@ export function createRaid(G: Game): RaidApi {
           : by === "bailiff"
             ? `IMPOUNDED · ${gunTag(r.weapon)} · buy it back at the dock within ${RAID.impoundHours} hours`
             : `LEFT IN A WRECK ${zoneOf(spot)} · someone may carry it out`;
-        const rows = (state: Row["state"], invoice: string, arrears: string, ledger: Row): Row[] => [{ k: "Your gun", v: fate, state: state === "refused" ? "refused" : undefined }, { k: "Invoice", v: invoice, state }, { k: "Arrears now", v: arrears, state }, ledger];
-        hud.setDead(rows("pending", "settling…", "settling…", { k: "Ledger", v: "logging…", state: "pending" }));
-        closing = settle(() => v2.chain.die(r.raid!.raidId, report, spot, by)).then(
+        const rows = (state: Row["state"], invoice: string, arrears: string, ledger: Row, gun: Row = { k: "Your gun", v: fate, state: state === "refused" ? "refused" : undefined }): Row[] => [gun, { k: "Invoice", v: invoice, state }, { k: "Arrears now", v: arrears, state }, ledger];
+        // The contract won't log a death younger than 8 s a container opened: it is queued until then, never sent
+        // early, and the card says it is settling.
+        const wait = dieWait(report.opened.length, seconds - 2) * 1000;
+        hud.setDead(rows("pending", "settling…", "settling…", { k: "Ledger", v: wait > 0 ? `logging in ${Math.ceil(wait / 1000)} s…` : "logging…", state: "pending" }));
+        const sent = new Promise((ok) => setTimeout(ok, wait)).then(() => settle(() => v2.chain.die(r.raid!.raidId, report, spot, by)));
+        closing = sent.then(
           (res) => {
             emit("raid:died", { by, impounded: res.ok ? (res.impounded ?? null) : null });
-            if (res.ok) emit("stash:changed", {});
+            if (res.ok || !res.pending) emit("stash:changed", {});
             if (live?.token !== r.token) return;
+            if (!res.ok && !res.pending && res.code === "E_RAID_CLOSED") {
+              // The raid had run past the contract's limit before the death: the gun went back to the stash then.
+              const gun: Row = { k: "Your gun", v: r.weapon ? `${gunTag(r.weapon)} · ${LAPSED.gun}` : "Issue rifle. Nothing lost." };
+              hud.setDead(rows("refused", "unknown", "unknown", { k: "Ledger", v: LAPSED.ledger(RAID_MINUTES), state: "refused" }, gun));
+              return;
+            }
             if (res.ok) hud.setDead(rows("ok", res.invoice == null ? "unknown" : `${money(res.invoice)} scrip`, res.arrears == null ? "unknown" : `${money(res.arrears)} scrip`, txRow(v2, res.txHash)));
             else hud.setDead(rows(res.pending ? "pending" : "refused", "unknown", "unknown", { k: "Ledger", v: res.pending ? "Unconfirmed. Check the dock." : `Not logged: ${res.error || "refused"}`, state: res.pending ? "pending" : "refused" }));
           },
@@ -879,6 +915,7 @@ export function createRaid(G: Game): RaidApi {
       const res = await sign();
       hud.signDone();
       if (res.kind === "signed") accept(res);
+      else if (res.kind === "passless") goOffBooks(SIGN.passlessCard, SIGN.passless);
       return res.kind;
     },
     get state() {
@@ -907,8 +944,16 @@ export function createRaid(G: Game): RaidApi {
         // The Harbormaster's turn on the radio: in play, and over the debrief for its line about the boat.
         if (state === "playing" || state === "complete") pacer.tick();
         const r = live;
+        if (r && r.note && !r.ended && state === "playing") {
+          call(G.hud, "radio", r.note, 5); // Control, on why this one is off the books
+          r.note = null;
+        }
         if (!r || r.ended || !r.ledger) return;
         if (state === "playing") {
+          // The contract closes a raid by itself after RAID_MINUTES: say so before, and when it has.
+          const minutes = elapsed(r) / 60;
+          if (r.lapse < 1 && minutes >= RAID_MINUTES - 5 && minutes < RAID_MINUTES) ((r.lapse = 1), call(G.hud, "message", LAPSED.warn(5), 7));
+          if (r.lapse < 2 && minutes >= RAID_MINUTES) ((r.lapse = 2), call(G.hud, "message", LAPSED.now, 9));
           if (r.due.length) for (const t of r.due.splice(0)) fire(r, t);
           pickParts(r);
         }

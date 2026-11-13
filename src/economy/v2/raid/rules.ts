@@ -389,5 +389,19 @@ export class RaidLedger {
 
 const cargoLine = (weight: number, what = "CARGO"): LineItem => ({ added: weight * INVOICE.perWeight, why: `${what} · ${weight} WT` });
 
+// ---------------------------------------------------------------------------------------------------------------
+// The contract's clock (docs/CONTRACT_V2.md → Ending a raid, and the rules the live contract settled)
+
+/**
+ * A raid lapses this many minutes after start_raid: `extract` and `die` then answer E_RAID_CLOSED, the gun is back
+ * in the stash and the gear is lost. The contract's number; items.ts doesn't carry it yet.
+ */
+export const RAID_MINUTES = 30;
+
+/** Seconds still to wait before the contract will take `extract`: 45 s plus 8 s for each container opened. */
+export const extractWait = (opened: number, seconds: number) => Math.max(0, RAID.minSeconds + RAID.perContainerSeconds * opened - seconds);
+/** Seconds still to wait before it will take `die`: 8 s for each container opened. */
+export const dieWait = (opened: number, seconds: number) => Math.max(0, RAID.perContainerSeconds * opened - seconds);
+
 /** Seconds of holding E: a customs seal, a bonded one (it takes longer), a wreck. */
 export const HOLD = { seal: 1.6, bonded: 3.2, wreck: 1.6 } as const;

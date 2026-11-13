@@ -39,4 +39,16 @@ export const SIGN = {
   refused: "Raid not signed",
   unconfirmed: "Not confirmed",
   closed: "The dock office isn't answering. No raid can be signed.",
+  /** No dock pass: the raid card's line, and what Control says once the raid is on. */
+  passlessCard: "No dock pass on file. The issue rifle, and nothing to carry out.",
+  passless: "No dock pass on file, Breacher. This one is off the books: the yard's cargo stays sealed. Sign on at the dock.",
+} as const;
+
+/** What the cards say when the contract answers that the raid had lapsed (E_RAID_CLOSED). */
+export const LAPSED = {
+  warn: (minutes: number) => `The raid's papers lapse in ${minutes} minutes. Make the boat`,
+  now: "This raid has lapsed. Nothing you carry will be logged",
+  ledger: (minutes: number) => `The raid lapsed after ${minutes} minutes. Nothing was logged.`,
+  gun: "Back in your stash. The gear you brought is lost.",
+  haul: "Lost: the raid had lapsed",
 } as const;

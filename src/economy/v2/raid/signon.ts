@@ -9,13 +9,16 @@ export const SIGN_ON_MS = 8_000;
 
 export type SignOn =
   | { kind: "signed"; raid: Raid; weapon: Weapon | null; loadout: Loadout; /** The loadout's gun was gone: the issue rifle went instead. */ fellBack: boolean }
+  /** No dock pass: the contract would only refuse, so nothing was sent. The raid is off the books. */
+  | { kind: "passless" }
   | { kind: "refused"; why: string }
   | { kind: "unconfirmed"; why: string };
 
 export interface SignOnDeps {
   /** `balances`, when given, is read so gear the stash no longer holds isn't asked for. */
   chain: Pick<Chain2, "weapon" | "startRaid"> & Partial<Pick<Chain2, "balances">>;
-  wallet: Pick<Wallet2, "accountId">;
+  /** `registered`, when given, is asked first: without a dock pass nothing is sent. */
+  wallet: Pick<Wallet2, "accountId"> & Partial<Pick<Wallet2, "registered">>;
   loadout: Loadout;
   timeoutMs?: number;
   /** Resolves after `ms` (tests pass their own clock). */
@@ -39,8 +42,17 @@ export async function signOn(deps: SignOnDeps): Promise<SignOn> {
     return Promise.race<T | typeof TIMEOUT>([p, deadline]);
   };
 
+  // No dock pass: the dock's gate has asked for one and the player went in without. The contract would only refuse
+  // (E_NOT_REGISTERED), so nothing is sent. A pass that can't be read is unknown, and the contract decides.
   const account = deps.wallet.accountId();
-  if (!account) return { kind: "refused", why: "No dock pass on file. Sign on at the dock." };
+  if (!account) return { kind: "passless" };
+  if (deps.wallet.registered) {
+    try {
+      if ((await inTime(() => deps.wallet.registered!())) === false) return { kind: "passless" };
+    } catch {
+      /* unknown: the contract decides */
+    }
+  }
 
   // The gun the loadout names, as the contract holds it now. A failed read is unknown, and an unknown gun can't be
   // put in the player's hands.
@@ -89,6 +101,7 @@ export async function signOn(deps: SignOnDeps): Promise<SignOn> {
   if (res === TIMEOUT) return { kind: "unconfirmed", why: "The ledger didn't confirm in time." };
   if (!res || !res.ok) {
     if (res && res.pending) return { kind: "unconfirmed", why: "Sent, not confirmed. It may still land." };
+    if (res && res.code === "E_NOT_REGISTERED") return { kind: "passless" };
     return { kind: "refused", why: (res && res.error) || "The contract refused the raid." };
   }
   const raid = checkRaid(res.raid);
