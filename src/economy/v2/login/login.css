@@ -1,0 +1,31 @@
+/* login.css: the sign-on panel on the title (v2's sign-in gate, login/index.ts). ui.css's language: square corners,
+   letter-spaced Barlow labels, Plex Mono for what the player types. Class prefix lg-. */
+
+/* Locked: nobody deploys or opens the dock before signing on. */
+#app.lg-locked .m-screen[data-s="title"] [data-act="deploy"],
+#app.lg-locked .m-screen[data-s="title"] .d2-entry,
+#app.lg-locked .m-screen[data-s="title"] .co-howto,
+#app.lg-locked .st-replay { display: none !important; }
+
+.lg { max-width: 540px; margin: 18px 0 14px; pointer-events: auto; }
+.lg[data-state="in"] { margin: 0 0 12px; }
+.lg p { margin: 0; }
+.lg-k { display: flex; align-items: center; gap: 10px; font: 600 12px/1 var(--f-label); letter-spacing: .26em; text-transform: uppercase; color: var(--signal); padding-bottom: 10px; }
+.lg-k::before { content: ""; width: 18px; height: 2px; background: var(--signal); }
+.lg-line { font: 500 17px/1.4 var(--f-label); color: var(--bone); padding-bottom: 12px; max-width: 46ch; text-shadow: var(--shadow); }
+.lg-line b { font: 500 14px/1 var(--f-mono); }
+.lg-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.lg-input { flex: 1 1 230px; min-width: 0; height: 50px; padding: 0 14px; background: rgba(8, 9, 10, .84); border: 1px solid var(--line); border-radius: 0; color: var(--bone); font: 500 16px/1 var(--f-mono); }
+.lg-input::placeholder { color: var(--bone-faint); }
+.lg-input:focus { outline: 2px solid var(--signal); outline-offset: 0; border-color: var(--signal); }
+.lg-code { flex: 0 1 190px; letter-spacing: .4em; font-size: 20px; text-align: center; }
+.lg .btn { min-height: 50px; }
+.lg-google { flex: 1 1 100%; justify-content: center; }
+.lg-note { font: 400 13px/1.45 var(--f-mono); color: var(--signal-hot); padding: 2px 0 10px; text-shadow: var(--shadow); }
+.lg-wait { font: 400 13px/1.45 var(--f-mono); color: var(--bone-dim); padding-bottom: 14px; }
+.lg-link { background: none; border: 0; padding: 0; font: 600 12px/1.4 var(--f-label); letter-spacing: .18em; text-transform: uppercase; color: var(--bone-dim); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.lg-link:hover { color: var(--signal); }
+.lg-in { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 600 12px/1 var(--f-label); letter-spacing: .2em; text-transform: uppercase; color: var(--bone-dim); }
+.lg-in i { width: 7px; height: 7px; border-radius: 50%; background: var(--signal); }
+.lg-in b { color: var(--bone); font: 500 13px/1 var(--f-mono); letter-spacing: 0; text-transform: none; }
+.lg-in .lg-link { margin-left: 8px; }

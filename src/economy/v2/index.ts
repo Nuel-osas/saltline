@@ -10,6 +10,8 @@ import { startCoach } from "./coach";
 import { resolveV2Config } from "./config";
 import { mountDock } from "./dock";
 import { startIntro } from "./intro";
+import { type Login, startLogin } from "./login";
+import { sessionUrlFor, withToken } from "./login/session";
 import { MOCK2_WARMUP_SECONDS, type MockChain2, createMockChain2, createMockWallet2 } from "./mock";
 import { startRaid } from "./raid";
 import { startTicksV2 } from "./tick";
@@ -31,22 +33,29 @@ const guard = (what: string, fn: () => unknown) => {
   }
 };
 
-/** The chain and wallet for this config: the offline mock, or testnet with the guest wallet. */
-export function buildV2(cfg: EconomyConfig): { v2: V2; mock: MockChain2 | null } {
+/**
+ * The chain and wallet for this config: the offline mock, or testnet with the guest wallet. `token` is the sign-in
+ * token to send with a dock-pass request (login/): absent, or answering null, the request goes without one.
+ */
+export function buildV2(cfg: EconomyConfig, token?: () => Promise<string | null>): { v2: V2; mock: MockChain2 | null; guest: GuestWallet2 | null } {
   const loadout = { weapon: null, plates: 0, charges: 0, mags: 0 };
   if (cfg.mode === "mock") {
     const mock = createMockChain2(cfg.mockSeed, { warmupSeconds: MOCK2_WARMUP_SECONDS });
-    return { v2: { chain: mock, wallet: createMockWallet2(mock), loadout, raid: null }, mock };
+    return { v2: { chain: mock, wallet: createMockWallet2(mock), loadout, raid: null }, mock, guest: null };
   }
   let wallet: GuestWallet2 | null = null;
   const chain = createTestnetChain2({ config: cfg, keys: () => wallet?.signingKey() ?? null });
-  wallet = createGuestWallet2({ faucetUrl: cfg.faucetUrl, lookup: chain });
-  return { v2: { chain, wallet, loadout, raid: null }, mock: null };
+  wallet = createGuestWallet2({ faucetUrl: cfg.faucetUrl, lookup: chain, ...(token ? { fetch: withToken(cfg.faucetUrl, token) } : {}) });
+  return { v2: { chain, wallet, loadout, raid: null }, mock: null, guest: wallet };
 }
 
 export function startV2(G: Game): void {
   const cfg = resolveV2Config(import.meta.env as Record<string, unknown>, typeof location === "undefined" ? "" : location.search);
-  const { v2, mock } = buildV2(cfg);
+  // Sign-in is on when the build names a Privy app (VITE_PRIVY_APP_ID) and the game is on testnet. The offline mock
+  // never asks: it has no chain to hold a pass on.
+  const privyAppId = typeof import.meta.env.VITE_PRIVY_APP_ID === "string" ? import.meta.env.VITE_PRIVY_APP_ID.trim() : "";
+  let login: Login | null = null;
+  const { v2, mock, guest } = buildV2(cfg, async () => login?.token() ?? null);
   G.v2 = v2;
   if (mock) {
     setInterval(() => {
@@ -65,6 +74,9 @@ export function startV2(G: Game): void {
   guard("raid", () => startRaid(G)); // sign-on, the owned gun in the shooter, loot, the invoice and its thresholds (G.raid)
   guard("dock", () => mountDock(G)); // the hub: loadout, armoury, market, vendors, the ledger
   guard("coach", () => startCoach(G)); // the rifle in its crate, the first raid's checklist, the once-ever moments (G.coach)
+
+  // Last, so its lock wraps the raid's own start: nobody deploys or opens the dock before signing on (G.login).
+  if (guest && privyAppId) guard("login", () => void (login = startLogin(G, { appId: privyAppId, sessionUrl: sessionUrlFor(cfg.faucetUrl), wallet: guest })));
 
   console.info(cfg.mode === "mock" ? "[v2] offline mock: not the chain" : `[v2] testnet, contract ${cfg.contractId}`);
   G.events?.emit("v2:ready", v2);
