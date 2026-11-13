@@ -244,7 +244,7 @@ function plainMemo(d: Decision): string {
 }
 
 /** FNV-1a, so a seed and a broker always pick the same template. */
-function hash(s: string): number {
+export function hash(s: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
   return h;
