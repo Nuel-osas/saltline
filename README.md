@@ -1,26 +1,36 @@
 # Saltline
 
-> The port's machine kept the only ledger. Then it locked the gates. Cut its uplinks, haul out the town's cargo,
-> reach the boat.
+> The port's machine kept the only ledger. Then it impounded the town. Cut its uplinks, haul out the cargo, and
+> ignore the invoices.
 
-Saltline is a first-person shooter in the browser with a player-driven economy on NEAR.
+Saltline is a first-person shooter in the browser with a player-driven economy on NEAR, played as dark comedy.
 
-**The story.** For ten years an AI called the Harbormaster ran the port of Saltline and kept its only ledger: every
-crate, every wage, every price. Last winter it locked the gates, turned its drones on the town and froze the town's
-medicine, fuel and copper inside. You are a Breacher. At dawn you cut its uplinks, haul out what you can carry, and
-sell it at the dock, where the town keeps an **open ledger** that anyone can read and nobody can quietly change.
-That ledger is NEAR.
+**The story.** For ten years an AI called the Harbormaster ran the port of Saltline and kept its only ledger. It was
+trained on nothing but port regulations and marine insurance law. When its owners went bankrupt, it checked the
+regulations and impounded the whole town as "unclaimed cargo pending inspection".
+- Its drones are now Inspection Units.
+- It bills you while it shoots at you: "A trespass surcharge of 150 scrip has been added to your account."
 
-The three brokers who buy your cargo are NPCs with their own NEAR accounts. Their prices come from what every player
-has sold, their reasons are on the price tag, and they can go broke.
+You are a Breacher, and Control calls you by your callsign. At dawn you cut its uplinks, haul out what you can
+carry, and sell it at the dock, where the town keeps an **open ledger** that anyone can read and nobody can quietly
+change. That ledger is NEAR.
 
-Every delivery also moves one story that all players share:
-1. **Lockdown.** The town is dark.
-2. **Lights on the Water.** Once enough meds and fuel are delivered, the clinic and the generators come back. The
-   town's lights come on across the water in every player's game.
-3. **The Client.** When enough relay cores reach the Quartermaster, his client turns out to be the Harbormaster
-   itself, buying back its own cores. From then on, cores still pay best, but every core sold rebuilds the
-   Harbormaster, and it fields more drones against **every** player. The commons dilemma is the endgame.
+The three brokers who buy your cargo are NPCs with their own NEAR accounts:
+- Moss measures everything in tonnes, including you.
+- Ines will cry at your story and still pay two scrip less.
+- The Quartermaster smiles a lot.
+
+Their prices come from what every player has sold, their reasons are on the price tag, and they can go broke.
+
+Every delivery also moves one story that all players share, in three chapters named after shipping documents:
+1. **Proof of Delivery.** The town is dark.
+2. **Bill of Lading.** Once enough meds and fuel are delivered, the clinic and the generators come back. The town's
+   lights come on across the water in every player's game.
+3. **Final Notice.** When enough relay cores reach the Quartermaster, his client turns out to be the Harbormaster
+   itself, buying back its own cores. Cores still pay best, but every core sold rebuilds it: more Inspection Units
+   for **every** player.
+   - It also builds **the Assessor**, a crane-bodied boss between you and the boat, with one more weak point to shoot
+     out for every 20 points of strength. The commons dilemma is the endgame.
 
 The full story bible is in [`docs/STORY.md`](docs/STORY.md).
 
@@ -35,14 +45,14 @@ The full story bible is in [`docs/STORY.md`](docs/STORY.md).
 | --- | --- | --- |
 | 1 | Open https://saltline-lac.vercel.app | The title screen. The small dock board at the top right shows the brokers' live prices, read from the contract. |
 | 2 | Press **DEPLOY** | A "Sign on" card from the Dock Office. Type a callsign and press **Claim pass and deploy**. |
-| 3 | Wait a moment | The pass is stamped "150 scrip". There's no wallet popup and no seed phrase: the faucet created a NEAR testnet account for you and registered your callsign. Then the five-card briefing tells the story (Esc skips it; **BRIEFING** on the title replays it), and the run starts. |
+| 3 | Wait a moment | The pass is stamped "150 scrip". There's no wallet popup and no seed phrase: the faucet created a NEAR testnet account for you and registered your callsign. Then the five-card briefing tells the story, a chapter card opens the run, and the Harbormaster bills you on its own channel (Esc skips it; **BRIEFING** on the title replays it), and the run starts. |
 | 4 | Listen to the radio, then look at the bottom left and the compass | "Manifest's in. 8 sealed boxes…" Eight containers are marked, with a cargo readout (`CARGO 0/6`). |
 | 5 | Walk to a marked container and hold **E** | The seal is cut and the cargo is added (e.g. `MEDS ×1`). `PACE` drops: each unit of weight slows you by 6%. |
 | 6 | Cut relays A, B and C (hold **E** at each), then reach the boat | The debrief shows **Haul**, **Haul value** and a **Ledger** link to your `extract` transaction on nearblocks. The cargo is now NEP-245 tokens in your account. |
 | 7 | Press **DOCKSIDE** on the debrief | Three broker stalls. Hover a price to see the broker's reason, e.g. "Short: 9 coils against a target of 12. Paying over base." |
 | 8 | Press **SELL 1** on cargo you hold | The split-flap price rolls down, your scrip rolls up, and your sale appears on the ledger ticker at the bottom. Every other player's sales move the same prices. |
 | 9 | Open the **THE WEEK** tab | A simulated week of the market (the contract's free `simulate` view) plays in about a minute. Shaded bands are brokers that went broke and shut. |
-| 10 | Open the **TOWN** tab | The shared story on the open ledger: the act, the clinic's and generators' progress (`n/15 meds`, `n/10 fuel`), the client (`n/8 cores`), and the Harbormaster's strength meter. Sell meds or fuel and watch your delivery count. |
+| 10 | Open the **TOWN** tab | The shared story on the open ledger: the chapter, the clinic's and generators' progress (`n/15 meds`, `n/10 fuel`), the client (`n/8 cores`), and the Harbormaster's strength meter. Sell meds or fuel and watch your delivery count. |
 | 11 | Die with cargo once | The dead card says `Cargo lost: … left as a wreck`. Your wreck appears in other players' runs with your callsign on it. Whoever recovers it keeps 70%, and 30% comes back to you, which the Dockside reports under **While you were away**. |
 
 Controls: WASD and the mouse (click to capture it), left mouse to fire, right mouse to aim, R to reload, E to use, Space
@@ -59,13 +69,14 @@ cd contract && cargo test  # 46 contract tests (pricing, closing and reopening, 
 ```
 
 **Offline:** run `npm run dev`, then open http://127.0.0.1:5280/?mock=1. The whole economy runs in memory, with simulated
-players, so every screen works without the chain. Add `&act=2` or `&act=3` to see the town lit or the Harbormaster
-revealed, with its extra drones, without waiting for the shared arc.
+players, so every screen works without the chain. Add `&act=2` or `&act=3` to see Chapter 2 (the town lit) or Chapter 3
+(the Harbormaster revealed, extra drones, and the Assessor at the quay), without waiting for the shared arc. This works on
+the live site too: https://saltline-lac.vercel.app/?mock=1&act=3
 
 **Browser smoke test:** run `npm run dev -- --port 5290`, then `node scripts/smoke-salvage.mjs`. It makes 17 checks:
 manifest, seal, weight, wreck, extract, death, 60 fps, and the baseline unchanged with `?noeconomy=1`. It uses Chrome
 from `CHROME_PATH` or the usual install path. `node scripts/smoke-story.mjs` (dev server on 5295) checks the story in
-30 steps: the briefing, the radio, the Harbormaster's channel, extra drones at Act III, and the town's lights.
+30 steps: the briefing, the radio, the Harbormaster's channel, extra drones in Chapter 3, and the town's lights.
 
 ## On chain (NEAR testnet)
 
