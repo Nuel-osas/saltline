@@ -8,6 +8,7 @@ import { startSalvage } from "./salvage";
 import { startTicks, tickUrl } from "./tick";
 import { startStory } from "./story";
 import { startBoss } from "./boss";
+import { startBailiff } from "./bailiff";
 import type { Economy } from "./types";
 import { type GuestWallet, createGuestWallet } from "./wallet";
 
@@ -67,6 +68,7 @@ whenBooted()
     // before the Dockside so its key and click capture runs ahead of the deploy gate's while the briefing is up.
     startStory(G);
     startBoss(G); // Chapter 3's boss, the Assessor (src/economy/boss); guarded inside, after the story it speaks through
+    startBailiff(G); // the hunter (src/economy/bailiff, G.bailiff); guarded inside, after the story it speaks through
     // The Dockside, the between-runs market (src/economy/dockside). Guarded: if it fails, the shooter plays on.
     import("./dockside/mount").then((d) => d.mount(G)).catch((e) => console.warn("[dockside] off:", e));
 
