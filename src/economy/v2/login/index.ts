@@ -24,6 +24,11 @@ export interface LoginOptions {
   appId: string;
   sessionUrl: string;
   wallet: LoginWallet;
+  /**
+   * Where the sign-on form lives. Absent, it stands on the title where Deploy was. True (the lobby, home/), it is a
+   * sheet over the game that `open()` shows: the lobby's own Sign in buttons call that.
+   */
+  sheet?: boolean;
   /** For tests: stands in for Privy. */
   auth?: Auth;
   fetch?: typeof fetch;
@@ -36,6 +41,10 @@ export interface Login {
   who(): Who | null;
   /** The sign-in token for the faucet, or null when signed out. */
   token(): Promise<string | null>;
+  /** Shows the sign-on form (sheet mode), or puts the cursor in it. */
+  open(): void;
+  close(): void;
+  signOut(): Promise<void>;
   stop(): void;
 }
 
@@ -64,6 +73,22 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
   let stopped = false;
 
   const panel = h("section", { class: "lg", "aria-label": "Sign on", "data-state": state });
+  // Sheet mode: the form sits in a dialog over the game, closed until someone asks to sign in.
+  const shut = h("button", { class: "lg-shut", type: "button", "aria-label": "Close" }, "×");
+  const sheet = opts.sheet ? h("div", { class: "lg-sheet", role: "dialog", "aria-modal": "true", "aria-label": "Sign on", hidden: "" }, h("div", { class: "lg-box" }, shut, panel)) : null;
+  const open = () => {
+    if (sheet) sheet.hidden = false;
+    panel.querySelector<HTMLElement>("input, button")?.focus();
+  };
+  const close = () => {
+    if (sheet) sheet.hidden = true;
+  };
+  shut.onclick = close;
+  if (sheet) {
+    sheet.addEventListener("click", (e) => e.target === sheet && close());
+    sheet.addEventListener("keydown", (e) => e.key === "Escape" && close());
+    (app ?? document.body).append(sheet);
+  }
   const locked = () => state !== "in";
 
   // ---- the lock: the title's, and a start that slips past it ----
@@ -85,19 +110,19 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
   // Typing an email must not drive the game's menu.
   for (const type of ["keydown", "keyup", "keypress"] as const) panel.addEventListener(type, (e) => e.stopPropagation());
 
-  function focusPanel() {
-    panel.querySelector<HTMLElement>("input, button")?.focus();
-  }
+  const focusPanel = open;
 
   function mount() {
+    if (sheet) return true;
     const actions = document.querySelector('.m-screen[data-s="title"] .m-actions');
     if (!actions) return false;
     actions.before(panel);
     return true;
   }
+  // The title is usually there already; if not, look again for a few seconds. Never mount twice.
   let tries = 0;
-  const mounting = setInterval(() => (mount() || ++tries > 40) && clearInterval(mounting), 150);
-  mount();
+  let mounting = 0;
+  if (!mount()) mounting = window.setInterval(() => (mount() || ++tries > 40) && clearInterval(mounting), 150);
 
   // ---- drawing ----
   function set(next: LoginState, message = "") {
@@ -106,6 +131,7 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
     app?.classList.toggle("lg-locked", locked());
     panel.dataset.state = state;
     draw();
+    if (state === "in") close();
     G.events?.emit?.("login:state", { state, who });
   }
 
@@ -252,6 +278,9 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
     state: () => state,
     who: () => who,
     token: async () => (state === "in" || state === "working" ? ((await auth?.token()) ?? null) : null),
+    open,
+    close,
+    signOut,
     stop() {
       stopped = true;
       clearInterval(mounting);
@@ -259,6 +288,7 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
       ext.beforeRun = innerBeforeRun;
       app?.classList.remove("lg-locked");
       panel.remove();
+      sheet?.remove();
     },
   };
   G.login = login;
