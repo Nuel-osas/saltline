@@ -209,6 +209,9 @@ fn calls() -> Vec<(&'static str, Value, u128, &'static str)> {
             1,
             "E_NOT_REGISTERED",
         ),
+        ("vendor_build", json!({ "blueprint": "ammo", "memo": "" }), 0, "E_NOT_VENDOR"),
+        ("vendor_price", json!({ "token_id": "ammo", "price": "15", "memo": "" }), 0, "E_NOT_VENDOR"),
+        ("hm_posture", json!({ "posture": "pursuit", "memo": "" }), 0, "E_NOT_HARBORMASTER"),
     ]
 }
 
@@ -239,6 +242,11 @@ fn views(account: &str) -> Vec<(&'static str, Value)> {
         ("nft_total_supply", json!({})),
         ("nft_supply_for_owner", json!({ "account_id": account })),
         ("nft_tokens_for_owner", json!({ "account_id": account, "from_index": "0", "limit": 10 })),
+        ("nft_tokens", json!({ "from_index": "0", "limit": 50 })),
+        ("nft_metadata", json!({})),
+        ("nft_payout", json!({ "token_id": "S-000003", "balance": "1000", "max_len_payout": 10 })),
+        ("economy", json!({})),
+        ("leaderboard", json!({})),
     ]
 }
 
@@ -436,6 +444,47 @@ async fn the_whole_loop_on_the_sandbox() -> anyhow::Result<()> {
     assert_eq!(view(&contract, "paused", json!({})).await?, true);
     call(&contract, &house, "unpause", json!({}), 0).await?;
 
+    // ---- the vendors' and the Harbormaster's own accounts; the public economy; the drawing ----
+    let (made, g_vendor_build) =
+        call(&contract, &moss, "vendor_build", json!({ "blueprint": "stevedore", "memo": "Short guns sell." }), 0)
+            .await?;
+    let racked = made["weapon"]["serial"].as_str().unwrap().to_string();
+    assert_eq!(
+        (made["weapon"]["state"].as_str(), made["weapon"]["maker_callsign"].as_str()),
+        (Some("vendor"), Some("MOSS"))
+    );
+    // `serial` and `token_id` are optional: the one not meant is left out of the JSON.
+    let (_, g_vendor_price) =
+        call(&contract, &moss, "vendor_price", json!({ "serial": racked, "price": "999", "memo": "Firm." }), 0).await?;
+    call(&contract, &ines, "vendor_price", json!({ "token_id": "ammo", "price": "15", "memo": "Up a little." }), 0)
+        .await?;
+    let stalls = view(&contract, "vendors", json!({})).await?;
+    let on_rack = stalls[0]["guns"].as_array().unwrap().iter().find(|g| g["weapon"]["serial"] == racked.as_str());
+    assert_eq!(on_rack.unwrap()["price"], "999");
+    assert_eq!(
+        (stalls[1]["goods"][2]["price"].as_str(), stalls[1]["last_memo"].as_str()),
+        (Some("15"), Some("Up a little."))
+    );
+    let (villain, g_posture) =
+        call(&contract, &hm, "hm_posture", json!({ "posture": "pursuit", "memo": "Send it sooner." }), 0).await?;
+    assert_eq!((villain["posture"].as_str(), villain["bonus_drones"].as_u64()), (Some("pursuit"), Some(0)));
+    let economy = view(&contract, "economy", json!({})).await?;
+    assert_eq!((economy["players"].as_u64(), economy["weapons_alive"].as_u64()), (Some(3), Some(4)));
+    assert_eq!(economy["last_sales"][0]["prices"], json!(["100"]));
+    let board = view(&contract, "leaderboard", json!({})).await?;
+    assert_eq!(board["makers"][0]["callsign"], "ROOK");
+    assert_eq!((board["scanned"].as_u64(), board["players"].as_u64()), (Some(3), Some(3)));
+    let token = view(&contract, "nft_token", json!({ "token_id": gun })).await?;
+    let media = token["metadata"]["media"].as_str().unwrap();
+    assert!(media.starts_with("data:image/svg+xml;base64,") && media.len() <= 1_500, "{} bytes of media", media.len());
+    let rules = view(&contract, "rules", json!({})).await?;
+    assert_eq!(
+        (rules["raid"]["slow_per_weight"].as_f64(), rules["invoice"]["per_minute"].as_u64()),
+        (Some(0.06), Some(40))
+    );
+    let payout = view(&contract, "nft_payout", json!({ "token_id": gun, "balance": "1000" })).await?;
+    assert_eq!(payout["payout"][rook.id().as_str()], "1000", "ROOK made it and holds it again");
+
     // ---- every exported method: who may call it ----
     let listed: BTreeSet<String> =
         calls().iter().map(|c| c.0.to_string()).chain(views("x").iter().map(|v| v.0.to_string())).collect();
@@ -501,6 +550,12 @@ async fn the_whole_loop_on_the_sandbox() -> anyhow::Result<()> {
     );
     println!("  settle {}, export {} (player), {} (vendor)", tgas(g_settle), tgas(g_export), tgas(g_sell));
     println!(
+        "  vendor_build {}, vendor_price {}, hm_posture {}",
+        tgas(g_vendor_build),
+        tgas(g_vendor_price),
+        tgas(g_posture)
+    );
+    println!(
         "  views, dearest first: {}",
         view_gas.iter().take(8).map(|(m, g)| format!("{m} {}", tgas(*g))).collect::<Vec<_>>().join(", ")
     );
@@ -516,7 +571,8 @@ async fn the_whole_loop_on_the_sandbox() -> anyhow::Result<()> {
     for g in [g_start, g_start_gun, g_start_wreck, g_extract, g_extract_wreck, g_die] {
         assert!(g < 30_000_000_000_000, "raid calls must fit the client's 30 Tgas");
     }
-    for g in [g_build, g_list, g_buy_listing, g_settle, g_export, g_transfer] {
+    for g in [g_build, g_list, g_buy_listing, g_settle, g_export, g_transfer, g_vendor_build, g_vendor_price, g_posture]
+    {
         assert!(g < 20_000_000_000_000, "other calls must fit the client's 20 Tgas");
     }
     Ok(())
