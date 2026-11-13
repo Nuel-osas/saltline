@@ -55153,9 +55153,12 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         },
       };
     function _e() {
-      ((ve.magSize = Gv + (i.ext?.gear?.rounds || 0)), // ext: extended mag
+      let Wx = i.ext?.weapon; // ext: the equipped gun's numbers (src/economy/v2/raid); without one, the baseline rifle
+      ((ve.name = Wx?.name || mi.name), (ve.damage = Wx?.damage || H_), (ve.rpm = Wx?.rpm || O_), (ve.range = Wx?.range || V_)); // ext: the equipped gun
+      ((ve.reloadScale = Wx?.reload || 1), (ve.recoilScale = Wx?.recoil || 1)); // ext: the equipped gun
+      ((ve.magSize = (Wx?.mag || Gv) + (i.ext?.gear?.rounds || 0)), // ext: extended mag
         (ve.ammo = ve.magSize),
-        (ve.reserve = B_),
+        (ve.reserve = Wx?.reserve ?? B_), // ext: the equipped gun's magazines
         (ve.state = "idle"),
         (ve.ads = 0),
         Object.assign(k, {
@@ -55227,9 +55230,9 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         Ie.copy(Me.eye || we.position));
       let ut = null;
       try {
-        ut = i.combat.playerShot(Ie, ze, { damage: H_, range: V_ });
+        ut = i.combat.playerShot(Ie, ze, { damage: ve.damage, range: ve.range || V_ }); // ext: the equipped gun
       } catch {}
-      (ut && ut.point ? Ne.copy(ut.point) : Ne.copy(Ie).addScaledVector(ze, V_), Re(We));
+      (ut && ut.point ? Ne.copy(ut.point) : Ne.copy(Ie).addScaledVector(ze, ve.range || V_), Re(We));
       let nn = i.fx;
       (nn &&
         (nn.tracer && nn.tracer(We, Ne),
@@ -55244,7 +55247,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         Os = k.burst,
         pn = Os <= 9 ? 1 : 0.38,
         Ti = (Os < 4 ? (ae() - 0.5) * 0.0022 : Math.sin(Os * 0.57 + k.recPhase) * 0.0042 + (ae() - 0.5) * 0.002) * bt;
-      (Me.addRecoil && Me.addRecoil(0.0068 * pn * bt * (0.85 + ae() * 0.3), Ti),
+      (Me.addRecoil && Me.addRecoil(0.0068 * (ve.recoilScale || 1) * pn * bt * (0.85 + ae() * 0.3), Ti * (ve.recoilScale || 1)), // ext: the equipped gun's kick
         Me.addShake && Me.addShake(0.12 * bt),
         (k.kZ.v += 1.5 * bi(1, 0.6, k.adsE)),
         (k.kP.v += 1.5 * bt),
@@ -55280,7 +55283,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         k.reload)
       ) {
         let Je = k.reload;
-        ce.reloadT != null ? (Je.t = ce.reloadT) : (Je.t += Me);
+        ce.reloadT != null ? (Je.t = ce.reloadT) : (Je.t += Me / (ve.reloadScale || 1)); // ext: the equipped gun's reload
         let Pt = Je.t,
           Vt = (Tt, Ai) =>
             Pt >= Ai && !Je.f[Tt]
@@ -55323,7 +55326,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       if (Oe && bt)
         if (ve.ammo > 0) {
           let Je = 0;
-          for (; k.cooldown <= 0 && ve.ammo > 0 && Je < 3;) (Be(), (k.cooldown += 60 / O_), Je++);
+          for (; k.cooldown <= 0 && ve.ammo > 0 && Je < 3;) (Be(), (k.cooldown += 60 / (ve.rpm || O_)), Je++); // ext: the equipped gun's fire rate
         } else
           k.dryDone ||
             ((k.dryDone = !0),
@@ -58929,7 +58932,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         o.setMarkers(P));
     }
     function U({ skipIntro: P = !1, quick: V = !1, keepRetries: Y = !1 } = {}) {
-      if (!P && !V && a(i.ext, "beforeRun", () => U({ keepRetries: Y }))) return; // ext: the briefing plays first
+      if (!P && (!V || i.ext?.gateRetries) && a(i.ext, "beforeRun", () => U({ quick: V, keepRetries: Y }))) return; // ext: the briefing plays first; v2's sign-on (gateRetries) holds a retry too
       if (
         (Y || (c.retries = 0),
         l.show("none"),
