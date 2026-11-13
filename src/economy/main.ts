@@ -9,6 +9,7 @@ import { startTicks, tickUrl } from "./tick";
 import { startStory } from "./story";
 import { startBoss } from "./boss";
 import { startArsenal } from "./arsenal";
+import { startBailiff } from "./bailiff";
 import type { Economy } from "./types";
 import { type GuestWallet, createGuestWallet } from "./wallet";
 
@@ -69,6 +70,7 @@ whenBooted()
     startStory(G);
     startBoss(G); // Chapter 3's boss, the Assessor (src/economy/boss); guarded inside, after the story it speaks through
     startArsenal(G); // the kit: breaker charge, rifle butt, pickups and lockers (src/economy/arsenal); guarded inside
+    startBailiff(G); // the hunter (src/economy/bailiff, G.bailiff); guarded inside, after the story it speaks through
     // The Dockside, the between-runs market (src/economy/dockside). Guarded: if it fails, the shooter plays on.
     import("./dockside/mount").then((d) => d.mount(G)).catch((e) => console.warn("[dockside] off:", e));
 

@@ -10,7 +10,9 @@ import type { Line } from "./lines";
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
 type Game = any;
 
-export const CHANNEL_LABEL = { control: "Control", harbormaster: "Harbormaster" } as const;
+// `bailiff` is the Bailiff's label on the Harbormaster's channel: its lines are queued here as the Harbormaster's,
+// and src/economy/bailiff relabels the box (and adds its own class, `bf-voice`) as each one starts.
+export const CHANNEL_LABEL = { control: "Control", harbormaster: "Harbormaster", bailiff: "Bailiff" } as const;
 
 /** The HUD types a line at 58 characters a second, then holds it for its `seconds` (game.js, the radio's update). */
 export const lineMs = (text: string, seconds: number) => (text.length / 58 + seconds) * 1000;

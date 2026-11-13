@@ -1,0 +1,24 @@
+/* The Bailiff's HUD chip (src/economy/bailiff/chip.ts), under the compass where the Assessor's bar sits in mission 5
+   (they never share a run; if a debug run has both, the chip drops below the bar). Built from the game's tokens
+   (src/ui.css): the display face, the signal amber of its lens, the alarm red once the lens has you. */
+.bf-chip { position: absolute; top: calc(84px + var(--sat)); left: 50%; display: flex; align-items: center; gap: 9px; padding: 6px 12px 5px 9px; transform: translate(-50%, -6px); opacity: 0;
+  white-space: nowrap; color: var(--signal); background: rgba(11, 13, 15, .58); border-left: 2px solid currentColor; box-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+  transition: opacity .35s ease, transform .35s ease, color .2s; pointer-events: none; }
+.bf-chip.on { opacity: 1; transform: translate(-50%, 0); }
+.hud:has(.as-bar.on) .bf-chip { top: calc(152px + var(--sat)); }
+.bf-arrow { width: 16px; height: 16px; flex: none; transition: transform .12s linear; }
+.bf-arrow::before { content: ''; display: block; width: 0; height: 0; margin: 1px auto 0; border-left: 5.5px solid transparent; border-right: 5.5px solid transparent; border-bottom: 13px solid currentColor; filter: drop-shadow(0 0 3px rgba(0, 0, 0, .6)); }
+.bf-name { font: 800 15px/1 var(--f-display); letter-spacing: .22em; margin-right: -.1em; text-transform: uppercase; color: var(--bone); }
+.bf-dist { min-width: 3.1em; text-align: right; font: 500 13px/1 var(--f-mono); letter-spacing: .04em; font-variant-numeric: tabular-nums; color: currentColor; }
+.bf-tag { font: 600 10px/1 var(--f-label); font-style: normal; letter-spacing: .24em; text-transform: uppercase; color: var(--st-cold, #8fd3ff); }
+.bf-tag:empty { display: none; }
+.bf-chip.sees { color: var(--alarm); animation: bf-seen 1s steps(2, jump-none) infinite; }
+.bf-chip.down { color: rgba(232, 228, 218, .5); } .bf-chip.down .bf-name { color: rgba(232, 228, 218, .6); }
+@keyframes bf-seen { 0% { box-shadow: 0 1px 4px rgba(0, 0, 0, .45), 0 0 0 rgba(255, 90, 64, 0); } 100% { box-shadow: 0 1px 4px rgba(0, 0, 0, .45), 0 0 14px rgba(255, 90, 64, .35); } }
+/* Its lines play on the Harbormaster's channel under its own label (story/radio.ts, CHANNEL_LABEL.bailiff): the
+   channel's cold type, marked in the hazard amber of the machine that is speaking. */
+.comms.bf-voice .comms-who { color: var(--signal); }
+.comms.bf-voice .comms-who::before { background: var(--signal); }
+.comms.bf-voice .comms-t { box-shadow: inset 2px 0 0 var(--signal), 0 0 18px rgba(255, 179, 71, .12); }
+@media (max-width: 760px) { .bf-chip { top: calc(146px + var(--sat)); padding: 5px 10px 4px 8px; } .bf-name { font-size: 13px; letter-spacing: .16em; } }
+@media (prefers-reduced-motion: reduce) { .bf-chip { transition-duration: .01ms; } .bf-chip.sees { animation: none; } }
