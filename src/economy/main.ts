@@ -8,8 +8,8 @@ import { startSalvage } from "./salvage";
 import { startTicks, tickUrl } from "./tick";
 import { startStory } from "./story";
 import { startBoss } from "./boss";
-import { startArsenal } from "./arsenal";
-import { startBailiff } from "./bailiff";
+import { readGame } from "./v2/config";
+import { startV2 } from "./v2";
 import type { Economy } from "./types";
 import { type GuestWallet, createGuestWallet } from "./wallet";
 
@@ -52,6 +52,8 @@ function whenBooted(): Promise<GameContext> {
 whenBooted()
   .then((G) => {
     if (G.params && typeof G.params === "object" && "noeconomy" in G.params) return; // ?noeconomy: the baseline game
+    // v2 (docs/GAME.md) runs instead of everything below when this page load asks for it: ?game=v2, or VITE_GAME=v2.
+    if (readGame(import.meta.env as Record<string, unknown>, location.search) === "v2") return startV2(G);
     const cfg = readConfig();
     const { economy, mock } = buildEconomy(cfg);
     G.economy = economy;
@@ -69,8 +71,6 @@ whenBooted()
     // before the Dockside so its key and click capture runs ahead of the deploy gate's while the briefing is up.
     startStory(G);
     startBoss(G); // Chapter 3's boss, the Assessor (src/economy/boss); guarded inside, after the story it speaks through
-    startArsenal(G); // the kit: breaker charge, rifle butt, pickups and lockers (src/economy/arsenal); guarded inside
-    startBailiff(G); // the hunter (src/economy/bailiff, G.bailiff); guarded inside, after the story it speaks through
     // The Dockside, the between-runs market (src/economy/dockside). Guarded: if it fails, the shooter plays on.
     import("./dockside/mount").then((d) => d.mount(G)).catch((e) => console.warn("[dockside] off:", e));
 
