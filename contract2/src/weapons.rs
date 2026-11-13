@@ -123,7 +123,9 @@ impl Saltline {
         self.burn(Holder::Player(ix), t, 1);
         mt::emit_burn(vec![BurnLog::one(&me, t, 1, Some("fitted"))]);
         self.gun_mut(n).mods |= mod_bit(t);
-        let text = format!("{callsign} fitted {} to {serial}.", TOKENS[t].name.to_lowercase());
+        let name = TOKENS[t].name.to_lowercase();
+        let article = if name.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+        let text = format!("{callsign} fitted {article} {name} to a {}.", self.gun(n).label());
         self.record(
             "fit",
             &me,
@@ -161,7 +163,8 @@ impl Saltline {
         mt::emit_transfer(vec![TransferLog::one(&me, &moss, SCRIP, cost, Some("repair"))]);
         mt::emit_burn(vec![BurnLog::one(&me, COPPER, copper, Some("repair"))]);
         self.gun_mut(n).condition = (condition + points) as u8;
-        let text = format!("Moss brought {callsign}'s {serial} up to {} for {cost}.", condition + points);
+        let text =
+            format!("Moss brought {callsign}'s {} up to {} for {cost}.", self.gun(n).label(), condition + points);
         self.record(
             "repair",
             &me,
