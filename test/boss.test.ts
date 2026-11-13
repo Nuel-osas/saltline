@@ -439,6 +439,7 @@ describe("the boss in the game", () => {
     await flush();
     expect(b.fight).toBeNull();
     expect(body.dispose).toHaveBeenCalled();
+    expect(made()!.bar.dispose).toHaveBeenCalled(); // its bar leaves the HUD, not just hides
     b.dispose();
     expect(G.ext.raycast).toBeUndefined();
     expect(G.ext.extractBlocked).toBeUndefined();

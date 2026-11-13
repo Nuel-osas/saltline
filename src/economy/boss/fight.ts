@@ -579,7 +579,7 @@ export function createFight(deps: FightDeps, opts: { cores: number; callsign: st
       disposed = true;
       bolts.dispose();
       body.dispose();
-      bar.hide();
+      bar.dispose();
     },
   };
 }
