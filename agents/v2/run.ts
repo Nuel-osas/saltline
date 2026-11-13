@@ -39,7 +39,7 @@ import {
 import { METHOD_NOT_FOUND, type NearPort, nearKitPort } from "../../src/economy/chain.js";
 import { ConfigError, resolveConfig } from "../../src/economy/config.js";
 import { type AgentCalls, createTestnetChain2 } from "../../src/economy/v2/chain.js";
-import type { Chain2, EconomyView, TxResult } from "../../src/economy/v2/types";
+import type { Chain2, EconomyView, Posture, TxResult } from "../../src/economy/v2/types";
 import {
   CHARACTER_IDS,
   type CharacterId,
@@ -95,6 +95,17 @@ export interface RoundDeps2 {
   voice?: VoiceConfig | null;
   /** --loop only: refused moves wait out the hour here. */
   bench?: Benched;
+  /** This runner's own record of the Harbormaster's last change, for when the ledger's line has scrolled away. */
+  memory?: PostureMemory;
+}
+
+/**
+ * The Harbormaster never changes within three hours of its last change, and reads when that was from the ledger's
+ * `posture` line. `recent` keeps 64 lines, so on a busy dock that line is gone in minutes. A runner that signed the
+ * change itself may keep it here; a runner that didn't (a cold start, another process) doesn't know, and holds.
+ */
+export interface PostureMemory {
+  last: { posture: Posture; at: number } | null;
 }
 
 /** The account each character signs as: a sibling of the contract (`v2.saltline.testnet` → `moss.saltline.testnet`). */
@@ -151,7 +162,10 @@ async function turn(who: CharacterId, accountId: string, decision: Decision2, d:
 
   const r = await send(d.act(key.key), move, memo);
   const tx = r.txHash ? { txHash: r.txHash } : {};
-  if (r.ok) return { ...line, status: "sent", ...tx };
+  if (r.ok) {
+    if (move.action === "posture" && d.memory) d.memory.last = { posture: move.posture, at: d.now() };
+    return { ...line, status: "sent", ...tx };
+  }
   if (r.pending) {
     d.bench?.put(benchKey(who, "any"), 15 * 60_000);
     return { ...line, status: "pending", ...tx, note: "sent but not confirmed; check the tx before acting again" };
@@ -185,7 +199,7 @@ export async function runRoundV2(d: RoundDeps2): Promise<Line2[]> {
       if (who === "harbormaster") {
         if (!hm.ok || !recent.ok) lines.push(unknown(who, !hm.ok ? hm.why : (recent as { why: string }).why));
         else {
-          const board: HarbormasterBoard = { harbormaster: hm.value, recent: recent.value };
+          const board: HarbormasterBoard = { harbormaster: hm.value, recent: recent.value, now, remembered: d.memory?.last ?? null };
           lines.push(await turn(who, hm.value.accountId, decideHarbormaster(board), d));
         }
         continue;
@@ -281,6 +295,7 @@ export async function main(argv: readonly string[], env: Record<string, string |
     : null;
   const chain = testnetDeps({ config });
   const bench = opts.mode === "loop" ? new Benched() : undefined;
+  const memory: PostureMemory = { last: null };
 
   const rpc = new URL(config.rpcUrls[0]).host + (config.rpcUrls.length > 1 ? ` (+${config.rpcUrls.length - 1} fallback)` : "");
   say(
@@ -297,6 +312,7 @@ export async function main(argv: readonly string[], env: Record<string, string |
       dryRun: opts.dryRun,
       voice,
       bench,
+      memory,
     });
     for (const l of lines) say(`${startedAt}  ${formatLine2(l, secrets)}`);
     return exitCode(lines);

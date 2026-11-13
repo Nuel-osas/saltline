@@ -16,7 +16,7 @@
 // response or a log. Fails closed: no keys means 503, and a broker whose state can't be read holds (the round's own
 // rule).
 import { DEFAULT_CONTRACT_ID, ENV_KEYS, type KeyOptions, type Line, createBoard, findKey, findKeyNamed, redact, runRound } from "../agents/brokers.js";
-import { DEFAULT_CONTRACT_ID_V2, ENV_KEYS_V2, type Line2, runRoundV2, testnetDeps } from "../agents/v2/run.js";
+import { DEFAULT_CONTRACT_ID_V2, ENV_KEYS_V2, type Line2, type PostureMemory, runRoundV2, testnetDeps } from "../agents/v2/run.js";
 import { nearKitPort } from "../src/economy/chain.js";
 import { resolveConfig } from "../src/economy/config.js";
 
@@ -42,11 +42,14 @@ interface Pace<L> {
 /** Per server instance: a cold start forgets it, which costs at most one extra round. v1 and v2 each keep their own. */
 const v1: Pace<Line> = { lastRound: 0, running: null };
 const v2: Pace<Line2> = { lastRound: 0, running: null };
+/** When this instance last changed the Harbormaster's posture. A cold start forgets it, and then only the ledger says. */
+const postures: PostureMemory = { last: null };
 
 /** For tests. */
 export function resetTick() {
   v1.lastRound = v2.lastRound = 0;
   v1.running = v2.running = null;
+  postures.last = null;
 }
 
 // Env keys only: on a server there is no keychain to fall back to, so a missing key skips that broker.
@@ -72,7 +75,7 @@ function defaultRoundV2(env: TickEnv, seed: number): Promise<Line2[]> {
     { VITE_NEAR_NETWORK: env.NEAR_NETWORK, VITE_CONTRACT_ID: env.CONTRACT_ID_V2?.trim() || DEFAULT_CONTRACT_ID_V2, VITE_NEAR_RPC: env.NEAR_RPC },
     "",
   );
-  return runRoundV2({ ...testnetDeps({ config }), key: (who, accountId) => findKeyNamed(ENV_KEYS_V2[who], accountId, env, envOnly), seed });
+  return runRoundV2({ ...testnetDeps({ config }), key: (who, accountId) => findKeyNamed(ENV_KEYS_V2[who], accountId, env, envOnly), seed, memory: postures });
 }
 
 const wantsV2 = (request: Request): boolean => {

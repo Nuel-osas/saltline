@@ -20,15 +20,16 @@ import {
   describeMove2,
   fill2,
   floorPrice,
+  lastChange,
   memoFor2,
   moss,
   openingPrice,
   raidEndings,
 } from "../agents/v2/characters";
-import { type Acts, ENV_KEYS_V2, type Line2, type RoundDeps2, accountFor, formatLine2, main, runRoundV2 } from "../agents/v2/run";
+import { type Acts, ENV_KEYS_V2, type Line2, type PostureMemory, type RoundDeps2, accountFor, formatLine2, main, runRoundV2 } from "../agents/v2/run";
 import { METHOD_NOT_FOUND } from "../src/economy/chain";
-import { MOCK2_STORAGE_KEY, type MockChain2, createMockChain2 } from "../src/economy/v2/mock";
-import type { RaidReport, Vendor } from "../src/economy/v2/types";
+import { MOCK2_HARBORMASTER, MOCK2_STORAGE_KEY, type MockChain2, createMockChain2 } from "../src/economy/v2/mock";
+import type { LedgerEvent, RaidReport, Vendor } from "../src/economy/v2/types";
 
 const T0 = Date.UTC(2026, 10, 13, 12, 0, 0);
 const HOUR = 3_600_000;
@@ -380,26 +381,91 @@ describe("the Harbormaster", () => {
     expect(h.bailiffAt).toBeLessThan(1200);
     expect(w.signed.at(-1)).toBe(h.accountId);
     expect((await w.round()).harbormaster).toMatchObject({ status: "held", action: "hold" });
-
-    // Two wrecks against three boats: no longer more than twice. Back to patrols.
-    await w.raid("die");
-    await w.raid("die");
-    const back = (await w.round()).harbormaster;
-    expect(back).toMatchObject({ status: "sent", action: "posture patrols" });
-    expect(TEMPLATES2.harbormaster.patrols).toContain(back.memo);
-    expect((await w.mock.harbormaster()).posture).toBe("patrols");
   });
 
-  it("stands pursuit down when its balance has decayed under the strength it needs", async () => {
+  it("goes back to patrols only under 1.2 extractions a death, and never within three hours of its last change", async () => {
     const w = world();
     await w.player();
     for (let i = 0; i < 3; i++) await w.raid("extract");
     w.mock.debug.payHarbormaster(700);
     expect((await w.round()).harbormaster.action).toBe("posture pursuit");
-    w.advance(24 * HOUR); // two half-lives
+    // Two wrecks against three boats is no longer "more than twice", but it isn't under 1.2 either: pursuit stands.
+    await w.raid("die");
+    await w.raid("die");
+    const stands = (await w.round()).harbormaster;
+    expect(stands).toMatchObject({ status: "held", action: "hold" });
+    expect(stands.note).toBeUndefined();
+    // A third wreck, 3 against 3: patrols are due, but the posture changed minutes ago.
+    await w.raid("die");
+    const early = (await w.round()).harbormaster;
+    expect(early).toMatchObject({ status: "held", action: "hold" });
+    expect(early.note).toMatch(/^patrols is due, but the posture changed \d+ minutes ago and stands for 3 hours$/);
+    w.advance(3 * HOUR - 10 * 60_000);
+    expect((await w.round()).harbormaster.status).toBe("held"); // 2 h 56 min since the change
+    w.advance(10 * 60_000);
+    const back = (await w.round()).harbormaster;
+    expect(back).toMatchObject({ status: "sent", action: "posture patrols" });
+    expect(TEMPLATES2.harbormaster.patrols).toContain(back.memo);
+    expect((await w.mock.harbormaster()).posture).toBe("patrols");
+    // And it doesn't go straight back: 3 against 3 isn't more than twice.
+    expect((await w.round()).harbormaster).toMatchObject({ status: "held", action: "hold" });
+    expect(w.signed.filter((a) => a === MOCK2_HARBORMASTER)).toHaveLength(2);
+  });
+
+  it("stands pursuit down when its strength drops under 15, not as soon as it is under the 25 it started on", async () => {
+    const w = world();
+    await w.player();
+    for (let i = 0; i < 3; i++) await w.raid("extract");
+    w.mock.debug.payHarbormaster(700);
+    expect((await w.round()).harbormaster.action).toBe("posture pursuit");
+    w.advance(10 * HOUR);
+    const mid = (await w.mock.harbormaster()).strength;
+    expect(mid).toBeLessThan(HM.minStrength);
+    expect(mid).toBeGreaterThanOrEqual(HM.backStrength);
+    expect((await w.round()).harbormaster).toMatchObject({ status: "held", action: "hold" });
+    w.advance(14 * HOUR); // two half-lives in all
+    expect((await w.mock.harbormaster()).strength).toBeLessThan(HM.backStrength);
     const l = (await w.round()).harbormaster;
     expect(l).toMatchObject({ status: "sent", action: "posture patrols" });
-    expect(l.memo).toMatch(/[Rr]eceipts/);
+    expect(TEMPLATES2.harbormaster.unfunded).toContain(l.memo!.replace(/\d+/, "{balance}"));
+  });
+
+  it("doesn't change when the ledger no longer shows its last change, unless this runner signed that change itself", async () => {
+    const w = world();
+    await w.player();
+    for (let i = 0; i < 3; i++) await w.raid("extract");
+    w.mock.debug.payHarbormaster(700);
+    const memory: PostureMemory = { last: null };
+    expect((await w.round({ memory })).harbormaster.action).toBe("posture pursuit");
+    expect(memory.last).toEqual({ posture: "pursuit", at: w.mock.now() });
+    w.advance(4 * HOUR);
+    // A busy dock: 70 lines push the posture line, and the old raids, off the 64 the ledger keeps. Then one wreck.
+    for (let i = 0; i < 35; i++) expect((await w.mock.cancelListing((await w.mock.listItem("copper", 1, 50)).id!)).ok).toBe(true);
+    await w.raid("die");
+    const recent = await w.mock.recent(64);
+    expect(recent).toHaveLength(64);
+    expect(recent.some((e) => e.kind === "posture")).toBe(false);
+    // A runner that didn't sign it (a cold start): patrols are due, and it can't tell when the posture last changed.
+    const cold = (await w.round()).harbormaster;
+    expect(cold).toMatchObject({ status: "held", action: "hold", note: "patrols is due, but the ledger no longer shows when the posture last changed" });
+    expect((await w.round({ memory: { last: { posture: "patrols", at: T0 } } })).harbormaster.status).toBe("held"); // remembers a different posture
+    // The runner that signed it remembers, and four hours have passed.
+    expect((await w.round({ memory })).harbormaster).toMatchObject({ status: "sent", action: "posture patrols" });
+    expect(memory.last?.posture).toBe("patrols");
+  });
+
+  it("knows when it last changed from the ledger's line, from never having moved, or from a ledger old enough", async () => {
+    const never = await world().mock.harbormaster();
+    expect(never.lastMemo).toBeNull();
+    const moved = { ...never, lastMemo: "Collections have been prioritised." };
+    const line = (kind: LedgerEvent["kind"], at: number): LedgerEvent => ({ kind, at, account: "x", text: "" });
+    expect(lastChange({ harbormaster: never, recent: [line("sale", T0 - 1)], now: T0 })).toBe("never");
+    expect(lastChange({ harbormaster: moved, recent: [line("sale", T0 - 1), line("posture", T0 - 5), line("posture", T0 - 9)], now: T0 })).toBe(T0 - 5);
+    expect(lastChange({ harbormaster: moved, recent: [line("sale", T0 - 1), line("sale", T0 - 3 * HOUR + 1)], now: T0 })).toBeNull();
+    expect(lastChange({ harbormaster: moved, recent: [line("sale", T0 - 1), line("sale", T0 - 3 * HOUR)], now: T0 })).toBe(T0 - 3 * HOUR);
+    expect(lastChange({ harbormaster: moved, recent: [], now: T0 })).toBeNull();
+    expect(lastChange({ harbormaster: { ...moved, posture: "pursuit" }, recent: [], now: T0, remembered: { posture: "pursuit", at: T0 - 7 } })).toBe(T0 - 7);
+    expect(lastChange({ harbormaster: moved, recent: [], now: T0, remembered: { posture: "pursuit", at: T0 - 7 } })).toBeNull(); // changed since by someone else
   });
 });
 
@@ -449,7 +515,7 @@ describe("a round", () => {
     expect(checkMove2("moss", board, { action: "export", tokenId: "copper", amount: 999 })).toMatch(/holds/);
     expect(checkMove2("moss", { ...board, quotes: [] }, { action: "export", tokenId: "copper", amount: 1 })).toMatch(/no price/);
     expect(checkMove2("moss", board, { action: "posture", posture: "pursuit" })).toMatch(/Harbormaster/);
-    const h = { harbormaster: await w.mock.harbormaster(), recent: [] };
+    const h = { harbormaster: await w.mock.harbormaster(), recent: [], now: T0 };
     expect(checkMove2("harbormaster", h, { action: "posture", posture: "patrols" })).toMatch(/already/);
     expect(checkMove2("harbormaster", h, { action: "build", blueprint: "pilot" })).toMatch(/only sets its posture/);
     // A board whose parts vanished between the rules and the check: the round holds and says why.
@@ -655,14 +721,19 @@ describe("48 hours on the dock", () => {
     const w = world(11, true);
     const log: string[] = [];
     const sent: Line2[] = [];
-    const postures: string[] = [];
+    const postures: { action: string; at: number }[] = [];
     /** When these agents moved: nothing else may sign as the three characters (the mock's own agents are parked). */
     const mine = new Set<number>();
+    // One runner for the 48 hours, as `--loop` is: it remembers the posture changes it signed. The dock is busy
+    // enough that the ledger's own `posture` line is gone from `recent` within minutes.
+    const memory: PostureMemory = { last: null };
+    let heldForDwell = 0;
     for (let step = 1; step <= 48 * 6; step++) {
       w.advance(10 * 60_000);
       w.mock.ambient(600); // the other players raid, die, trade and buy for those ten minutes
       expect((await w.mock.recent(64)).filter((e) => /^(Moss|Ines|The Harbormaster) /.test(e.text) && e.kind !== "export").every((e) => mine.has(e.at))).toBe(true);
-      const lines = await runRoundV2(w.deps({ seed: step }));
+      const lines = await runRoundV2(w.deps({ seed: step, memory }));
+      if (/stands for 3 hours/.test(lines[2].note ?? "")) heldForDwell++;
       expect(lines).toHaveLength(3);
       for (const l of lines) {
         expect(["sent", "held"]).toContain(l.status); // never refused: every move added up against the mock's rules
@@ -671,7 +742,7 @@ describe("48 hours on the dock", () => {
         if (l.status !== "sent") continue;
         mine.add(w.mock.now());
         sent.push(l);
-        if (l.who === "harbormaster") postures.push(l.action);
+        if (l.who === "harbormaster") postures.push({ action: l.action, at: w.mock.now() });
         const at = `+${String(Math.floor(step / 6)).padStart(2, "0")}:${String((step % 6) * 10).padStart(2, "0")}`;
         log.push(`${at}  ${formatLine2(l).replace(/\s+tx mock-\d+/, "")}`);
       }
@@ -693,10 +764,11 @@ describe("48 hours on the dock", () => {
       [
         `48 simulated hours, seed 11, ${sent.length} moves in 288 rounds`,
         JSON.stringify(tally),
+        `posture changes ${postures.length}; rounds a change was due and waited out the 3 hours: ${heldForDwell}`,
         `end: Harbormaster ${h.posture}, balance ${h.balance}, strength ${h.strength}; guns built ${e.weaponsBuilt}, alive ${e.weaponsAlive}; scrip supply ${e.scripSupply}`,
         ...log.slice(0, 14),
         "…",
-        ...log.filter((l) => l.includes("harbormaster")).slice(0, 6),
+        ...log.filter((l) => l.includes("harbormaster")),
         "…",
         ...log.slice(-6),
       ].join("\n"),
@@ -704,7 +776,15 @@ describe("48 hours on the dock", () => {
     expect(tally["moss builds a gun"]).toBeGreaterThan(0);
     expect(tally["moss prices a gun"]).toBeGreaterThan(0);
     expect(tally["ines restocks"]).toBeGreaterThan(0);
-    expect(postures.length).toBeGreaterThan(0);
+    // A handful of posture changes, not one every time the count crosses a line: they alternate, and no two are
+    // within three hours (so 48 hours can hold 16 at the very most).
+    expect(postures.length).toBeGreaterThanOrEqual(2);
+    expect(postures.length).toBeLessThanOrEqual(12);
+    expect(heldForDwell).toBeGreaterThan(0);
+    for (let i = 1; i < postures.length; i++) {
+      expect(postures[i].action).not.toBe(postures[i - 1].action);
+      expect(postures[i].at - postures[i - 1].at).toBeGreaterThanOrEqual(HM.dwellHours * HOUR);
+    }
     for (const v of await w.mock.vendors()) for (const g of v.guns) expect(g.price).toBeGreaterThanOrEqual(floorPrice(g.weapon));
   }, 120_000);
 });

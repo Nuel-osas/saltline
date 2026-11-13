@@ -74,10 +74,16 @@ export const EXPORT_MIN_PCT = 50;
 export const HM = {
   /** Raid endings it looks back over. */
   window: 20,
-  /** Pursuit when extractions are more than this many times the deaths… */
+  /** To pursuit when extractions are more than this many times the deaths… */
   ratio: 2,
   /** …and its strength is at least this. */
   minStrength: 25,
+  /** Back to patrols only when extractions fall under this many tenths of the deaths (1.2 times)… */
+  backRatioTenths: 12,
+  /** …or its strength drops under this. */
+  backStrength: 15,
+  /** It never changes within this long of its last change. */
+  dwellHours: 3,
 } as const;
 
 /** The one thing a character does this round. */
@@ -100,8 +106,8 @@ export type Why2 =
   | "restock" // Ines: a shelf under its line
   | "thin" // Ines: the clinic's till is thin, surplus shipped
   | "pursuit" // The Harbormaster: Breachers are getting away and it has the strength
-  | "patrols" // The Harbormaster: they aren't
-  | "unfunded" // The Harbormaster: they are, and it can't afford pursuit
+  | "patrols" // The Harbormaster: they no longer are
+  | "unfunded" // The Harbormaster: it can no longer afford pursuit
   | "steady"; // nothing to do
 
 export interface Decision2 {
@@ -125,8 +131,11 @@ export interface VendorBoard {
 }
 export interface HarbormasterBoard {
   harbormaster: HarbormasterView;
-  /** `recent`, newest first. */
+  /** `recent`, newest first: everything the ledger still shows. */
   recent: LedgerEvent[];
+  now: number;
+  /** A change this runner signed itself, and when, if it remembers one. */
+  remembered?: { posture: Posture; at: number } | null;
 }
 
 const hold = (say: Decision2["say"] = {}, note?: string): Decision2 => ({ move: { action: "hold" }, why: "steady", say, ...(note ? { note } : {}) });
@@ -268,15 +277,41 @@ export function raidEndings(recent: LedgerEvent[]): { extractions: number; death
   return { extractions, deaths: ends.length - extractions };
 }
 
+/**
+ * When the posture last changed, as far as can be known: a time it changed at or before, "never", or null (unknown).
+ * The ledger's newest `posture` line says. Without one, it is known only if the Harbormaster has never signed a
+ * posture (it has no memo), or every line the ledger still shows is older than the dwell (so the change is older
+ * still), or this runner signed the standing posture itself and remembers when.
+ */
+export function lastChange(b: HarbormasterBoard): number | "never" | null {
+  const lines = b.recent.filter((e) => e.kind === "posture");
+  if (lines.length) return Math.max(...lines.map((e) => e.at));
+  if (b.harbormaster.lastMemo === null) return "never";
+  const oldest = b.recent.length ? Math.min(...b.recent.map((e) => e.at)) : null;
+  if (oldest !== null && b.now - oldest >= HM.dwellHours * HOUR_MS) return oldest;
+  if (b.remembered && b.remembered.posture === b.harbormaster.posture) return b.remembered.at;
+  return null;
+}
+
 export function harbormaster(b: HarbormasterBoard): Decision2 {
   const h = b.harbormaster;
   const { extractions, deaths } = raidEndings(b.recent);
-  const escaping = extractions > HM.ratio * deaths;
-  const want: Posture = escaping && h.strength >= HM.minStrength ? "pursuit" : "patrols";
   const say = { out: extractions, lost: deaths, raids: extractions + deaths, balance: h.balance, strength: h.strength };
-  // It moves only when the posture changes.
-  if (want === h.posture) return hold(say);
-  return { move: { action: "posture", posture: want }, why: want === "pursuit" ? "pursuit" : escaping ? "unfunded" : "patrols", say };
+  // Two lines, not one, so it doesn't flip each time the count crosses a single threshold.
+  const toPursuit = h.posture === "patrols" && extractions > HM.ratio * deaths && h.strength >= HM.minStrength;
+  const unfunded = h.posture === "pursuit" && h.strength < HM.backStrength;
+  const contained = h.posture === "pursuit" && extractions * 10 < HM.backRatioTenths * deaths;
+  // It moves only when the posture changes…
+  if (!toPursuit && !unfunded && !contained) return hold(say);
+  const want: Posture = toPursuit ? "pursuit" : "patrols";
+  const why: Why2 = toPursuit ? "pursuit" : unfunded ? "unfunded" : "patrols";
+  // …and never within three hours of its last change. Not knowing when that was means no change.
+  const last = lastChange(b);
+  if (last === null) return hold(say, `${want} is due, but the ledger no longer shows when the posture last changed`);
+  if (last !== "never" && b.now - last < HM.dwellHours * HOUR_MS) {
+    return hold(say, `${want} is due, but the posture changed ${Math.max(0, Math.floor((b.now - last) / 60_000))} minutes ago and stands for ${HM.dwellHours} hours`);
+  }
+  return { move: { action: "posture", posture: want }, why, say };
 }
 
 // ---------------------------------------------------------------------------------------------------------------

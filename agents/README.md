@@ -212,8 +212,16 @@ Neither ships while the desk pays under half the book price for that material (`
 **The Harbormaster** (polite, procedural, sincere):
 
 1. It reads the last 20 raid endings in `recent`: `extract` lines against `wreck` and `impound` lines.
-2. `pursuit` when extractions are more than twice the deaths and its strength is at least 25; otherwise `patrols`.
-3. It signs only when the posture changes: "Recoveries are below forecast. Collections have been prioritised."
+2. It goes to `pursuit` when extractions are more than twice the deaths and its strength is at least 25.
+3. It goes back to `patrols` only when extractions fall under 1.2 times the deaths, or its strength drops under 15.
+4. It never changes within 3 hours of its last change. It reads that time from the newest `posture` line in
+   `recent`. With no such line, the time is known only if it has never moved, or every line the ledger still shows
+   is over 3 hours old, or this same runner signed the change and remembers it (`--loop`, or a warm server
+   instance). Otherwise it is unknown, and unknown means no change.
+5. It signs only when the posture changes: "Recoveries are below forecast. Collections have been prioritised."
+
+`recent` keeps 64 lines. On a busy dock the `posture` line is gone in minutes, so a runner that starts cold after a
+change holds the posture until the ledger quietens.
 
 ### Running them
 
