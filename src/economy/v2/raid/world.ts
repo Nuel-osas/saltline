@@ -123,7 +123,9 @@ export function createRaidWorld(G: any): RaidWorld {
     ring: new T.RingGeometry(0.2, 0.26, 20),
   };
 
-  const mesh = (geo: Obj, m: Obj, x: number, y: number, z: number, shadow = true) => {
+  // Nothing here casts a shadow by default: these are small plates, straps and boards, and every caster is drawn
+  // again for each shadow cascade. The crates (the game's own props) keep theirs.
+  const mesh = (geo: Obj, m: Obj, x: number, y: number, z: number, shadow = false) => {
     const o = new T.Mesh(geo, m);
     o.position.set(x, y, z);
     o.castShadow = shadow;

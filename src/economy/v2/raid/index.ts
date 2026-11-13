@@ -61,6 +61,11 @@ type Game = any;
 const RANGE = 2.2;
 const FACING = 0.45;
 const NEAR_MARKERS = 2;
+/**
+ * Supply lockers in a signed raid, placed from the raid's id. Half the arsenal's default of six: magazines are
+ * something a player buys and brings in v2, and each locker is about thirty meshes to draw.
+ */
+const LOCKERS = 3;
 /** A part is taken by walking within this of it (m). */
 const PART_REACH = 1.35;
 /** The sign-on card stays up at least this long, so it reads as a step and not a flicker (ms). */
@@ -393,7 +398,7 @@ export function createRaid(G: Game): RaidApi {
       guard("kit", () => {
         if (!live || live.token !== token) return;
         call(G.arsenal, "setCharges", p.loadout.charges);
-        call(G.arsenal, "placeLockers", raid.raidId, 6);
+        call(G.arsenal, "placeLockers", raid.raidId, LOCKERS);
       }),
     );
     if (p.fellBack) setTimeout(() => live?.token === token && call(G.hud, "message", "The gun in your loadout isn't in your stash. Issue rifle this raid.", 5), 4200);
