@@ -1,0 +1,34 @@
+/* The Assessor's HUD bar (src/economy/boss/bar.ts), under the compass. Built from the game's tokens (src/ui.css):
+   the display face for its name, the signal amber of the relay cores it carries, and the Harbormaster's cold colour
+   (story.css, --st-cold) for its lamp's assessment until it turns hot. */
+.as-bar { position: absolute; top: calc(84px + var(--sat)); left: 50%; width: min(520px, calc(100vw - var(--gl) - var(--gr) - 24px)); transform: translate(-50%, -6px); opacity: 0;
+  transition: opacity .5s ease, transform .5s ease; pointer-events: none; }
+.as-bar.on { opacity: 1; transform: translate(-50%, 0); }
+.as-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.as-name { font: 800 15px/1 var(--f-display); letter-spacing: .22em; text-transform: uppercase; color: var(--bone); white-space: nowrap; }
+.as-name::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 10px; vertical-align: 2px; background: var(--st-cold, #8fd3ff); box-shadow: 0 0 8px rgba(143, 211, 255, .6); }
+.as-cores { display: flex; gap: 4px; padding-bottom: 1px; }
+.as-cores i { width: 9px; height: 9px; background: var(--signal); border: 1.5px solid var(--signal); box-shadow: 0 0 6px rgba(255, 179, 71, .55); transition: background .2s, border-color .2s, box-shadow .2s; }
+.as-cores i.out { background: transparent; border-color: rgba(232, 228, 218, .35); box-shadow: none; }
+.as-track { position: relative; height: 5px; background: rgba(11, 13, 15, .55); box-shadow: inset 0 0 0 1px rgba(232, 228, 218, .2), 0 1px 4px rgba(0, 0, 0, .45); overflow: hidden; }
+.as-track i { position: absolute; inset: 0; transform-origin: 0 50%; }
+.as-fill { background: linear-gradient(90deg, #d2622a, var(--signal) 70%, var(--signal-hot)); }
+.as-lag { background: rgba(232, 228, 218, .55); }
+.as-assess { display: flex; align-items: center; gap: 10px; margin-top: 7px; opacity: 0; transition: opacity .3s; }
+.as-assess.on { opacity: 1; }
+.as-k { font: 600 10px/1 var(--f-label); letter-spacing: .26em; text-transform: uppercase; color: rgba(232, 228, 218, .72); }
+.as-meter { position: relative; flex: 1; height: 2px; background: rgba(143, 211, 255, .18); overflow: hidden; }
+.as-meter i { position: absolute; inset: 0; transform-origin: 0 50%; transform: scaleX(0); background: var(--st-cold, #8fd3ff); transition: background .25s; }
+.as-pct { min-width: 5.6em; text-align: right; font: 500 10px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--st-cold, #8fd3ff); }
+.as-assess.hot .as-meter i { background: var(--signal); } .as-assess.hot .as-pct { color: var(--signal); }
+.as-assess.lock .as-meter i { background: var(--alarm); } .as-assess.lock .as-pct, .as-assess.lock .as-k { color: var(--alarm); }
+.as-assess.lock { animation: as-lock .22s steps(2, jump-none) infinite; }
+@keyframes as-lock { 0% { opacity: 1; } 100% { opacity: .45; } }
+/* The defeat line glitches harder than the channel's own flicker. */
+.comms.as-glitch .comms-t { animation: as-glitch .18s steps(2, jump-none) infinite !important; }
+@keyframes as-glitch {
+  0% { text-shadow: -3px 0 rgba(255, 64, 96, .85), 3px 0 rgba(90, 220, 255, .85); transform: translateX(-2px); }
+  100% { text-shadow: 2px 0 rgba(255, 64, 96, .6), -2px 0 rgba(90, 220, 255, .6); transform: translateX(1px); opacity: .7; }
+}
+@media (max-width: 760px) { .as-name { font-size: 13px; letter-spacing: .16em; } .as-bar { top: calc(78px + var(--sat)); } }
+@media (prefers-reduced-motion: reduce) { .as-bar { transition-duration: .01ms; } .as-assess.lock, .comms.as-glitch .comms-t { animation: none !important; } }
