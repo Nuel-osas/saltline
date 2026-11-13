@@ -3,6 +3,7 @@
 // for help, what it says and when the boat comes back. The three.js body, its bolts and the HUD bar are stand-ins
 // here (types.ts is the seam); the fight's rules and the game hooks are the real thing.
 import { describe, expect, it, vi } from "vitest";
+import { hooks } from "../src/economy/hooks";
 import { VOICE_TTL, createBoss, type Parts } from "../src/economy/boss";
 import { LINES, arrival } from "../src/economy/boss/copy";
 import { createFight, type Fight, type FightDeps } from "../src/economy/boss/fight";
@@ -489,8 +490,11 @@ describe("the boss in the game", () => {
     expect(body.dispose).toHaveBeenCalled();
     expect(made()!.bar.dispose).toHaveBeenCalled(); // its bar leaves the HUD, not just hides
     b.dispose();
-    expect(G.ext.raycast).toBeUndefined();
-    expect(G.ext.extractBlocked).toBeUndefined();
+    // Its shot target and boat gate leave the shared registries (src/economy/hooks.ts); the dispatchers stay.
+    expect(hooks(G).shotTargets).toBe(0);
+    expect(hooks(G).boatGates).toBe(0);
+    expect(G.ext.raycast({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }, 100)).toBeNull();
+    expect(G.ext.extractBlocked()).toBe(false);
   });
 
   it("waits for a quiet radio before it speaks", async () => {

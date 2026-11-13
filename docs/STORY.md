@@ -48,6 +48,11 @@ written where anyone can read it and nobody can quietly change it, not even the 
 
 ## Chapters (the arc, shared by every player)
 
+> **The campaign.** Each player now plays five missions of their own, in order (`docs/CAMPAIGN.md`): Proof of
+> Delivery, Chain of Custody, Bill of Lading, Force Majeure and Final Notice. The table below is the **town's**
+> shared state, which still moves with deliveries and still reaches into every mission (extra Inspection Units, the
+> Assessor's cores, every price). The Assessor belongs to mission 5 for every player.
+
 The town's arc moves when players deliver cargo, meaning sell it to the brokers. It isn't scripted per player.
 Everyone plays in the same town, the open ledger keeps count, and nobody (the developer included) can push it
 forward or back without a visible redeploy. Thresholds are deliberately reachable in a hackathon's judging week.
