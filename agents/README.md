@@ -195,7 +195,8 @@ One move a round each, the first rule that fits. A move that doesn't add up agai
 
 1. A fresh A or B still at the default price (125% of appraisal) is priced up: A at 150%, B at 135%.
 2. With fewer than 4 guns for sale and the parts for one, she builds the frame her rack lacks. With every frame
-   racked, she builds the one with the most sales on the market (`economy().lastSales`; none, no build).
+   racked, she builds the one with the most sales on the market (`economy().lastSales`), and with no sales to go
+   on, a Longshore.
 3. A gun unsold over 6 hours is marked down 10%, once for each 6 hours it has sat, never under 90% of appraisal.
 4. With 3 or more guns racked, she makes a mod she has fewer than 2 of.
 5. Materials held over twice their target go to the freighter, at most 6 units a round.
@@ -233,6 +234,8 @@ node --import ./agents/ts-hook.mjs agents/v2/run.ts --loop 10           # a roun
   key is skipped; the others still run.
 - A character moves only when every view its rules read came back: `vendors` and `export_prices` for both vendors,
   `economy` for Moss too, `harbormaster` and `recent` for the Harbormaster.
+- One exception: while the deployed contract has no `economy` view (`METHOD_NOT_FOUND`), Moss reads "no sales" and
+  still moves. Any other failure of that read holds her.
 - `export` takes no memo on the contract, so an export's memo is in the agent's log line only.
 - On the live site, `POST /api/tick?game=v2` (`server/tick.ts`) runs one v2 round when people play, at most every
   10 minutes, on a clock separate from v1's. It answers 503 when none of the three keys is set.

@@ -93,6 +93,7 @@ export type Why2 =
   | "fresh-grade" // Moss: a fresh A or B, priced above the default
   | "rack-lacks" // Moss: a frame the rack doesn't have
   | "selling" // Moss: the frame the market has been buying
+  | "staple" // Moss: every frame racked and no sales to go on, so a Longshore
   | "markdown" // Moss: unsold too long
   | "mod" // Moss: three guns racked and short of a mod
   | "surplus" // Moss: over twice target, shipped
@@ -118,8 +119,8 @@ export interface VendorBoard {
   vendor: Vendor;
   /** `export_prices`: what the desk pays for the next unit. */
   quotes: Quote[];
-  /** Moss only. */
-  economy?: EconomyView;
+  /** Moss only: the market's last sales. Left out when they couldn't be read; empty when there are none. */
+  economy?: Pick<EconomyView, "lastSales">;
   now: number;
 }
 export interface HarbormasterBoard {
@@ -172,7 +173,7 @@ export function ceilingPrice(w: Weapon, now: number): number {
 }
 
 /** How many market sales of this frame the contract still remembers (it keeps the last five per frame and grade). */
-const sold = (e: EconomyView, f: FrameId) => e.lastSales.filter((s) => s.frame === f).reduce((n, s) => n + s.prices.length, 0);
+const sold = (e: Pick<EconomyView, "lastSales">, f: FrameId) => e.lastSales.filter((s) => s.frame === f).reduce((n, s) => n + s.prices.length, 0);
 
 /** True while the desk pays at least EXPORT_MIN_PCT of the book price for it. An unknown price is never worth it. */
 export const worthShipping = (quotes: Quote[], m: MaterialId) => {
@@ -201,14 +202,18 @@ export function moss(b: VendorBoard): Decision2 {
     return { move: { action: "price", serial: w.serial, price: openingPrice(w) }, why: "fresh-grade", say: { serial: w.serial, grade: w.grade, frame: FRAME_SHORT[w.frame], price: openingPrice(w) } };
   }
 
-  // Fewer than four for sale and the parts for one: the frame the rack lacks, else the one the market is buying.
+  // Fewer than four for sale and the parts for one: the frame the rack lacks, else the one the market is buying,
+  // else (no sales to go on) a Longshore. Sales that couldn't be read are not "no sales": then she builds neither.
   if (v.guns.length < MOSS.rack) {
     const can = FRAME_IDS.filter((f) => hasParts(v, f));
     const lacking = can.find((f) => !v.guns.some((g) => g.weapon.frame === f));
     if (lacking) return { move: { action: "build", blueprint: lacking }, why: "rack-lacks", say: { frame: FRAME_SHORT[lacking] } };
     const e = b.economy;
-    const selling = e ? [...can].sort((x, y) => sold(e, y) - sold(e, x))[0] : undefined;
-    if (e && selling && sold(e, selling) > 0) return { move: { action: "build", blueprint: selling }, why: "selling", say: { frame: FRAME_SHORT[selling], sales: sold(e, selling) } };
+    if (e) {
+      const selling = [...can].sort((x, y) => sold(e, y) - sold(e, x))[0];
+      if (selling && sold(e, selling) > 0) return { move: { action: "build", blueprint: selling }, why: "selling", say: { frame: FRAME_SHORT[selling], sales: sold(e, selling) } };
+      if (can.includes("longshore")) return { move: { action: "build", blueprint: "longshore" }, why: "staple", say: { frame: FRAME_SHORT.longshore } };
+    }
   }
 
   // Over six hours unsold and asking more than that long on the rack allows: 10% off, never under the floor.
@@ -343,6 +348,7 @@ export const TEMPLATES2: Record<CharacterId, Templates> = {
     "fresh-grade": ["{serial} rolled {grade}. {price}, and not a gram under.", "{grade}-grade {frame}, {serial}. Worth its weight: {price}."],
     "rack-lacks": ["No {frame} on the rack. Had the parts sitting idle, so I built one.", "Rack was a {frame} short. Fixed. Idle parts are waste."],
     selling: ["{frame}s are moving on the board. Built another before the parts rust.", "The market keeps lifting {frame}s. One more on the rack."],
+    staple: ["Nothing's moved on the board. Built a {frame}: it does every job.", "Rack's a gun short. A {frame}, till the market says otherwise."],
     markdown: ["{serial} has sat {hours} hours. Dead weight. {price} now.", "Nobody's lifted {serial} in {hours} hours. Down from {was} to {price}."],
     mod: ["Three guns racked and {have}. Made one from offcuts.", "Rack's stocked. Turned spare parts into one {mod}."],
     surplus: ["{count} over double what I need. To the freighter at {each}. Waste is waste.", "Shed's a tonne over on {things}. Shipping {count} at {each}."],

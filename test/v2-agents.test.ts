@@ -17,6 +17,7 @@ import {
   checkMove2,
   decideVendor,
   defaultGunPrice,
+  describeMove2,
   fill2,
   floorPrice,
   memoFor2,
@@ -25,6 +26,7 @@ import {
   raidEndings,
 } from "../agents/v2/characters";
 import { type Acts, ENV_KEYS_V2, type Line2, type RoundDeps2, accountFor, formatLine2, main, runRoundV2 } from "../agents/v2/run";
+import { METHOD_NOT_FOUND } from "../src/economy/chain";
 import { MOCK2_STORAGE_KEY, type MockChain2, createMockChain2 } from "../src/economy/v2/mock";
 import type { RaidReport, Vendor } from "../src/economy/v2/types";
 
@@ -122,6 +124,8 @@ function seedWhere(want: "plain" | "graded"): number {
 const PLAIN = seedWhere("plain");
 const GRADED = seedWhere("graded");
 
+const GUN_BUILD = /^build (longshore|stevedore|pilot)$/;
+
 /** Rounds until Moss holds, with what she did on the way. */
 async function untilMossHolds(w: World, max = 24): Promise<string[]> {
   const did: string[] = [];
@@ -164,21 +168,46 @@ describe("Moss", () => {
 
   it("with every frame racked, builds the one the market has been buying", async () => {
     const w = world(PLAIN);
-    await untilMossHolds(w); // pilot, then mods, then nothing: three frames racked and no sales to go on
-    expect((await w.vendor("moss")).guns).toHaveLength(3);
     await w.player();
     const mine = w.mock.debug.giveGun("stevedore", { grade: "C" });
     const listed = await w.mock.listWeapon(mine.serial, 100);
     expect((await w.mock.register("buyer.mock", "BUYER")).ok).toBe(true);
     expect((await w.mock.as("buyer.mock").buyListing(listed.id!)).ok).toBe(true);
     expect((await w.mock.economy()).lastSales).toEqual([{ frame: "stevedore", grade: "C", prices: [100] }]);
-    for (const [m, n] of [["copper", 6], ["chips", 4], ["rotor", 4]] as const) await w.mock.sell("moss", m, n); // the mods used her parts
-    const l = (await w.round()).moss;
-    expect(l).toMatchObject({ status: "sent", action: "build stevedore" });
-    expect(l.memo).toMatch(/Stevedore/);
+    // The frame the rack lacked first, then the one that sold. Four racked is a full rack, whatever sells.
+    const did = await untilMossHolds(w);
+    expect(did.filter((a) => GUN_BUILD.test(a))).toEqual(["build pilot", "build stevedore"]);
     expect((await w.vendor("moss")).guns).toHaveLength(4);
-    // Four racked is a full rack: no fifth, whatever sells.
-    expect((await untilMossHolds(w)).filter((a) => /^build (longshore|stevedore|pilot)$/.test(a))).toEqual([]);
+    expect((await w.vendor("moss")).lastMemo).not.toBeNull();
+  });
+
+  it("with every frame racked and no sales to go on, the fourth is a Longshore", async () => {
+    const w = world(PLAIN);
+    expect((await w.mock.economy()).lastSales).toEqual([]);
+    expect((await untilMossHolds(w)).filter((a) => GUN_BUILD.test(a))).toEqual(["build pilot", "build longshore"]);
+    // Sales that couldn't be read are not "no sales": on the same board she builds a gun only once they are known.
+    const v = await w.vendor("moss");
+    const board = { vendor: { ...v, guns: v.guns.slice(0, 3), stock: { copper: 9, chips: 9, servo: 4, rotor: 4, core: 1 } }, quotes: [], now: T0 };
+    expect(GUN_BUILD.test(describeMove2(moss(board).move))).toBe(false);
+    const known = moss({ ...board, economy: { lastSales: [] } });
+    expect(known.move).toEqual({ action: "build", blueprint: "longshore" });
+    expect(memoFor2("moss", known, 1)).toMatch(/Longshore/);
+  });
+
+  it("while the contract has no economy view yet, she reads no sales and still moves; any other failure holds her", async () => {
+    const w = world(PLAIN);
+    const missing = () => Promise.reject(Object.assign(new Error("economy: the contract has no economy view yet"), { code: METHOD_NOT_FOUND }));
+    const reads = { ...w.mock, economy: missing };
+    const did: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      const lines = await w.round({ reads });
+      expect(lines.moss.unknown).toBeUndefined();
+      if (lines.moss.status !== "sent") break;
+      did.push(lines.moss.action);
+    }
+    expect(did.filter((a) => GUN_BUILD.test(a))).toEqual(["build pilot", "build longshore"]);
+    const other = await world(PLAIN).round({ reads: { ...w.mock, economy: () => Promise.reject(Object.assign(new Error("timeout"), { code: "ETIMEDOUT" })) } });
+    expect(other.moss).toMatchObject({ status: "held", action: "hold", unknown: true });
   });
 
   it("marks a gun down 10% once it has sat six hours, again each six hours, never under 90% of appraisal", async () => {
@@ -192,11 +221,12 @@ describe("Moss", () => {
     const l = (await w.round()).moss;
     expect(l).toMatchObject({ status: "sent", action: `price S-000001 at ${cut}` });
     expect(l.memo).toMatch(/S-000001/);
-    // The other two are as old: one cut each, then she waits for the next six hours.
+    // The other three are as old: one cut each, then she waits for the next six hours.
     const rest = await untilMossHolds(w);
-    expect(rest).toHaveLength(2);
+    expect(rest).toHaveLength(3);
     expect(rest[0]).toBe(`price S-000002 at ${Math.floor((defaultGunPrice((await w.vendor("moss")).guns.find((g) => g.weapon.serial === "S-000002")!.weapon) * 90) / 100)}`);
     expect(rest[1]).toMatch(/^price S-000003 at \d+$/);
+    expect(rest[2]).toMatch(/^price S-000004 at \d+$/);
     for (let i = 0; i < 12; i++) {
       w.advance(6 * HOUR);
       await untilMossHolds(w);

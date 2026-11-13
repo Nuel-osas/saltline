@@ -15,6 +15,9 @@
 // character's state unknown, and unknown means no move), a refusal is logged and never re-sent (benched for an hour
 // in --loop), keys come from env or the legacy keychain and never reach a log, a missing key skips only that
 // character, and the optional NEAR AI voice only rewords a memo after the move is fixed.
+//
+// One read is allowed to be missing: `economy`, while the deployed contract doesn't have that view yet
+// (METHOD_NOT_FOUND). Moss then reads "no sales". Any other failed read still means no move.
 import { fileURLToPath } from "node:url";
 import {
   Benched,
@@ -33,10 +36,10 @@ import {
   redact,
   rewriteAs,
 } from "../brokers.js";
-import { type NearPort, nearKitPort } from "../../src/economy/chain.js";
+import { METHOD_NOT_FOUND, type NearPort, nearKitPort } from "../../src/economy/chain.js";
 import { ConfigError, resolveConfig } from "../../src/economy/config.js";
 import { type AgentCalls, createTestnetChain2 } from "../../src/economy/v2/chain.js";
-import type { Chain2, TxResult } from "../../src/economy/v2/types";
+import type { Chain2, EconomyView, TxResult } from "../../src/economy/v2/types";
 import {
   CHARACTER_IDS,
   type CharacterId,
@@ -100,8 +103,13 @@ export const accountFor = (who: CharacterId, contractId: string) => `${who}.${co
 const benchKey = (who: CharacterId, m: Move2 | "any") =>
   m === "any" ? `${who}|any` : `${who}|${m.action}|${m.action === "build" ? m.blueprint : m.action === "price" ? m.serial : m.action === "export" ? m.tokenId : m.action === "posture" ? m.posture : ""}`;
 
-type Read<T> = { ok: true; value: T } | { ok: false; why: string };
-const settle = async <T>(p: Promise<T>): Promise<Read<T>> => p.then((value) => ({ ok: true as const, value }), (e: unknown) => ({ ok: false as const, why: describeError(e) }));
+type Read<T> = { ok: true; value: T } | { ok: false; why: string; code?: string };
+const codeOf = (e: unknown) => (e && typeof e === "object" && typeof (e as { code?: unknown }).code === "string" ? { code: (e as { code: string }).code } : {});
+const settle = async <T>(p: Promise<T>): Promise<Read<T>> =>
+  p.then(
+    (value) => ({ ok: true as const, value }),
+    (e: unknown) => ({ ok: false as const, why: describeError(e), ...codeOf(e) }),
+  );
 
 function send(acts: Acts, move: Exclude<Move2, { action: "hold" }>, memo: string): Promise<TxResult> {
   if (move.action === "build") return acts.vendorBuild(move.blueprint, memo);
@@ -167,6 +175,9 @@ export async function runRoundV2(d: RoundDeps2): Promise<Line2[]> {
     settle(d.reads.recent(RECENT)),
   ]);
   const unknown = (who: CharacterId, why: string): Line2 => ({ who, status: "held", action: "hold", note: `state unknown: ${why}`, unknown: true });
+  // The first deployed contract has no `economy` view (it comes with stage 2). That one answer, and no other
+  // failure, is read as "no sales yet", so Moss still builds what her rack lacks, else a Longshore.
+  const sales: Read<Pick<EconomyView, "lastSales">> = !economy.ok && economy.code === METHOD_NOT_FOUND ? { ok: true, value: { lastSales: [] } } : economy;
   const now = d.now();
   const lines: Line2[] = [];
   for (const who of CHARACTER_IDS) {
@@ -180,7 +191,7 @@ export async function runRoundV2(d: RoundDeps2): Promise<Line2[]> {
         continue;
       }
       // Moss reads the market's sales to choose a frame; both read the desk's prices before shipping anything.
-      const failed = [vendors, quotes, ...(who === "moss" ? [economy] : [])].find((r) => !r.ok) as { why: string } | undefined;
+      const failed = [vendors, quotes, ...(who === "moss" ? [sales] : [])].find((r) => !r.ok) as { why: string } | undefined;
       if (failed || !vendors.ok || !quotes.ok) {
         lines.push(unknown(who, failed?.why ?? "unreadable"));
         continue;
@@ -190,7 +201,7 @@ export async function runRoundV2(d: RoundDeps2): Promise<Line2[]> {
         lines.push({ who, status: "held", action: "hold", note: "not on the contract's board", unknown: true });
         continue;
       }
-      const board: VendorBoard = { vendor, quotes: quotes.value, now, ...(who === "moss" && economy.ok ? { economy: economy.value } : {}) };
+      const board: VendorBoard = { vendor, quotes: quotes.value, now, ...(who === "moss" && sales.ok ? { economy: sales.value } : {}) };
       lines.push(await turn(who, vendor.accountId, decideVendor(who, board), d));
     } catch (e) {
       lines.push({ who, status: "failed", action: "hold", note: describeError(e) });
