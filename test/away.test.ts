@@ -205,7 +205,7 @@ describe("the away card's town lines", () => {
   it("says the lights came on across the water when the second district lit, or both did", () => {
     const one = awayLines(seen({ town: { lit: ["clinic"], revealed: false } }), reads({ town: town(["clinic", "generators"]) }), ME);
     expect(one).toEqual([
-      { kind: "town", tag: "Act II", text: "The generators are running. The town across the water is lit again.", figure: "Lights on the water", tone: "up" },
+      { kind: "town", tag: "Chapter 2", text: "The generators are running. The town across the water is lit again.", figure: "Lights on the water", tone: "up" },
     ]);
     const both = awayLines(seen({ town: { lit: [], revealed: false } }), reads({ town: town(["clinic", "generators"]) }), ME);
     expect(both[0].text).toBe("The clinic and the generators are lit. The town across the water is lit again.");
@@ -214,10 +214,10 @@ describe("the away card's town lines", () => {
 
   it("says the client was revealed, with the drones it fields", () => {
     const lines = awayLines(seen({ town: { lit: ["clinic", "generators"], revealed: false } }), reads({ town: town(["clinic", "generators"], true, 2) }), ME);
-    expect(lines).toEqual([{ kind: "town", tag: "Act III", text: "The Quartermaster's client is the Harbormaster.", figure: "+2 drones a wave", tone: "down" }]);
+    expect(lines).toEqual([{ kind: "town", tag: "Chapter 3", text: "The Quartermaster's client is the Harbormaster.", figure: "+2 drones a wave", tone: "down" }]);
     // the whole arc in one absence: the lights, then the reveal
     const all = awayLines(seen({ town: { lit: [], revealed: false } }), reads({ town: town(["clinic", "generators"], true) }), ME);
-    expect(all.map((l) => l.tag)).toEqual(["Act II", "Act III"]);
+    expect(all.map((l) => l.tag)).toEqual(["Chapter 2", "Chapter 3"]);
     expect(all[1].figure).toBeUndefined();
   });
 
@@ -379,8 +379,8 @@ describe("the away card in the Dockside", () => {
     await vi.waitFor(() => expect(dock.root.querySelector(".dk-away")).not.toBe(null));
     const rows = [...dock.root.querySelectorAll<HTMLElement>(".dk-away-i")];
     expect(rows.map((r) => r.dataset.kind)).toEqual(["town", "town"]);
-    expect(rows[0].textContent).toBe("Act IIThe clinic and the generators are lit. The town across the water is lit again.Lights on the water");
-    expect(rows[1].textContent).toBe("Act IIIThe Quartermaster's client is the Harbormaster.+2 drones a wave");
+    expect(rows[0].textContent).toBe("Chapter 2The clinic and the generators are lit. The town across the water is lit again.Lights on the water");
+    expect(rows[1].textContent).toBe("Chapter 3The Quartermaster's client is the Harbormaster.+2 drones a wave");
     expect(rows[1].dataset.tone).toBe("down");
   });
 

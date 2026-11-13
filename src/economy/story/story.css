@@ -1,4 +1,5 @@
-/* The story layer (src/economy/story): the opening briefing's title cards and the Harbormaster's radio channel.
+/* The story layer (src/economy/story): the opening briefing's title cards, the chapter card that opens a run, and
+   the Harbormaster's radio channel.
    Built from the game's own tokens and type (src/ui.css): the display and label faces, bone on ink, the signal
    orange for Control and the Dock Office, and one cold colour that belongs to the Harbormaster alone. */
 :root { --st-cold: #8fd3ff; --st-cold-dim: rgba(143, 211, 255, .55); --st-bar: clamp(30px, 11vh, 110px); }
@@ -40,6 +41,13 @@
 #app .menu { transition: opacity .4s ease; }
 #app.st-briefing .menu { opacity: 0; pointer-events: none; }
 
+/* ---- the chapter card: game.js's location card (ui.css .loc-card), filled with the chapter (card.ts) ---- */
+.loc-card.st-chapter b { font-size: clamp(18px, 2.6vw, 30px); letter-spacing: .14em; }
+.loc-card.st-chapter .st-ch-line { display: block; margin-top: 10px; max-width: 34em; font: 500 clamp(15px, 1.45vw, 19px)/1.3 var(--f-label); font-style: normal; letter-spacing: .02em; color: var(--bone); }
+.loc-card.st-chapter span { margin-top: 9px; }
+.loc-card.st-chapter.on .st-ch-line { animation: st-ch-in .6s .5s ease both; }
+@keyframes st-ch-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
 /* ---- the Harbormaster's channel ---- */
 .comms.st-hm .comms-who { color: var(--st-cold); letter-spacing: .5em; margin-right: -.5em; }
 .comms.st-hm .comms-who::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 11px; vertical-align: 1px; background: var(--st-cold); animation: st-hm-dot 1.2s steps(2, jump-none) infinite; }
@@ -55,8 +63,16 @@
   94% { text-shadow: var(--shadow); }
 }
 @media (max-width: 760px) { .comms.st-hm .comms-t { font-size: 14px; } }
+/* Its invoice arrives over the debrief: in front of the menu's veil, and clear of the card (beside it when there's
+   room, under it when there isn't). */
+#ui:has(> .menu[data-screen="complete"]) > .comms.st-hm { z-index: 2; bottom: calc(8px + var(--sab)); }
+#ui:has(> .menu[data-screen="complete"]) > .comms.st-hm .comms-t { font-size: 13px; }
+@media (min-width: 1100px) {
+  #ui:has(> .menu[data-screen="complete"]) > .comms.st-hm { left: max(var(--gl), 3vw); bottom: calc(14vh + var(--sab)); width: min(340px, calc(50vw - 250px)); transform: none; text-align: left; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .st-brief, .st-card, .st-bars i, #app .menu { transition-duration: .01ms !important; }
+  .loc-card.st-chapter.on .st-ch-line { animation: none; }
   .comms.st-hm .comms-t, .comms.st-hm .comms-who::before { animation: none; }
 }

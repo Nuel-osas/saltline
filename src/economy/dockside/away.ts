@@ -294,7 +294,7 @@ export function townLines(was: Seen["town"], now: TownView | null | undefined): 
     const said = lit.length > 1 ? TOWN_NEWS.both : TOWN_NEWS[lit[0].id];
     out.push({
       kind: "town",
-      tag: lightsOn ? "Act II" : "Lights",
+      tag: lightsOn ? "Chapter 2" : "Lights",
       text: lightsOn ? `${said} ${TOWN_NEWS.act2}` : said,
       figure: lightsOn ? "Lights on the water" : undefined,
       tone: "up",
@@ -302,7 +302,7 @@ export function townLines(was: Seen["town"], now: TownView | null | undefined): 
   }
   if (now.client.revealed && !was.revealed) {
     const n = now.harbormaster.bonusDrones;
-    out.push({ kind: "town", tag: "Act III", text: REVEAL, figure: n > 0 ? dronesLine(n) : undefined, tone: "down" });
+    out.push({ kind: "town", tag: "Chapter 3", text: REVEAL, figure: n > 0 ? dronesLine(n) : undefined, tone: "down" });
   }
   return out;
 }

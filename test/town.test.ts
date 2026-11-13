@@ -39,18 +39,21 @@ afterEach(() => {
   localStorage.clear();
 });
 
-describe("Town tab: the acts", () => {
-  it("Act I: Lockdown is now, the lights and the client are ahead, and nothing names the client", async () => {
+describe("Town tab: the chapters", () => {
+  it("Chapter 1: Proof of Delivery is now, the lights and the client are ahead, and nothing names the client", async () => {
     const { el } = townWith({ s: "ok", v: await viewAt(1) });
     expect(el.dataset.state).toBe("ok");
     expect(el.dataset.act).toBe("1");
     const acts = [...el.querySelectorAll<HTMLElement>(".dk-tw-act")];
     expect(acts.map((a) => a.dataset.state)).toEqual(["now", "next", "next"]);
-    expect(acts.map((a) => q(a, ".dk-tw-act-n").textContent)).toEqual(["Lockdown", "Lights on the Water", "The Client"]);
+    expect(acts.map((a) => q(a, ".dk-tw-act-n").textContent)).toEqual(["Proof of Delivery", "Bill of Lading", "Final Notice"]);
+    expect(acts.map((a) => q(a, ".dk-tw-act-k").textContent)).toEqual(["Chapter 1Now", "Chapter 2Now", "Chapter 3Now"]); // "Now" shows on the current one only
+    expect(el.textContent).not.toMatch(/\bAct\b/);
+    expect(textOf(acts[0], ".dk-tw-act-w")).toBe("Since the town was impounded");
     expect(acts[0].getAttribute("aria-current")).toBe("step");
     expect(textOf(acts[1], ".dk-tw-act-w")).toBe("When the clinic and the generators are lit");
     expect(textOf(acts[2], ".dk-tw-act-w")).toBe("When the lights are on and 8 relay cores have gone to the Quartermaster");
-    expect(textOf(el, ".dk-tw-sees")).toBe("The town across the water is dark. Ines is rationing.");
+    expect(textOf(el, ".dk-tw-sees")).toBe("The town needs its cargo. The Harbormaster needs a signature. The town across the water is dark. Ines is rationing.");
     expect(textOf(el, ".dk-tw-status")).toBe("Dark");
     expect(el.dataset.clinic).toBe("dark");
     expect(el.dataset.gen).toBe("dark");
@@ -75,12 +78,12 @@ describe("Town tab: the acts", () => {
     // the Harbormaster is silent, and the dilemma isn't told before the reveal
     expect(textOf(el, ".dk-tw-hm-n")).toBe("0");
     expect(textOf(el, ".dk-tw-hm-d")).toBe("+0 drones a wave");
-    expect(textOf(el, ".dk-tw-hm-s")).toBe("Silent");
+    expect(textOf(el, ".dk-tw-hm-s")).toBe("Billing");
     expect(el.textContent).not.toContain(DILEMMA);
     expect(el.textContent).not.toContain(REVEAL);
   });
 
-  it("Act II: the lights are on, with the dates they came on, and the client is 3 cores away", async () => {
+  it("Chapter 2: the lights are on, with the dates they came on, and the client is 3 cores away", async () => {
     const v = await viewAt(2);
     const { el } = townWith({ s: "ok", v });
     expect(el.dataset.act).toBe("2");
@@ -99,13 +102,19 @@ describe("Town tab: the acts", () => {
     expect(textOf(el, ".dk-tw-client-l")).toBe("5/8 relay cores to the Quartermaster's client");
     expect(textOf(el, ".dk-tw-client-n")).toBe("He won't name his client. The ledger will, at 8.");
     expect(el.textContent).not.toContain("client is the Harbormaster");
+    expect(textOf(el, ".dk-tw-sees .dk-tw-line")).toBe("The lights are back. The Harbormaster has noticed the discrepancy.");
+    // Chapter 3's line would give the client away: it isn't shown while that chapter is ahead.
+    expect(el.textContent).not.toContain("would like its cores back");
   });
 
-  it("Act III: the reveal, and the Harbormaster's strength with the drones it fields and the dilemma", async () => {
+  it("Chapter 3: the reveal, and the Harbormaster's strength with the drones it fields and the dilemma", async () => {
     const { el } = townWith({ s: "ok", v: await viewAt(3) });
     expect(el.dataset.act).toBe("3");
     expect([...el.querySelectorAll<HTMLElement>(".dk-tw-act")].map((a) => a.dataset.state)).toEqual(["past", "past", "now"]);
     expect(textOf(el, '.dk-tw-act[data-n="3"] .dk-tw-act-w')).toMatch(/^Reached /);
+    expect(textOf(el, '.dk-tw-act[data-n="1"] .dk-tw-act-w')).toBe("The town was impounded");
+    // The chapter's own line, only once it has begun (before, it would name the client).
+    expect(textOf(el, ".dk-tw-sees .dk-tw-line")).toBe("The client has been identified. The client would like its cores back.");
     const client = q(el, ".dk-tw-client");
     expect(client.dataset.revealed).toBe("true");
     expect(textOf(client, ".dk-tw-client-h")).toBe(REVEAL);
@@ -203,11 +212,11 @@ async function mockDock(act: 1 | 2 | 3) {
 }
 
 describe("Town tab in the Dockside", () => {
-  it("is the fifth tab, opens on key 5, and shows the town's act on the tab itself", async () => {
+  it("is the fifth tab, opens on key 5, and shows the town's chapter on the tab itself", async () => {
     const { dock, root } = await mockDock(2);
     const tab = q(root, '.dk-tab[data-tab="town"]');
     expect(tab.textContent).toContain("Town");
-    await vi.waitFor(() => expect(textOf(tab, ".dk-tab-act")).toBe("II"));
+    await vi.waitFor(() => expect(textOf(tab, ".dk-tab-act")).toBe("Ch 2"));
     expect(q(tab, ".dk-tab-act").dataset.act).toBe("2");
     q<HTMLButtonElement>(root, '.dk-tab[data-tab="stalls"]').focus();
     q(root, '.dk-tab[data-tab="stalls"]').dispatchEvent(new KeyboardEvent("keydown", { code: "Digit5", bubbles: true }));
@@ -219,7 +228,7 @@ describe("Town tab in the Dockside", () => {
   });
 
   it("moves when your own sale lights a district", async () => {
-    // WREN holds six crates of meds in an Act I town: the clinic is at 9/15.
+    // WREN holds six crates of meds in a Chapter 1 town: the clinic is at 9/15.
     localStorage.clear();
     const first = createMockChain(5, { storage: localStorage, act: 1 });
     await createMockWallet(first).claim("WREN");
@@ -228,7 +237,7 @@ describe("Town tab in the Dockside", () => {
     localStorage.setItem(MOCK_STORAGE_KEY, JSON.stringify(saved));
     const chain = createMockChain(5, { storage: localStorage });
     const { dock, root } = await dockOn(chain, createMockWallet(chain));
-    await vi.waitFor(() => expect(textOf(root, ".dk-tab-act")).toBe("I"));
+    await vi.waitFor(() => expect(textOf(root, ".dk-tab-act")).toBe("Ch 1"));
     const all = q<HTMLButtonElement>(root, '.dk-stall[data-broker="ines"] .dk-q[data-tok="meds"] [data-a="sellall"]');
     await vi.waitFor(() => expect(all.disabled).toBe(false));
     all.click();
@@ -273,7 +282,7 @@ describe("Town tab in the Dockside", () => {
     await vi.waitFor(() => expect(q(root, '.dk-stall[data-broker="moss"]').dataset.open).toBe("open"));
   });
 
-  it("shows unreachable when the contract has no town yet (METHOD_NOT_FOUND), not Act I", async () => {
+  it("shows unreachable when the contract has no town yet (METHOD_NOT_FOUND), not Chapter 1", async () => {
     const chain = createMockChain(5, { storage: null });
     const wallet = createMockWallet(chain);
     await wallet.claim("WREN");
@@ -282,7 +291,7 @@ describe("Town tab in the Dockside", () => {
     const { dock, root } = await dockOn(older, wallet);
     dock.tab("town");
     await vi.waitFor(() => expect(q(root, ".dk-town").dataset.state).toBe("unknown"));
-    // no act, no counts: the whole body is hidden, not painted as Act I with zeros
+    // no act, no counts: the whole body is hidden, not painted as Chapter 1 with zeros
     expect(q(root, ".dk-tw-body").hidden).toBe(true);
     expect(q(root, ".dk-town").dataset.act).toBe("0");
     expect(textOf(root, ".dk-tw-notice")).toContain(UNREACHABLE);
@@ -291,10 +300,10 @@ describe("Town tab in the Dockside", () => {
 
 describe("The story's copy on the stalls and the pass", () => {
   it("uses docs/STORY.md's broker blurbs", () => {
-    expect(BROKERS.moss.blurb).toBe("Rebuilding the sea wall from what you drag out. Thinks in tonnes, hates waste.");
-    expect(BROKERS.ines.blurb).toBe("Runs the clinic's stores and keeps the generators turning. Spends the clinic's money like it's hers to lose.");
-    expect(BROKERS.qm.blurb).toBe("Buys relay cores for a client he won't name. Pays better than anyone.");
-    expect(BROKERS.qm.blurbRevealed).toBe("Buying for the Harbormaster. Still pays better than anyone.");
+    expect(BROKERS.moss.blurb).toBe("Rebuilding the sea wall from what you drag out. Measures everything in tonnes, including you.");
+    expect(BROKERS.ines.blurb).toBe("Runs the clinic's stores and the generators. Will cry at your story and still pay two scrip less.");
+    expect(BROKERS.qm.blurb).toBe("Buys relay cores for a client he won't name. Pays better than anyone. Smiles a lot.");
+    expect(BROKERS.qm.blurbRevealed).toBe("Buying for the Harbormaster. Still pays better than anyone. Still smiling.");
   });
 
   it("issues the dock pass from the Dock Office, on the open ledger", () => {
@@ -327,11 +336,11 @@ const tipOf = (root: ParentNode, broker: string, tok: string) => {
 describe("The Quartermaster after the reveal", () => {
   it("before it: his own blurb, no tag, no dilemma on his core bid", async () => {
     const { root } = await mockDock(2);
-    await vi.waitFor(() => expect(textOf(root, ".dk-tab-act")).toBe("II"));
+    await vi.waitFor(() => expect(textOf(root, ".dk-tab-act")).toBe("Ch 2"));
     await vi.waitFor(() => expect(qm(root).dataset.open).toBe("open"));
     expect(qm(root).dataset.client).toBeUndefined();
     expect(q(qm(root), ".dk-hm-tag").hidden).toBe(true);
-    expect(textOf(qm(root), ".dk-blurb")).toBe("Buys relay cores for a client he won't name. Pays better than anyone.");
+    expect(textOf(qm(root), ".dk-blurb")).toBe("Buys relay cores for a client he won't name. Pays better than anyone. Smiles a lot.");
     expect(tipOf(root, "qm", "core")).not.toContain(DILEMMA);
   });
 
@@ -341,7 +350,7 @@ describe("The Quartermaster after the reveal", () => {
     const tag = q(qm(root), ".dk-hm-tag");
     expect(tag.hidden).toBe(false);
     expect(tag.textContent).toBe("Buying for the Harbormaster");
-    expect(textOf(qm(root), ".dk-blurb")).toBe("Buying for the Harbormaster. Still pays better than anyone.");
+    expect(textOf(qm(root), ".dk-blurb")).toBe("Buying for the Harbormaster. Still pays better than anyone. Still smiling.");
     await vi.waitFor(() => expect(tipOf(root, "qm", "core")).toContain(DILEMMA));
     expect(tipOf(root, "qm", "fuel")).not.toContain(DILEMMA);
     // the other brokers are as they were
@@ -387,7 +396,7 @@ describe("The Quartermaster after the reveal", () => {
 
   it("no warning before the reveal, and none for a sale the dock refused", async () => {
     const before = await dockWithHold(2, { core: 2 });
-    await vi.waitFor(() => expect(textOf(before.root, ".dk-tab-act")).toBe("II"));
+    await vi.waitFor(() => expect(textOf(before.root, ".dk-tab-act")).toBe("Ch 2"));
     const s1 = q<HTMLButtonElement>(qm(before.root), '.dk-q[data-tok="core"] [data-a="sell1"]');
     await vi.waitFor(() => expect(s1.disabled).toBe(false));
     s1.click();

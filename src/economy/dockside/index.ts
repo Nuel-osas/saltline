@@ -252,7 +252,8 @@ export function createDockside(G: GameLike, economy: EconomyWithGear, opts: Dock
     const t = okv(reads.town);
     actChip.hidden = !t;
     if (t) {
-      text(actChip, ACTS[t.act - 1].numeral);
+      text(actChip, ACTS[t.act - 1].chip);
+      actChip.title = `${ACTS[t.act - 1].label} · ${ACTS[t.act - 1].name}`;
       actChip.dataset.act = String(t.act);
     }
   }
