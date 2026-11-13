@@ -7,12 +7,15 @@ import { createMockChain2, createMockWallet2 } from "../src/economy/v2/mock";
 import { createFakeV2 } from "../src/economy/v2/raid/fake";
 import {
   HOLD,
+  RAID_MINUTES,
   RaidLedger,
   Thresholds,
   capKills,
   checkRaid,
   deathBy,
+  dieWait,
   dropsPart,
+  extractWait,
   foreclosureCores,
   gearUsed,
   nearestSpot,
@@ -130,17 +133,20 @@ describe("the gun drives the shooter", () => {
 describe("the invoice", () => {
   it("follows items.ts invoiceTotal as things happen", () => {
     const L = new RaidLedger(raid());
-    const facts = { start: 175, seconds: 0, seals: 0, weight: 0, uplinks: 0, gulls: 0, hounds: 0 };
-    expect(L.invoice(0)).toBe(175);
+    // The rates are items.ts's (INVOICE), which the contract holds too: nothing here is a number of its own.
+    const I = INVOICE;
+    const start = invoiceStart(1, 0);
+    const facts = { start, seconds: 0, seals: 0, weight: 0, uplinks: 0, gulls: 0, hounds: 0 };
+    expect(L.invoice(0)).toBe(start);
     expect(L.invoice(90)).toBe(invoiceTotal({ ...facts, seconds: 90 }));
-    expect(L.cut(0)).toEqual({ ok: true, items: [{ added: 80, why: "CUSTOMS SEAL" }, { added: 80, why: "CARGO · 2 WT" }] });
+    expect(L.cut(0)).toEqual({ ok: true, items: [{ added: I.seal, why: "CUSTOMS SEAL" }, { added: 2 * I.perWeight, why: "CARGO · 2 WT" }] });
     expect(L.invoice(90)).toBe(invoiceTotal({ ...facts, seconds: 90, seals: 1, weight: 2 }));
-    expect(L.kill("hound")).toEqual({ added: 120, why: "HOUND DESTROYED" });
-    expect(L.kill("gull")).toEqual({ added: 40, why: "GULL DESTROYED" });
-    expect(L.cutUplink()).toEqual({ added: 200, why: "UPLINK CUT" });
-    expect(L.takePart("servo")).toEqual({ ok: true, items: [{ added: 40, why: "HOUND SERVO · 1 WT" }] });
-    expect(L.invoice(120)).toBe(invoiceTotal({ start: 175, seconds: 120, seals: 1, weight: 3, uplinks: 1, gulls: 1, hounds: 1 }));
-    expect(L.invoice(120)).toBe(175 + 120 + 80 + 120 + 200 + 40 + 120);
+    expect(L.kill("hound")).toEqual({ added: I.hound, why: "HOUND DESTROYED" });
+    expect(L.kill("gull")).toEqual({ added: I.gull, why: "GULL DESTROYED" });
+    expect(L.cutUplink()).toEqual({ added: I.uplink, why: "UPLINK CUT" });
+    expect(L.takePart("servo")).toEqual({ ok: true, items: [{ added: I.perWeight, why: "HOUND SERVO · 1 WT" }] });
+    expect(L.invoice(120)).toBe(invoiceTotal({ start, seconds: 120, seals: 1, weight: 3, uplinks: 1, gulls: 1, hounds: 1 }));
+    expect(L.invoice(120)).toBe(start + 2 * I.perMinute + I.seal + 3 * I.perWeight + I.hound + I.gull + I.uplink);
     // Every line item's amount is what the total moved by.
     const before = L.invoice(120);
     const r = L.cut(12);
@@ -154,7 +160,7 @@ describe("the invoice", () => {
     L.cut(4); // fuel ×1 = 2
     expect(L.weight()).toBe(4);
     expect(L.speed()).toBeCloseTo(1 - 0.06 * 4);
-    expect(L.recover(301)).toEqual({ ok: true, items: [{ added: 80, why: "RECOVERED GUN · 2 WT" }] });
+    expect(L.recover(301)).toEqual({ ok: true, items: [{ added: RAID.gunWeight * INVOICE.perWeight, why: "RECOVERED GUN · 2 WT" }] });
     expect(L.weight()).toBe(6);
     expect(L.guns.map((g) => g.serial)).toEqual(["S-000023"]);
     expect(L.cut(5)).toEqual({ ok: false }); // meds ×2 would make 8
@@ -274,6 +280,17 @@ describe("the report", () => {
   it("a bonded seal takes longer to cut", () => {
     expect(HOLD.bonded).toBeGreaterThan(HOLD.seal);
   });
+
+  it("the boat and a death wait out the contract's clock rather than send early", () => {
+    // extract: 45 s plus 8 s a container opened. die: 8 s a container opened.
+    expect(extractWait(0, 10)).toBe(RAID.minSeconds - 10);
+    expect(extractWait(3, 20)).toBe(RAID.minSeconds + 3 * RAID.perContainerSeconds - 20);
+    expect(extractWait(3, 500)).toBe(0);
+    expect(dieWait(0, 1)).toBe(0);
+    expect(dieWait(4, 10)).toBe(4 * RAID.perContainerSeconds - 10);
+    expect(dieWait(4, 300)).toBe(0);
+    expect(RAID_MINUTES).toBe(30);
+  });
 });
 
 describe("what killed the player", () => {
@@ -312,9 +329,22 @@ describe("signing on", () => {
   it("refused: the contract's reason, and nothing signed", async () => {
     const r = await signOn({ chain: chain({ startRaid: async () => ({ ok: false, error: "Too soon after your last raid.", code: "E_TOO_SOON" }) }), wallet, loadout, sleep: never });
     expect(r).toEqual({ kind: "refused", why: "Too soon after your last raid." });
-    expect(await signOn({ chain: chain(), wallet: { accountId: () => null }, loadout, sleep: never })).toMatchObject({ kind: "refused" });
     // A manifest that doesn't hold together is refused whole.
     expect(await signOn({ chain: chain({ startRaid: async () => ({ ok: true, raid: raid({ invoiceStart: NaN }) }) }), wallet, loadout, sleep: never })).toMatchObject({ kind: "refused" });
+  });
+
+  it("without a dock pass nothing is sent: the raid is off the books", async () => {
+    let started = 0;
+    const counting = chain({ startRaid: async (l) => (started++, { ok: true, raid: raid({ loadout: l }) }) });
+    expect(await signOn({ chain: counting, wallet: { accountId: () => null }, loadout, sleep: never })).toEqual({ kind: "passless" });
+    expect(await signOn({ chain: counting, wallet: { ...wallet, registered: async () => false }, loadout, sleep: never })).toEqual({ kind: "passless" });
+    expect(started).toBe(0);
+    // A pass that can't be read is unknown, not missing: the contract is asked, and its refusal means the same.
+    expect(await signOn({ chain: counting, wallet: { ...wallet, registered: () => Promise.reject(new Error("rpc down")) }, loadout, sleep: never })).toMatchObject({ kind: "signed" });
+    expect(await signOn({ chain: chain({ startRaid: async () => ({ ok: false, error: "No dock pass.", code: "E_NOT_REGISTERED" }) }), wallet: { ...wallet, registered: async () => true }, loadout, sleep: never })).toEqual({ kind: "passless" });
+    // The offline mock says the same of an account that never claimed one.
+    const mock = createMockChain2(3, { storage: null, stash: null });
+    expect(await signOn({ chain: mock, wallet: createMockWallet2(mock), loadout: { weapon: null, plates: 0, charges: 0, mags: 0 }, sleep: never })).toEqual({ kind: "passless" });
   });
 
   it("unconfirmed, never failed: no answer in time, a thrown call, or a pending one", async () => {

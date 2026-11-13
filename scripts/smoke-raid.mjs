@@ -9,14 +9,17 @@
 // debug hooks put a B-grade Stevedore and its gear in the locker (and a wreck in the yard), DEPLOY is game.start(),
 // E is held by stubbing input.down, the player is moved and faced by script, and machines are destroyed through the
 // game's own damage path. The chain's startRaid, extract and die are wrapped to record what the raid sends. The
-// manifest is the mock's own draw, so the checks read it rather than assume it. Four page loads:
-//   1. a raid to the boat: the sign-on card, the Stevedore's numbers in the shooter, a seal (cargo and +80), a hound
-//      (+120, and a servo taken by walking over it), a wreck's gun, the load limit, the report the boat sends and the
-//      debrief's rows; then a refused sign-on and its off-the-books raid;
-//   2. heavy arrears: a bonded container, which looks different and takes longer;
+// manifest is the mock's own draw and the invoice's rates are items.ts's, so the checks read both rather than assume
+// them. Five page loads:
+//   1. a raid to the boat: the sign-on card, the Stevedore's numbers in the shooter, a seal (cargo, and its fee on
+//      the invoice), a hound (its cost, and a servo taken by walking over it), a wreck's gun, the load limit, the
+//      report the boat sends and the debrief's rows; then a refused sign-on and its off-the-books raid;
+//   2. heavy arrears: a bonded container, which looks different and takes longer; then an early death to machines,
+//      queued until the contract will log it, and the gun left in a wreck;
 //   3. ?invoice=1100: the Bailiff rises as play begins past its threshold, and its grab kills: `bailiff`, impounded,
 //      and the next loadout falls back to the issue rifle;
-//   4. ?invoice=4000: every threshold fires once, in order, and the Assessor holds the boat.
+//   4. ?invoice=4000: every threshold fires once, in order, and the Assessor holds the boat;
+//   5. no dock pass: the raid is off the books and nothing is sent.
 // fps and console errors throughout. Exits non-zero if a check failed.
 import { mkdirSync } from "node:fs";
 import { launch } from "./browser.mjs";
@@ -62,7 +65,7 @@ async function open(query, setup = {}) {
     for (const m of ["startRaid", "extract", "die"]) {
       const real = chain[m].bind(chain);
       chain[m] = async (...a) => {
-        window.__calls.push({ method: m, args: JSON.parse(JSON.stringify(a)) });
+        window.__calls.push({ method: m, t: performance.now(), args: JSON.parse(JSON.stringify(a)) });
         if (m === "startRaid" && window.__refuse) {
           const error = window.__refuse;
           window.__refuse = null;
@@ -71,15 +74,19 @@ async function open(query, setup = {}) {
         return real(...a);
       };
     }
-    const c = await G.v2.wallet.claim("SMOKE7");
-    if (!c.ok) throw new Error("claim failed: " + c.error);
-    const gun = chain.debug.giveGun("stevedore", { grade: "B" });
-    chain.debug.give({ plate: 1, charge: 2, ammo: 2 });
-    if (setup.wreck) chain.debug.addWreck({ spot: 1, frame: "pilot", grade: "C" });
-    if (setup.arrears) chain.debug.setArrears(setup.arrears);
-    window.__gun = gun;
-    /** The loadout, set just before a sign-on (the dock's own screen keeps it between raids in real play). */
-    window.__arm = () => (G.v2.loadout = { weapon: gun.serial, plates: 1, charges: 2, mags: 2 });
+    if (!setup.noPass) {
+      const c = await G.v2.wallet.claim("SMOKE7");
+      if (!c.ok) throw new Error("claim failed: " + c.error);
+      const gun = chain.debug.giveGun("stevedore", { grade: "B" });
+      chain.debug.give({ plate: 1, charge: 2, ammo: 2 });
+      if (setup.wreck) chain.debug.addWreck({ spot: 1, frame: "pilot", grade: "C" });
+      if (setup.arrears) chain.debug.setArrears(setup.arrears);
+      window.__gun = gun;
+      /** The loadout, set just before a sign-on (the dock's own screen keeps it between raids in real play). */
+      window.__arm = () => (G.v2.loadout = { weapon: gun.serial, plates: 1, charges: 2, mags: 2 });
+    }
+    // The invoice's rates, as the contract's `rules` view gives them (items.ts INVOICE): the checks read them here.
+    window.__inv = (await chain.rules()).invoice;
     // E, held by script.
     window.__hold = false;
     const down = G.input.down.bind(G.input);
@@ -127,6 +134,9 @@ try {
   let shot = async (name) => shots && (await page.screenshot({ path: `${shots}/${name}.png` }));
   const net = await page.evaluate(() => window.__G.v2.chain.network);
   check(net === "mock", "the page runs v2 on the offline mock", net);
+  const inv = await page.evaluate(() => window.__inv);
+  const RATE = { seal: Number(inv.seal), weight: Number(inv.per_weight), hound: Number(inv.hound), entry: Number(inv.entry), carryPct: Number(inv.carry_in_pct), carryMax: Number(inv.carry_in_max) };
+  check(Object.values(RATE).every((x) => Number.isInteger(x) && x > 0), "the invoice's rates come from the contract's rules view", JSON.stringify(RATE));
 
   // ---- signing on ----
   check(await page.evaluate(() => window.__G.ext.weapon.name === "PAC-9 Issue" && window.__G.ext.gateRetries === true), "before any sign-on the shooter would get the issue rifle");
@@ -170,13 +180,14 @@ try {
   const s1 = await state(page);
   const changes = (await ev(page, "invoice:changed")).filter((e) => e.e.why !== "TIME ON SITE" && e.e.why !== "AT THE FENCE");
   check(s1.opened.includes(first.spot) && s1.weight === first.weight, "holding E cuts the seal and the cargo is carried", `${first.what}: weight ${s1.weight}`);
-  check(changes.some((c) => c.e.added === 80 && c.e.why === "CUSTOMS SEAL") && changes.some((c) => c.e.added === 40 * first.weight && c.e.why === `CARGO · ${first.weight} WT`), "the seal adds 80 and its cargo 40 a unit of weight", JSON.stringify(changes.map((c) => `+${c.e.added} ${c.e.why}`)));
+  check(changes.some((c) => c.e.added === RATE.seal && c.e.why === "CUSTOMS SEAL") && changes.some((c) => c.e.added === RATE.weight * first.weight && c.e.why === `CARGO · ${first.weight} WT`), "the seal adds its fee and its cargo the rate for each unit of weight", JSON.stringify(changes.map((c) => `+${c.e.added} ${c.e.why}`)));
   const rose = s1.total - before;
-  check(rose >= 80 + 40 * first.weight && rose <= 80 + 40 * first.weight + 4, "the meter rose by exactly that (and the clock)", `${before} → ${s1.total}`);
+  const fee = RATE.seal + RATE.weight * first.weight;
+  check(rose >= fee && rose <= fee + 4, "the meter rose by exactly that (and the clock)", `${before} → ${s1.total}`);
   check(await page.evaluate((w) => Math.abs(window.__G.ext.speedScale - (1 - 0.06 * w)) < 1e-9, first.weight), "the weight slows the player by 6% a unit", `weight ${first.weight}`);
   await page.waitForTimeout(250);
   const m1 = await meter(page);
-  check(m1.lines.some((l) => /\+80\s*CUSTOMS SEAL/.test(l)), "the line item shows under the meter", JSON.stringify(m1.lines));
+  check(m1.lines.some((l) => new RegExp(`\\+${RATE.seal}\\s*CUSTOMS SEAL`).test(l)), "the line item shows under the meter", JSON.stringify(m1.lines));
   await shot("1-invoice-line-item");
   await sample(page);
 
@@ -199,7 +210,7 @@ try {
     return out;
   });
   const kills = (await ev(page, "invoice:changed")).filter((e) => e.e.why === "HOUND DESTROYED");
-  check(drop.kills >= 1 && kills.length === drop.kills && kills.every((k) => k.e.added === 120), "a destroyed hound adds 120 to the invoice", `${drop.kills} destroyed`);
+  check(drop.kills >= 1 && kills.length === drop.kills && kills.every((k) => k.e.added === RATE.hound), "a destroyed hound adds its replacement cost to the invoice", `${drop.kills} destroyed, +${RATE.hound} each`);
   check(drop.drops >= 1, "a destroyed hound can drop a servo", `${drop.drops} on the ground after ${drop.kills}`);
   if (drop.drops) {
     await page.evaluate(() => {
@@ -225,7 +236,7 @@ try {
     await takeIt(page, key);
     const s4 = await state(page);
     const gunLine = (await ev(page, "invoice:changed")).filter((e) => /RECOVERED GUN/.test(e.e.why));
-    check(s4.wrecks.includes(wreck.id) && s4.weight === w0 + 2 && gunLine.length === 1 && gunLine[0].e.added === 80, "holding E takes the wreck's gun: 2 weight, on the invoice", JSON.stringify({ wrecks: s4.wrecks, weight: s4.weight, line: gunLine[0]?.e }));
+    check(s4.wrecks.includes(wreck.id) && s4.weight === w0 + 2 && gunLine.length === 1 && gunLine[0].e.added === 2 * RATE.weight, "holding E takes the wreck's gun: 2 weight, on the invoice", JSON.stringify({ wrecks: s4.wrecks, weight: s4.weight, line: gunLine[0]?.e }));
     check(await page.evaluate(() => /GUN ×1/.test(document.querySelector(".rd-cargo .sv-items")?.textContent ?? "")), "the cargo readout shows what is carried", await page.evaluate(() => (document.querySelector(".rd-cargo")?.textContent ?? "").replace(/\s+/g, " ")));
   }
 
@@ -315,7 +326,8 @@ try {
   await page.evaluate(() => (window.__G.player.invulnerable = true));
   const owing = await raidOf(page);
   const bonded = await page.evaluate(() => window.__G.raid.state.targets.filter((t) => t.bonded));
-  check(owing.invoiceStart === 150 + 600 && bonded.length === 2 && owing.containers.length === 10, "1,200 in arrears: half of it is on the meter at the fence, and two bonded containers are on the manifest", JSON.stringify({ at: owing.invoiceStart, bonded: bonded.map((b) => b.what) }));
+  const carriedIn = Math.min(RATE.carryMax, Math.floor((1200 * RATE.carryPct) / 100));
+  check(owing.invoiceStart === RATE.entry + carriedIn && bonded.length === 2 && owing.containers.length === 10, "1,200 in arrears: its share is on the meter at the fence, and two bonded containers are on the manifest", JSON.stringify({ at: owing.invoiceStart, carriedIn, bonded: bonded.map((b) => b.what) }));
   if (bonded.length) {
     await page.evaluate((k) => window.__at(k, 1.9), bonded[0].key);
     await page.waitForTimeout(1000);
@@ -327,6 +339,23 @@ try {
     check((await state(page)).opened.includes(bonded[0].spot) && bondMs > 2900 && bondMs > plainMs * 1.6 && lines.includes("BONDED SEAL"), "a bonded seal takes twice as long to cut", `${(plainMs / 1000).toFixed(1)} s customs, ${(bondMs / 1000).toFixed(1)} s bonded`);
   }
   await sample(page);
+  // ---- killed by machines, early: the contract won't log a death younger than 8 s a container, so it is queued ----
+  const opened = (await state(page)).opened.length;
+  await page.evaluate(() => ((window.__G.player.invulnerable = false), window.__G.player.damage(9999)));
+  await page.waitForTimeout(400);
+  const queued = await page.evaluate(() => ({ sent: window.__calls.some((c) => c.method === "die"), ledger: [...document.querySelectorAll('.menu [data-s="dead"] .rd-row')].pop()?.textContent ?? "", age: (performance.now() - window.__ev.find((e) => e.name === "raid:started").t) / 1000 }));
+  if (queued.age < 8 * opened) check(!queued.sent && /logging in \d+ s/.test(queued.ledger), "a death younger than the contract allows is queued, and the card says so", `${queued.age.toFixed(1)} s old, ${opened} containers opened: "${queued.ledger}"`);
+  else console.log(`     (the raid was already ${queued.age.toFixed(0)} s old: nothing to wait for)`);
+  await page.waitForFunction(() => window.__ev.some((e) => e.name === "raid:died"), null, { timeout: 40000 }).catch(() => {});
+  const fell = await page.evaluate(async () => {
+    const G = window.__G;
+    const die = window.__calls.find((c) => c.method === "die");
+    const started = window.__calls.find((c) => c.method === "startRaid");
+    await new Promise((ok) => setTimeout(ok, 300));
+    return { age: die ? (die.t - started.t) / 1000 : null, by: die?.args[3], spot: die?.args[2], ev: window.__ev.find((e) => e.name === "raid:died")?.e, rows: [...document.querySelectorAll('.menu [data-s="dead"] .rd-row')].map((x) => `${x.querySelector("dt").textContent}: ${x.querySelector("dd").textContent}`), wrecks: (await G.v2.chain.wrecks()).filter((w) => w.weapon?.serial === window.__gun.serial).length };
+  });
+  check(fell.age !== null && fell.age >= 8 * opened && fell.by === "machines" && fell.ev?.by === "machines" && fell.ev?.impounded === false, "the death is sent once the raid is old enough, as `machines`", JSON.stringify({ age: fell.age?.toFixed(1), need: 8 * opened, by: fell.by, ev: fell.ev }));
+  check(/^Your gun: LEFT IN A WRECK (by the shed|on the quay|by the gate|in the yard) · someone may carry it out$/.test(fell.rows[0] ?? "") && fell.wrecks === 1, "the dead card says the gun is in a wreck, and the mock holds that wreck", JSON.stringify(fell.rows));
   await page.close();
 
   // ================================================================================ 3. ?invoice=1100: the Bailiff
@@ -419,6 +448,18 @@ try {
   await page.waitForTimeout(3000);
   await sample(page);
   if (shots) await page.screenshot({ path: `${shots}/7-foreclosure.png` });
+  await page.close();
+
+  // =========================================================================== 5. no dock pass: off the books
+  page = await open("", { noPass: true });
+  await page.evaluate(() => window.__G.game.start());
+  await playing(page);
+  await page.waitForFunction(() => window.__radio.some((x) => /No dock pass on file/.test(x.text)), null, { timeout: 15000 }).catch(() => {});
+  const bare = await page.evaluate(() => {
+    const G = window.__G;
+    return { mode: G.raid.state.mode, weapon: G.weapon.name, sent: window.__calls.length, cardDown: document.querySelector(".rd-sign").hidden, meter: document.querySelector(".rd-inv").classList.contains("on"), targets: G.raid.state.targets.length, said: window.__radio.find((x) => /No dock pass on file/.test(x.text))?.who ?? null };
+  });
+  check(bare.mode === "offbooks" && bare.weapon === "PAC-9 Issue" && bare.sent === 0 && bare.cardDown && !bare.meter && bare.targets === 0 && bare.said === "Control", "without a dock pass the raid is off the books: nothing is sent, no card asks twice, and Control says why", JSON.stringify(bare));
   await page.close();
 
   // ---- throughout ----
