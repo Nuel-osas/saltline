@@ -67,6 +67,8 @@ export interface GuestWalletOptions {
   fetch?: typeof fetch;
   lookup?: AccountLookup | null;
   now?: () => number;
+  /** Which game's contract the faucet registers on. Absent (the first game) sends no `game` field at all. */
+  game?: "v2";
 }
 
 interface Stored {
@@ -200,7 +202,7 @@ export function createGuestWallet(opts: GuestWalletOptions = {}): GuestWallet {
         res = await doFetch(faucetUrl, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ accountId: state.accountId, callsign: cs }),
+          body: JSON.stringify({ accountId: state.accountId, callsign: cs, ...(opts.game ? { game: opts.game } : {}) }),
         });
       } catch {
         // The faucet funds an account at most once and refuses a registered one, so asking again is safe.

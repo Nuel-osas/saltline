@@ -369,6 +369,26 @@ describe("calls: wire format, errors and retries", () => {
     expect(tx.resends).toBe(0);
   });
 
+  it("waits for a just-created account to reach the node, instead of refusing a new player's first call", async () => {
+    const unseen = Object.assign(new Error("access key not found"), { code: "ACCESS_KEY_NOT_FOUND" });
+    const tx = new ScriptTx([unseen, unseen, ok({ paid: "70" })], null, 2);
+    const { chain, sleeps } = setup({ txs: [tx] });
+    expect((await chain.sell("moss", "copper", 1)).ok).toBe(true);
+    expect(tx.sends).toBe(3);
+    expect(tx.resends).toBe(0);
+    expect(sleeps.length).toBe(2);
+  });
+
+  it("still says there is no dock pass when the account never appears", async () => {
+    const unseen = () => Object.assign(new Error("account not found"), { code: "ACCOUNT_NOT_FOUND" });
+    const tx = new ScriptTx([unseen(), unseen(), unseen(), unseen()], null, 4);
+    const { chain } = setup({ txs: [tx] });
+    const r = await chain.sell("moss", "copper", 1);
+    expect(r.ok).toBe(false);
+    expect(r.pending).toBeUndefined();
+    expect(r.error).toMatch(/dock pass/i);
+  });
+
   it("stops at an executed failure that follows a transient one", async () => {
     const tx = new ScriptTx([http503(), panic("E_FUNDS: You've only got 1 coil.")]);
     const { chain } = setup({ txs: [tx] });

@@ -166,8 +166,12 @@ const tilde = (path: string) => (path.startsWith(homedir()) ? `~${path.slice(hom
  * The broker's key: its env variable if set, else the legacy keychain file for its account. A malformed env key is
  * refused rather than passed over for the keychain, so a typo never signs with a different key than intended.
  */
-export async function findKey(id: BrokerId, accountId: string, env: Record<string, string | undefined>, opts: KeyOptions = {}): Promise<KeyLookup> {
-  const name = ENV_KEYS[id];
+export function findKey(id: BrokerId, accountId: string, env: Record<string, string | undefined>, opts: KeyOptions = {}): Promise<KeyLookup> {
+  return findKeyNamed(ENV_KEYS[id], accountId, env, opts);
+}
+
+/** The same lookup for any account, by the name of its env variable (v2's characters use it too). */
+export async function findKeyNamed(name: string, accountId: string, env: Record<string, string | undefined>, opts: KeyOptions = {}): Promise<KeyLookup> {
   const raw = env[name]?.trim();
   if (raw) {
     const key = raw.startsWith("ed25519:") ? raw : `ed25519:${raw}`;
@@ -256,7 +260,12 @@ export function acceptRewrite(text: unknown, truth: string): string | null {
 }
 
 /** Asks NEAR AI Cloud to say the memo in character. Any failure (network, status, shape, a bad line) is null. */
-export async function rewriteMemo(id: BrokerId, memo: string, facts: string, v: VoiceConfig): Promise<string | null> {
+export function rewriteMemo(id: BrokerId, memo: string, facts: string, v: VoiceConfig): Promise<string | null> {
+  return rewriteAs(`${PERSONAS[id]} You write the one-line memo this broker signs on the public ledger.`, memo, facts, v);
+}
+
+/** The same request for any character: `persona` says who is speaking and what the line is for. */
+export async function rewriteAs(persona: string, memo: string, facts: string, v: VoiceConfig): Promise<string | null> {
   try {
     const res = await v.fetch(`${v.baseUrl}/chat/completions`, {
       method: "POST",
@@ -269,7 +278,7 @@ export async function rewriteMemo(id: BrokerId, memo: string, facts: string, v: 
           {
             role: "system",
             content:
-              `${PERSONAS[id]} You write the one-line memo this broker signs on the public ledger. ` +
+              `${persona} ` +
               `Rewrite the memo in your voice. Keep it true to the facts. Use no number that isn't in the facts. ` +
               `At most ${MEMO_MAX} characters, one line, no quotes, no emoji. Reply with the memo only.`,
           },
@@ -314,11 +323,27 @@ async function sign(port: NearPort, contractId: string, key: BrokerKey, method: 
 // ---------------------------------------------------------------------------------------------------------------
 // The loop's memory: a refused move isn't sent again for an hour
 
-export class Bench {
+/** What is benched, by key, and until when (v2's runner keys it by its own moves). */
+export class Benched {
   private until = new Map<string, number>();
   private now: () => number;
   constructor(now: () => number = Date.now) {
     this.now = now;
+  }
+  put(key: string, ms: number) {
+    this.until.set(key, this.now() + ms);
+  }
+  /** When the latest of `keys` comes off the bench, or null if none is on it. */
+  check(...keys: string[]): number | null {
+    const t = Math.max(0, ...keys.map((k) => this.until.get(k) ?? 0));
+    return t > this.now() ? t : null;
+  }
+}
+
+export class Bench {
+  private benched: Benched;
+  constructor(now: () => number = Date.now) {
+    this.benched = new Benched(now);
   }
   private static key(id: BrokerId, move: Move | "any") {
     if (move === "any") return `${id}|any`;
@@ -326,12 +351,11 @@ export class Bench {
   }
   /** Bench a move (or "any" move) for `ms`. */
   put(id: BrokerId, move: Move | "any", ms: number) {
-    this.until.set(Bench.key(id, move), this.now() + ms);
+    this.benched.put(Bench.key(id, move), ms);
   }
   /** When the move comes off the bench, or null if it isn't on it. */
   check(id: BrokerId, move: Move): number | null {
-    const t = Math.max(this.until.get(Bench.key(id, "any")) ?? 0, this.until.get(Bench.key(id, move)) ?? 0);
-    return t > this.now() ? t : null;
+    return this.benched.check(Bench.key(id, "any"), Bench.key(id, move));
   }
 }
 
@@ -464,7 +488,7 @@ export function formatLine(l: Line, secrets: readonly string[] = []): string {
 }
 
 /** 2: some broker's state or outcome is unknown (a failed read, a failed or unconfirmed call). 0 otherwise. */
-export const exitCode = (lines: Line[]) => (lines.some((l) => l.unknown || l.status === "failed" || l.status === "pending") ? 2 : 0);
+export const exitCode = (lines: readonly Pick<Line, "unknown" | "status">[]) => (lines.some((l) => l.unknown || l.status === "failed" || l.status === "pending") ? 2 : 0);
 
 // ---------------------------------------------------------------------------------------------------------------
 // The command line
@@ -558,6 +582,21 @@ export async function main(argv: readonly string[], env: Record<string, string |
       `${opts.dryRun ? " · dry run, nothing signed" : ""} · memos: ${voice ? `NEAR AI ${voice.model}` : "templates"}`,
   );
 
+  return everyRound(opts, async () => {
+    const startedAt = new Date().toISOString().slice(0, 19) + "Z";
+    const lines = await runRound(deps(opts.seed ?? Math.floor(Date.now() / 900_000)));
+    for (const l of lines) {
+      const text = `${startedAt}  ${formatLine(l, secrets)}`;
+      say(text);
+      if (actions && (l.unknown || l.status === "failed" || l.status === "pending")) say(`::error::${formatLine(l, secrets)}`);
+      else if (actions && (l.status === "skipped" || l.status === "refused")) say(`::warning::${formatLine(l, secrets)}`);
+    }
+    return exitCode(lines);
+  });
+}
+
+/** Runs `round` once, or every `minutes` until Ctrl-C. `round` returns its exit code; a loop always exits 0. */
+export async function everyRound(opts: Pick<Options, "mode" | "minutes">, round: () => Promise<number>): Promise<number> {
   let stop = false;
   let wake: (() => void) | null = null;
   const halt = () => {
@@ -568,18 +607,9 @@ export async function main(argv: readonly string[], env: Record<string, string |
     process.once("SIGINT", halt);
     process.once("SIGTERM", halt);
   }
-
   let code = 0;
   do {
-    const startedAt = new Date().toISOString().slice(0, 19) + "Z";
-    const lines = await runRound(deps(opts.seed ?? Math.floor(Date.now() / 900_000)));
-    for (const l of lines) {
-      const text = `${startedAt}  ${formatLine(l, secrets)}`;
-      say(text);
-      if (actions && (l.unknown || l.status === "failed" || l.status === "pending")) say(`::error::${formatLine(l, secrets)}`);
-      else if (actions && (l.status === "skipped" || l.status === "refused")) say(`::warning::${formatLine(l, secrets)}`);
-    }
-    code = exitCode(lines);
+    code = await round();
     if (opts.mode === "loop" && !stop) {
       await new Promise<void>((r) => {
         const t = setTimeout(r, opts.minutes * 60_000);

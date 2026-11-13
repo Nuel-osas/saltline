@@ -8,6 +8,8 @@ import { startSalvage } from "./salvage";
 import { startTicks, tickUrl } from "./tick";
 import { startStory } from "./story";
 import { startBoss } from "./boss";
+import { readGame } from "./v2/config";
+import { startV2 } from "./v2";
 import type { Economy } from "./types";
 import { type GuestWallet, createGuestWallet } from "./wallet";
 
@@ -50,6 +52,8 @@ function whenBooted(): Promise<GameContext> {
 whenBooted()
   .then((G) => {
     if (G.params && typeof G.params === "object" && "noeconomy" in G.params) return; // ?noeconomy: the baseline game
+    // v2 (docs/GAME.md) runs instead of everything below when this page load asks for it: ?game=v2, or VITE_GAME=v2.
+    if (readGame(import.meta.env as Record<string, unknown>, location.search) === "v2") return startV2(G);
     const cfg = readConfig();
     const { economy, mock } = buildEconomy(cfg);
     G.economy = economy;

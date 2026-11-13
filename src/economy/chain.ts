@@ -107,6 +107,12 @@ function executedFailure(e: unknown): boolean {
   return code === "FUNCTION_CALL_ERROR" || code === "CONTRACT_EXECUTION_ERROR";
 }
 
+/** The signer's account or key isn't on this node yet: true for a moment after the faucet creates a guest account. */
+function notYetVisible(e: unknown): boolean {
+  const code = errCode(e);
+  return code === "ACCOUNT_NOT_FOUND" || code === "ACCESS_KEY_NOT_FOUND";
+}
+
 /** Safe to try again: the request never produced an outcome. near-kit flags these `retryable`. */
 export function isTransient(e: unknown): boolean {
   if (!(e instanceof Error)) return false;
@@ -171,32 +177,32 @@ export function u128(v: unknown, field: string): number {
   throw new WireError(`${field}: expected a U128 string, got ${JSON.stringify(v)}`);
 }
 
-function int(v: unknown, field: string): number {
+export function int(v: unknown, field: string): number {
   if (typeof v === "number" && Number.isSafeInteger(v) && v >= 0) return v;
   throw new WireError(`${field}: expected a whole number, got ${JSON.stringify(v)}`);
 }
 
-function str(v: unknown, field: string): string {
+export function str(v: unknown, field: string): string {
   if (typeof v === "string") return v;
   throw new WireError(`${field}: expected a string, got ${JSON.stringify(v)}`);
 }
 
-function bool(v: unknown, field: string): boolean {
+export function bool(v: unknown, field: string): boolean {
   if (typeof v === "boolean") return v;
   throw new WireError(`${field}: expected true or false, got ${JSON.stringify(v)}`);
 }
 
-function obj(v: unknown, field: string): Record<string, unknown> {
+export function obj(v: unknown, field: string): Record<string, unknown> {
   if (v && typeof v === "object" && !Array.isArray(v)) return v as Record<string, unknown>;
   throw new WireError(`${field}: expected an object`);
 }
 
-function list<T>(v: unknown, field: string, each: (x: unknown, f: string) => T): T[] {
+export function list<T>(v: unknown, field: string, each: (x: unknown, f: string) => T): T[] {
   if (!Array.isArray(v)) throw new WireError(`${field}: expected a list`);
   return v.map((x, i) => each(x, `${field}[${i}]`));
 }
 
-const optional = <T>(v: unknown, f: (x: unknown) => T): T | null => (v === null || v === undefined ? null : f(v));
+export const optional = <T>(v: unknown, f: (x: unknown) => T): T | null => (v === null || v === undefined ? null : f(v));
 
 const TOKENS = new Set<string>(Object.keys(ITEMS));
 const CARGOS = new Set<string>(CARGO);
@@ -230,7 +236,7 @@ function cargo(v: unknown, field: string): CargoId {
 }
 
 /** `{ "<token>": U128 }`. Token ids this client doesn't know are skipped, not guessed at. */
-function amounts<K extends string>(v: unknown, field: string, keep: Set<string>): Amounts<K> {
+export function amounts<K extends string>(v: unknown, field: string, keep: Set<string>): Amounts<K> {
   const out: Record<string, number> = {};
   for (const [k, x] of Object.entries(obj(v, field))) if (keep.has(k)) out[k] = u128(x, `${field}.${k}`);
   return out as Amounts<K>;
@@ -421,7 +427,17 @@ export function decodeTown(raw: unknown): TownView {
 // The port: the few things this file needs from NEAR. nearKitPort() is the real one; tests pass a stub.
 
 export type CallSpec =
-  | { kind: "call"; signerId: string; privateKey: `ed25519:${string}`; contractId: string; method: string; args: object; gasTgas: number }
+  | {
+      kind: "call";
+      signerId: string;
+      privateKey: `ed25519:${string}`;
+      contractId: string;
+      method: string;
+      args: object;
+      gasTgas: number;
+      /** Attached deposit in yoctoNEAR. Absent for every game call; NEP-171 transfers attach 1. */
+      depositYocto?: bigint;
+    }
   | { kind: "transfer"; signerId: string; privateKey: `ed25519:${string}`; receiverId: string; yocto: bigint };
 
 /** An execution outcome as the RPC returns it (only the fields read here). */
@@ -476,7 +492,10 @@ export function nearKitPort(opts: { rpcUrls: readonly string[]; waitUntil?: TxEx
         const b = near.transaction(spec.signerId).signWith(spec.privateKey);
         return spec.kind === "transfer"
           ? b.transfer(spec.receiverId, spec.yocto)
-          : b.functionCall(spec.contractId, spec.method, spec.args, { gas: `${spec.gasTgas} Tgas` });
+          : b.functionCall(spec.contractId, spec.method, spec.args, {
+              gas: `${spec.gasTgas} Tgas`,
+              ...(spec.depositYocto ? { attachedDeposit: `${spec.depositYocto} yocto` as const } : {}),
+            });
       };
       return {
         hash: () => builder?.getHash() ?? null,
@@ -534,7 +553,7 @@ function decodeSuccess(outcome: RawOutcome): { done: true; value: unknown } | { 
   }
 }
 
-const PENDING_TEXT = "Sent, but not confirmed yet. Check the ledger before trying again.";
+export const PENDING_TEXT = "Sent, but not confirmed yet. Check the ledger before trying again.";
 
 function refusal(e: unknown, txHash: string | undefined): Executed {
   const p = panicOf(e);
@@ -581,6 +600,12 @@ export async function executeTx(tx: PreparedTx, opts: ExecOptions = {}): Promise
       if (executedFailure(e)) return refusal(e, hashOf());
       // A re-send refused for its nonce means the first copy (or another tab's call) used it: ask by hash.
       if (errCode(e) === "INVALID_NONCE" && mayHaveLanded) return reconcile(attempt + 1);
+      // A node that hasn't yet seen a just-created account or its key (a dock pass claimed a second ago): nothing was
+      // signed, so waiting and trying again is safe. Seen on testnet on 13 Nov 2026 as a refused first raid.
+      if (notYetVisible(e) && !tx.hash() && attempt < retries) {
+        await sleep(backoff * 2 ** attempt + Math.floor(Math.random() * backoff));
+        continue;
+      }
       if (isTransient(e)) {
         if (tx.hash()) mayHaveLanded = true;
         if (attempt < retries) {
@@ -622,14 +647,27 @@ export interface TestnetChain extends DetailedChain, AccountLookup {
 // was more than a whole dock pass, and the first start_run was refused with NotEnoughBalance.
 export const GAS_RUN = 30;
 export const GAS_DEFAULT = 20;
-const BASE58_HASH = /^[1-9A-HJ-NP-Za-km-z]{32,64}$/;
+export const BASE58_HASH = /^[1-9A-HJ-NP-Za-km-z]{32,64}$/;
 
 const whole = (n: unknown) => typeof n === "number" && Number.isSafeInteger(n) && n >= 0;
 const positive = (n: unknown) => whole(n) && (n as number) > 0;
 const badAmount = (): CallResult => ({ ok: false, error: ERROR_TEXT.E_BAD_AMOUNT, code: "E_BAD_AMOUNT" });
 
-export function createTestnetChain(opts: TestnetChainOptions): TestnetChain {
-  const { contractId, explorerTxUrl } = opts.config;
+/** The plumbing every contract client shares: views with retries, the one call queue, and reply shaping. */
+export interface ContractClient {
+  readonly port: NearPort;
+  withRetry<T>(fn: (attempt: number) => Promise<T>, what: string): Promise<T>;
+  view<T>(method: string, args: object, decode: (raw: unknown) => T): Promise<T>;
+  /** Queued behind every earlier call from this client, signed with the current wallet's key. */
+  call(method: string, args: object, gasTgas: number, depositYocto?: bigint): Promise<Executed>;
+  /** Strips `value` and adds decoded fields, keeping ok:true if the reply didn't parse (the call did happen). */
+  shape<X extends object>(r: Executed, decode: (v: unknown) => X): CallResult & Partial<X>;
+  /** Calls queued or in flight. */
+  queued(): number;
+}
+
+export function createContractClient(opts: Pick<TestnetChainOptions, "keys" | "port" | "exec"> & { config: { contractId: string; rpcUrls: readonly string[] } }): ContractClient {
+  const { contractId } = opts.config;
   const port = opts.port ?? nearKitPort({ rpcUrls: opts.config.rpcUrls });
   const retries = opts.exec?.retries ?? 3;
   const backoff = opts.exec?.backoffMs ?? 400;
@@ -680,11 +718,13 @@ export function createTestnetChain(opts: TestnetChainOptions): TestnetChain {
     return run.finally(() => waiting--);
   }
 
-  function call(method: string, args: object, gasTgas: number): Promise<Executed> {
+  function call(method: string, args: object, gasTgas: number, depositYocto?: bigint): Promise<Executed> {
     return enqueue(async () => {
       const key = opts.keys();
       if (!key) return { ok: false, error: "No wallet yet. Claim your dock pass." };
-      const tx = port.prepare({ kind: "call", signerId: key.accountId, privateKey: key.privateKey, contractId, method, args, gasTgas });
+      const spec: CallSpec = { kind: "call", signerId: key.accountId, privateKey: key.privateKey, contractId, method, args, gasTgas };
+      if (depositYocto) spec.depositYocto = depositYocto;
+      const tx = port.prepare(spec);
       return executeTx(tx, { retries, backoffMs: backoff, sleep });
     });
   }
@@ -702,11 +742,18 @@ export function createTestnetChain(opts: TestnetChainOptions): TestnetChain {
     }
   }
 
+  return { port, withRetry, view, call, shape, queued: () => waiting };
+}
+
+export function createTestnetChain(opts: TestnetChainOptions): TestnetChain {
+  const { contractId, explorerTxUrl } = opts.config;
+  const { port, withRetry, view, call, shape, queued } = createContractClient(opts);
+
   return {
     network: "testnet",
     contractId,
     txUrl: (h) => (BASE58_HASH.test(h) ? explorerTxUrl + h : null),
-    queued: () => waiting,
+    queued,
 
     profile: (accountId) => view("profile", { account_id: accountId }, decodeProfile),
     balances: (accountId) => view("balances", { account_id: accountId }, decodeBalances),

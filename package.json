@@ -12,7 +12,9 @@
     "check": "npm run typecheck && npm run test && npm run build",
     "format": "prettier --write \"src/**/*.{js,ts,css}\" index.html",
     "verify:testnet": "node scripts/verify-testnet.mjs",
-    "e2e:testnet": "node scripts/e2e-testnet.mjs"
+    "e2e:testnet": "node scripts/e2e-testnet.mjs",
+    "e2e:v2": "node scripts/e2e-v2.mjs",
+    "verify:v2": "node --import ./agents/ts-hook.mjs scripts/v2-chain-check.mjs v2.saltline.testnet"
   },
   "devDependencies": {
     "happy-dom": "21.0.4",

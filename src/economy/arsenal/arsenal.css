@@ -1,0 +1,93 @@
+/* The kit on the HUD: breaker charge pips beside the ammo count (h- look), and a burst's flash over the view.
+   Uses the game's tokens from src/ui.css; loaded after it. */
+
+/* ---- charge pips: left of the ammo count, on its baseline ---- */
+.ar-charges {
+  margin-right: 14px;
+  padding-bottom: 2px;
+  text-align: right;
+  transition: opacity 0.2s;
+}
+.ar-charges.cooling {
+  opacity: 0.55;
+}
+.ar-pips {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-bottom: 7px;
+}
+.ar-pips i {
+  width: 9px;
+  height: 17px;
+  background: var(--bone);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+  clip-path: polygon(0 3px, 3px 0, 100% 0, 100% 100%, 0 100%);
+  transition: background 0.2s;
+}
+.ar-pips i.off {
+  background: var(--bone-faint);
+  box-shadow: none;
+}
+.ar-k {
+  margin-right: -0.26em;
+  white-space: nowrap;
+}
+.ar-k kbd {
+  margin: 0 7px 0 0;
+  letter-spacing: 0;
+  vertical-align: 1px;
+}
+.ar-charges.none .ar-k {
+  color: var(--bone-dim);
+}
+.ar-charges.gain .ar-pips i:not(.off) {
+  animation: ar-gain 0.7s ease-out;
+}
+.ar-charges.empty .ar-pips i {
+  animation: ar-empty 0.45s steps(2, jump-none) 2;
+}
+@keyframes ar-gain {
+  0% {
+    background: var(--signal-hot);
+    box-shadow: 0 0 9px var(--signal);
+  }
+  100% {
+    background: var(--bone);
+  }
+}
+@keyframes ar-empty {
+  0% {
+    background: var(--alarm);
+  }
+  100% {
+    background: var(--bone-faint);
+  }
+}
+.is-touch .ar-k kbd {
+  display: none;
+}
+.is-touch .ar-pips i {
+  width: 7px;
+  height: 12px;
+}
+
+/* ---- a burst close by ---- */
+.ar-flash {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 55%, rgba(214, 238, 255, 0.9), rgba(150, 205, 255, 0.55) 55%, rgba(120, 180, 255, 0.3));
+  mix-blend-mode: screen;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ar-charges.gain .ar-pips i,
+  .ar-charges.empty .ar-pips i {
+    animation: none;
+  }
+  .ar-flash {
+    display: none;
+  }
+}
