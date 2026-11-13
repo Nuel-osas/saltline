@@ -55,10 +55,6 @@ export type FakeV2 = V2 & { fake: FakeControls };
 
 const ME = "breacher-7f3a.testnet";
 
-/** items.ts's goodsPrice, callable at any stock. Its `stock` parameter takes its type from its default, the literal
- *  5 (VENDOR_PRICING is `as const`), so TypeScript refuses every other stock level; the rule itself handles them. */
-const priceAt = goodsPrice as (id: ModId | ConsumableId, stock?: number) => number;
-
 /** The contract refusing a call: its code and its short reason. */
 class Refusal {
   constructor(
@@ -168,7 +164,7 @@ export function createFake(opts: FakeOptions = {}): FakeV2 {
 
   /** Something on a vendor's shelf, at items.ts's own default price for one unit at that stock (`goodsPrice`), so the
    *  stand-in's prices follow the blueprints and the pricing rule as they are tuned. */
-  const good = (tokenId: ModId | ConsumableId, stock: number, reason: string): Vendor["goods"][number] => ({ tokenId, price: priceAt(tokenId, stock), stock, reason });
+  const good = (tokenId: ModId | ConsumableId, stock: number, reason: string): Vendor["goods"][number] => ({ tokenId, price: goodsPrice(tokenId, stock), stock, reason });
 
   const vendorState: Record<VendorId, { scrip: number; stock: Amounts<MaterialId>; goods: Vendor["goods"]; guns: Vendor["guns"]; memo: string }> = {
     moss: {
@@ -457,7 +453,7 @@ export function createFake(opts: FakeOptions = {}): FakeV2 {
         const cost = g.price * amount;
         if (have("scrip") < cost) return no("E_FUNDS", "Not enough scrip");
         g.stock -= amount;
-        g.price = priceAt(g.tokenId, g.stock); // dearer as the shelf empties, by items.ts's rule
+        g.price = goodsPrice(g.tokenId, g.stock); // dearer as the shelf empties, by items.ts's rule
         add("scrip", -cost);
         add(tokenId, amount);
         vendorState[vendor].scrip += cost;
