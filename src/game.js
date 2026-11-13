@@ -51731,6 +51731,7 @@ void main() {
       KeyE: "interact",
       KeyF: "melee",
       KeyV: "melee",
+      KeyG: "charge", // ext: the breaker charge (src/economy/arsenal polls it; nothing in the baseline acts on it)
       Escape: "pause",
       KeyP: "pause",
       KeyQ: "alt",
@@ -55137,6 +55138,9 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
         reloadNow: Fe,
         addAmmo(Me) {
           ve.reserve += Me;
+        },
+        kick(Me = 0, we = 0, be = 0, Oe = 0) { // ext: a shove on the view model's recoil springs (the rifle butt)
+          ((k.kZ.v += Me), (k.kP.v += we), (k.kY.v += be), (k.kR.v += Oe));
         },
         setWetness(Me) {
           Wv.value = Math.max(0, Math.min(1, +Me || 0));
