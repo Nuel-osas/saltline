@@ -21,7 +21,10 @@ const check = (ok, what, detail = "") => {
 const browser = await launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
-page.on("console", (m) => m.type() === "error" && errors.push(m.text().slice(0, 200)));
+// A failed resource shows in the console without its address, so failed responses are collected by address instead.
+// /api/tick answers 503 where the agents' keys aren't set (a developer's machine); that is not the game's error.
+page.on("console", (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && errors.push(m.text().slice(0, 200)));
+page.on("response", (r) => r.status() >= 400 && !/\/api\/tick/.test(r.url()) && errors.push(`${r.status()} ${r.url().slice(0, 120)}`));
 page.on("pageerror", (e) => errors.push(String(e).slice(0, 200)));
 const shot = async (name) => shots && (await page.screenshot({ path: `${shots}/${name}.png` }));
 
