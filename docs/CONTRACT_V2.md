@@ -131,8 +131,8 @@ contract's `items.rs` must match exactly. Change both sides and this file togeth
 - `parts.servo` ≤ `kills.hound`, `parts.rotor` ≤ `kills.gull`. `used` ≤ what was brought.
 - Carry weight ≤ 6: opened cargo and parts at their weights, plus 2 for each recovered gun.
 - `extract` needs the raid to be at least 45 s + 8 s per container opened old.
-- The **invoice** is `invoice_start` + 60 per minute of block time + 80 per container opened + 40 per unit of
-  weight carried + 200 per uplink + 40 per gull + 120 per hound.
+- The **invoice** is `invoice_start` + 40 per minute of block time + 60 per container opened + 30 per unit of
+  weight carried + 50 per uplink + 15 per gull + 35 per hound (`INVOICE` in items.ts).
 
 **`extract`.**
 - Mints the cargo and parts.

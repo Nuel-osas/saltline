@@ -259,12 +259,14 @@ export const INVOICE = {
   perExtraction: 25,
   /** Past extractions counted toward the entry charge, so it tops out at 500. */
   maxExtractionsCounted: 14,
-  perMinute: 60,
-  seal: 80,
-  perWeight: 40,
-  uplink: 200,
-  gull: 40,
-  hound: 120,
+  // Tuned so the mandatory part of a raid (three uplinks, the machines they bring) costs little and greed costs
+  // most: a minimal raid ends near 800, a careful full load near 1,130, and a greedy one passes 1,200.
+  perMinute: 40,
+  seal: 60,
+  perWeight: 30,
+  uplink: 50,
+  gull: 15,
+  hound: 35,
   /** Thresholds before the Harbormaster's posture moves them. */
   secondNotice: 600,
   bailiff: 1200,

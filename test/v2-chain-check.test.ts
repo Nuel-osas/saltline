@@ -38,7 +38,7 @@ describe("v2 chain check", () => {
   it("names every number that differs, is missing, or is extra", async () => {
     const c = await load();
     const wire = c.toWire(items);
-    wire.rules.invoice.per_minute = 61;
+    wire.rules.invoice.per_minute = 41;
     delete wire.rules.raid.carry_limit;
     delete wire.rules.raid.slow_per_weight;
     wire.rules.market.listing_days = 7;
@@ -52,7 +52,7 @@ describe("v2 chain check", () => {
     const { problems, notes } = c.compareAll(wire, items);
     expect(problems).toEqual([
       "rules.raid.carry_limit: missing on the contract (items.ts has 6)",
-      "rules.invoice.per_minute: contract 61, items.ts 60",
+      "rules.invoice.per_minute: contract 41, items.ts 40",
       "rules.vendor_pricing.gun_pct: contract 130, items.ts 125",
       "materials.copper.bid: contract 41, items.ts 40",
       "materials.gold: on the contract, not in items.ts",
