@@ -5,6 +5,7 @@
 // A chain without town(), a failed or late read, or Chapters 1–2 leave both hooks inert and the run plays as before.
 // Anything here that throws is caught: the shooter never depends on the boss.
 import "./boss.css";
+import { hooks } from "../hooks";
 import type { Economy } from "../types";
 import { createChannel, type Channel, type TimedChannel } from "../story/radio";
 import { createTownReader, type TownRead, type TownReader } from "../story/town";
@@ -69,7 +70,7 @@ export function callsignOf(G: Game): string | null {
 }
 
 export function createBoss(G: Game, economy: Economy, opts: BossOptions = {}): Boss {
-  const ext = (G.ext ??= { speedScale: 1, gear: {} });
+  G.ext ??= { speedScale: 1, gear: {} };
   const build = opts.build ?? defaultParts;
   const town = opts.town ?? G.story?.town ?? createTownReader(economy.chain);
   // One channel for both voices: a second one would relabel the story's lines as Control's (radio.ts).
@@ -109,15 +110,16 @@ export function createBoss(G: Game, economy: Economy, opts: BossOptions = {}): B
   }
 
   // ---- the hooks ----
-  ext.raycast = (origin: any, dir: any, max: number) => (fight ? (guard("raycast", () => fight!.raycast(origin, dir, max)) ?? null) : null);
-  ext.extractBlocked = () => {
+  // Registered through the shared registries (../hooks.ts): the Bailiff and the missions' set pieces use them too.
+  const offShot = hooks(G).addShotTarget((origin: any, dir: any, max: number) => (fight ? (guard("raycast", () => fight!.raycast(origin, dir, max)) ?? null) : null));
+  const offGate = hooks(G).addBoatGate(() => {
     const blocked = !!fight && (guard("blocked", () => fight!.blocked()) ?? false);
     if (blocked && performance.now() - hintAt > 6000) {
       hintAt = performance.now();
       guard("hint", () => G.hud?.message?.(HINT, 3.5));
     }
     return blocked;
-  };
+  });
 
   // ---- the boat holds off while it stands ----
   const boat = G.backdrop?.boat ?? null;
@@ -245,8 +247,8 @@ export function createBoss(G: Game, economy: Economy, opts: BossOptions = {}): B
       end();
       resetBoat();
       for (const off of offs) off();
-      if (ext.raycast) delete ext.raycast;
-      if (ext.extractBlocked) delete ext.extractBlocked;
+      offShot();
+      offGate();
       watcher?.disconnect();
       own?.dispose();
     },
