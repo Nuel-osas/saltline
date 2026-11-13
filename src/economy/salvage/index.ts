@@ -433,6 +433,8 @@ export function createSalvage(G: Game, economy: Economy): Salvage {
                 state: "ok",
               }
             : { text: "recorded", state: "ok" };
+          // The story's Harbormaster invoices the haul at the debrief's value (story/index.ts); null when unknown.
+          guard("extracted", () => G.events?.emit?.("run:extracted", { minted: { ...minted }, value: v ?? null }));
         } else {
           view.value = "none minted";
           view.ledger = { text: `Refused: ${res.error || "no reason given"}`, state: "refused" };

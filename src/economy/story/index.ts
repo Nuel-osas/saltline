@@ -1,17 +1,20 @@
-// The story in the game (docs/STORY.md): the opening briefing, Control's lines that follow the town's arc, the
-// Harbormaster's channel from Act III, its extra drones, and the town's lights across the water.
+// The story in the game (docs/STORY.md): the opening briefing, Control's lines that
+// follow the town's arc, the Harbormaster billing the player on its own channel from Chapter 1 (and counting its
+// strength in Chapter 3), its extra drones, and the town's lights across the water.
 //
-// It reads the town through economy.chain.town() (optional: a chain without it is Act I) and never waits on it: every
-// read has a short timeout, a failed read is unknown, and unknown plays as Act I with no line that needs a number.
-// The shooter never depends on any of it; on any failure the game plays on as before.
+// It reads the town through economy.chain.town() (optional: a chain without it is Chapter 1) and the player through
+// chain.profile(), and never waits on either: every read has a short timeout, a failed read is unknown, and unknown
+// plays as Chapter 1 with no line that needs a number. The shooter never depends on any of it; on any failure the
+// game plays on as before.
 import "./story.css";
-import type { Economy } from "../types";
+import type { Economy, Profile } from "../types";
 import { createBriefing, type Briefing } from "./briefing";
-import { HARBORMASTER } from "./copy";
-import { coresSold24h, harbormasterAwake, runStartLines, type Line } from "./lines";
+import { HARBORMASTER, cleanCallsign, trespassFee } from "./copy";
+import { coresSold24h, evidenceLine, harbormasterAwake, invoiceLine, relayLine, runStartLines, type Line } from "./lines";
 import { createTownLights, lightsOf, type TownLights } from "./lights";
 import { defaultStore, loadMemory, saveMemory } from "./memory";
-import { createChannel, type Channel } from "./radio";
+import { createPacer, type Pacer } from "./pacing";
+import { createChannel, type TimedChannel } from "./radio";
 import { bonusOf, createTownReader, type TownRead, type TownReader } from "./town";
 import { NO_BONUS, waveBonus } from "./waves";
 
@@ -25,12 +28,18 @@ const IDLE_POLL = 60_000;
 /** Run-start lines that arrive later than this after the run started are dropped, not said out of place. */
 const LATE_MS = 20_000;
 const RECENT_LIMIT = 64;
+/** How long each kind of Harbormaster line may wait for its turn on the radio (pacing.ts) before it's dropped (ms). */
+const WAIT = { runStart: 50_000, seal: 14_000, relay: 16_000, evidence: 14_000, invoice: 25_000 };
 
 export interface Story {
   readonly briefing: Briefing;
   readonly lights: TownLights | null;
   readonly town: TownReader;
-  readonly channel: Channel;
+  readonly channel: TimedChannel;
+  /** The Harbormaster's turn on the radio (pacing.ts). */
+  readonly pacer: Pacer;
+  /** The dock pass callsign once read this session, else null (Control says "Breacher"). */
+  readonly callsign: string | null;
   /** For tests and screenshots: the read this run plays on. */
   readonly run: { read: TownRead | null; lines: Line[] };
   update(dt: number): void;
@@ -44,6 +53,12 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
   const session: string[] = [];
   const town = createTownReader(economy.chain);
   const channel = createChannel(G);
+  const pacer = createPacer({
+    now: () => performance.now(),
+    busy: () => channel.busy(),
+    lastHarbormasterEnd: () => channel.lastHarbormasterEnd(),
+    say: (line, seconds) => channel.say(line, seconds),
+  });
 
   const warned = new Set<string>();
   function guard<T>(where: string, fn: () => T): T | undefined {
@@ -111,21 +126,50 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
   }
   guard("button", injectButton);
 
+  // ---- the player: the dock pass callsign (read once a session) and the profile the surcharge is billed from ----
+  let callsign: string | null = null;
+  const setCallsign = (c: string | null) => {
+    if (!c || callsign) return;
+    callsign = c;
+    ext.callsign = c; // game.js fills Control's {callsign} from it (its `// ext:` hooks), else "Breacher"
+  };
+  /** The player's profile: null without an account or a pass, undefined when the read failed (unknown). */
+  async function readProfile(): Promise<Profile | null | undefined> {
+    const id = guard("account", () => economy.wallet?.accountId?.()) ?? null;
+    if (!id) return null;
+    const p = await Promise.race([
+      Promise.resolve()
+        .then(() => economy.chain.profile(id))
+        .catch(() => undefined),
+      new Promise<undefined>((ok) => setTimeout(() => ok(undefined), RUN_READ.timeout)),
+    ]);
+    if (p === null) return null;
+    if (!p || typeof p !== "object") return undefined;
+    setCallsign(cleanCallsign(p.callsign));
+    return p;
+  }
+  void readProfile().catch(() => {});
+
   // ---- a run ----
   let token = 0;
   let runAt = 0;
   let runRead: TownRead | null = null;
   let pending: Line[] | null = null;
   let said: Line[] = [];
-  let cutSaid = false;
-  let cores = 0;
+  /** Once a run: the seal, relay and evidence lines. */
+  let voiced = { seal: false, relay: false, evidence: false };
+  /** The carry weight after the last take this run; null before the first. */
+  let weight: number | null = null;
 
   function flush() {
     if (!pending || G.game?.state !== "playing") return;
     const lines = pending;
     pending = null;
     if (performance.now() - runAt > LATE_MS) return;
-    for (const l of lines) channel.say(l, l.who === "harbormaster" ? 4.6 : 4.2);
+    // Control's go straight after the game's intro; the Harbormaster's wait their turn (pacing.ts).
+    for (const l of lines)
+      if (l.who === "harbormaster") pacer.add(l.text, { seconds: 4.6, ttl: WAIT.runStart });
+      else channel.say(l, 4.2);
     said = lines;
   }
 
@@ -135,10 +179,11 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     runRead = null;
     pending = null;
     said = [];
-    cutSaid = false;
-    cores = 0;
+    voiced = { seal: false, relay: false, evidence: false };
+    weight = null;
+    pacer.clear();
     channel.reset();
-    const read = await town.read(RUN_READ);
+    const [read, profile] = await Promise.all([town.read(RUN_READ), readProfile().catch(() => undefined)]);
     if (t !== token) return;
     runRead = read;
     apply(read);
@@ -154,7 +199,8 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
       if (t !== token) return;
       cores24h = coresSold24h(events, Date.now(), RECENT_LIMIT);
     }
-    const out = runStartLines({ read, heard: memory.heard, session, peak: memory.peak, cores24h });
+    const fee = profile ? trespassFee(profile) : null;
+    const out = runStartLines({ read, heard: memory.heard, session, peak: memory.peak, cores24h, callsign, fee });
     for (const id of out.session) session.push(id);
     if (out.heard.length || out.peak !== memory.peak) {
       memory.heard = [...memory.heard, ...out.heard];
@@ -173,25 +219,47 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
   on("run:start", () => void startRun().catch((e) => console.warn("[story] run start", e)));
   on("game:state", (e: { state?: string }) => {
     if (e?.state === "playing") flush();
+    if (e?.state === "title" || e?.state === "dead") pacer.clear();
     if (e?.state === "title" || e?.state === "complete" || e?.state === "dead") idleRead();
   });
+  // The Harbormaster's billing, from Chapter 1. Each line waits its turn (pacing.ts): after Control's own line for
+  // the moment, which the game queues right after these events, and never within 8 s of its last line.
   on("objective:done", (e: { index?: number; total?: number }) => {
-    if (cutSaid || !harbormasterAwake(runRead) || !e || !(Number(e.index) < Number(e.total))) return;
-    cutSaid = true;
-    // After Control's own line for the cut, which the game queues right after this event.
-    queueMicrotask(() => channel.say({ who: "harbormaster", text: HARBORMASTER.relayCut }, 3.8));
+    if (voiced.relay) return;
+    const text = relayLine(e?.index, e?.total);
+    if (!text) return;
+    voiced.relay = true;
+    pacer.add(text, { seconds: 3.8, ttl: WAIT.relay });
   });
-  const track = (e: { carried?: { core?: number } }) => {
-    const n = e?.carried?.core;
-    cores = typeof n === "number" && Number.isFinite(n) ? n : cores;
+  const took = (e: { weight?: number } | undefined, seal: boolean) => {
+    const before = weight;
+    const after = e && typeof e.weight === "number" && Number.isFinite(e.weight) ? e.weight : null;
+    if (after !== null) weight = after;
+    // The evidence count says more than the seal: when one take does both, it's the one said.
+    const evidence = voiced.evidence ? null : evidenceLine(before, after);
+    if (evidence) {
+      voiced.evidence = true;
+      pacer.add(evidence, { seconds: 4, ttl: WAIT.evidence });
+    } else if (seal && !voiced.seal) {
+      voiced.seal = true;
+      pacer.add(HARBORMASTER.sealCut, { seconds: 4.4, ttl: WAIT.seal });
+    }
   };
-  on("cargo:taken", track);
-  on("wreck:found", track);
-  on("player:dead", () => (cores = 0));
+  on("cargo:taken", (e) => took(e, true));
+  on("wreck:found", (e) => took(e, false));
+  on("player:dead", () => {
+    pacer.clear();
+    channel.reset(); // the game clears the radio on a death
+  });
   on("extraction:reached", () => {
-    if (!(cores > 0) || !harbormasterAwake(runRead)) return;
-    // The game clears the radio and queues Control's "aboard" line right after this event: speak after it.
-    queueMicrotask(() => channel.say({ who: "harbormaster", text: HARBORMASTER.extractWithCores }, 4.4));
+    pacer.clear(); // the game clears the radio and queues Control's "aboard" line right after this event
+    channel.reset();
+  });
+  // Salvage settles the extraction and tells the debrief's value (salvage/index.ts): the invoice quotes it, and an
+  // unknown value says nothing.
+  on("run:extracted", (e: { value?: number | null; minted?: Record<string, number> } | undefined) => {
+    const cargo = !!e?.minted && Object.values(e.minted).some((n) => typeof n === "number" && n > 0);
+    if (cargo && G.game?.state === "complete") pacer.add(invoiceLine(e?.value), { seconds: 4.8, ttl: WAIT.invoice });
   });
 
   // ---- reads between runs ----
@@ -215,15 +283,20 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
     lights,
     town,
     channel,
+    pacer,
+    get callsign() {
+      return callsign;
+    },
     get run() {
       return { read: runRead, lines: said };
     },
     update(dt: number) {
       guard("update", () => {
-        if (G.game?.state === "paused") return;
+        const st = G.game?.state;
+        if (st === "paused") return;
+        if (st === "playing" || st === "complete") pacer.tick();
         lights?.update(dt);
         if (!replayBtn?.isConnected) injectButton();
-        const st = G.game?.state;
         if ((st === "title" || st === "complete" || st === "dead") && !document.hidden && (idleT -= dt) <= 0) idleRead();
       });
     },
@@ -231,6 +304,8 @@ export function createStory(G: Game, economy: Economy, opts: { store?: Storage |
       for (const off of offs) off();
       if (ext.beforeRun) delete ext.beforeRun;
       ext.waveBonus = { ...NO_BONUS };
+      if (ext.callsign === callsign) delete ext.callsign;
+      pacer.clear();
       briefing.dispose();
       channel.dispose();
       lights?.dispose();
