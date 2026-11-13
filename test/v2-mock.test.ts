@@ -506,7 +506,9 @@ describe("v2 mock: extract", () => {
     const invoice = invoiceTotal({ start: raid.invoiceStart, seconds: 240, seals: opened.length, weight: weight + 2, uplinks: 2, gulls: 3, hounds: 2 });
     expect(weightOf(minted)).toBe(weight + 2);
     expect(r.invoice).toBe(invoice);
-    expect(r.invoice).toBe(150 + 240 + 80 * opened.length + 40 * (weight + 2) + 400 + 120 + 240);
+    expect(r.invoice).toBe(
+      150 + (240 * INVOICE.perMinute) / 60 + INVOICE.seal * opened.length + INVOICE.perWeight * (weight + 2) + 2 * INVOICE.uplink + 3 * INVOICE.gull + 2 * INVOICE.hound,
+    );
     expect(r.arrears).toBe(Math.floor((invoice * 25) / 100));
     expect(await m.profile(me)).toMatchObject({ raids: 1, extractions: 1, deaths: 0, activeRaid: null, arrears: r.arrears });
   });
@@ -516,7 +518,8 @@ describe("v2 mock: extract", () => {
     const raid = (await m.startRaid(BARE)).raid as Raid;
     tick(45);
     const r = await m.extract(raid.raidId, rep());
-    expect(r).toMatchObject({ ok: true, weapon: null, minted: {}, invoice: 150 + 45, arrears: 48 });
+    const bare = 150 + Math.floor((45 * INVOICE.perMinute) / 60);
+    expect(r).toMatchObject({ ok: true, weapon: null, minted: {}, invoice: bare, arrears: Math.floor((bare * INVOICE.arrearsOnExtract) / 100) });
   });
 
   it("a recovered wreck's gun changes owner, worn by 15, and its items are minted to the finder", async () => {
@@ -572,7 +575,8 @@ describe("v2 mock: die", () => {
     const { m, tick } = await joined();
     const raid = (await m.startRaid(BARE)).raid as Raid;
     tick(30);
-    expect(await m.die(raid.raidId, rep(), 4, "machines")).toMatchObject({ ok: true, wreckId: null, impounded: false, invoice: 180, arrears: 18 });
+    const owed = 150 + Math.floor((30 * INVOICE.perMinute) / 60);
+    expect(await m.die(raid.raidId, rep(), 4, "machines")).toMatchObject({ ok: true, wreckId: null, impounded: false, invoice: owed, arrears: Math.floor((owed * INVOICE.arrearsOnDeath) / 100) });
     expect(await m.wrecks()).toEqual([]);
   });
 

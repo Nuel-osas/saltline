@@ -103,11 +103,11 @@ The Harbormaster bills you for everything, and the bill is the danger.
 | Action | Added |
 | --- | --- |
 | Entering | 150, plus 25 for each raid you have extracted from before (500 at most) |
-| Each minute on site | 60 |
-| Cutting a container seal | 80 |
-| Each unit of cargo taken | 40 per unit of weight |
-| Cutting an uplink | 200 |
-| Destroying a gull / a hound | 40 / 120 |
+| Each minute on site | 40 |
+| Cutting a container seal | 60 |
+| Each unit of cargo taken | 30 per unit of weight |
+| Cutting an uplink | 50 |
+| Destroying a gull / a hound | 15 / 35 |
 
 **What it brings**
 
@@ -118,8 +118,9 @@ The Harbormaster bills you for everything, and the bill is the danger.
 | 2,400 | A second Bailiff. |
 | 4,000 | **Foreclosure.** The Assessor walks to the boat. |
 
-- A careful raid ends around 700 to 1,100, so a careful player hears about the Bailiff and rarely meets it. A
-  greedy one always does.
+- The three uplinks and the machines they bring cost little; greed costs most. A minimal raid ends near 800 and a
+  careful full load near 1,130, just under the Bailiff. One more crate, a few more minutes or a wreck's gun tips it
+  over. A careful player hears about the Bailiff and rarely meets it. A greedy one always does.
 - The meter is on the HUD the whole time: `INVOICE 1,040 · BAILIFF AT 1,200`.
 - **After the raid** the invoice is on your account as **arrears**. Half of your arrears (up to 1,500) are already
   on the meter when your next raid starts.

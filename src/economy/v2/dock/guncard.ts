@@ -4,13 +4,12 @@
 // contract says it is worth. Where it is (stash, market, wreck, impound) is stamped on it in plain words.
 import { h } from "../../dockside/dom";
 import { fmt } from "../../dockside/format";
-import { CONDITION, effective, FRAMES, ISSUE, MODS, STAT_KEYS } from "../items";
+import { CONDITION, effective, FRAMES, ISSUE, LOWER_IS_BETTER, MODS, STAT_KEYS } from "../items";
 import type { FrameId, Grade, ModId, Stats, Weapon, WeaponState } from "../types";
 import { gunArt } from "./gunart";
 import { scripEl } from "./store";
 
 type StatKey = keyof Stats;
-const LOWER_IS_BETTER: StatKey[] = ["recoil", "reload"];
 export const STAT_LABEL: Record<StatKey, string> = { damage: "Damage", rpm: "Fire rate", mag: "Magazine", recoil: "Recoil", reload: "Reload", range: "Range" };
 const STAT_UNIT: Record<StatKey, string> = { damage: "", rpm: "", mag: "", recoil: "%", reload: "%", range: "m" };
 

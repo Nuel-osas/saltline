@@ -1,0 +1,15 @@
+# Sandbox tests: deploy the release wasm (target/near/saltline2.wasm, built by `cargo near build`) to a local
+# nearcore sandbox and play the game's loop. A separate crate so that the contract's own `cargo test` stays light.
+[package]
+name = "saltline2-sandbox"
+version = "0.2.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dev-dependencies]
+near-workspaces = "=0.23.0"
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+anyhow = "1"
