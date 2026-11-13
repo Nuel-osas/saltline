@@ -9,6 +9,8 @@ import { createTestnetChain2 } from "./chain";
 import { startCoach } from "./coach";
 import { resolveV2Config } from "./config";
 import { mountDock } from "./dock";
+import type { Dock } from "./dock/dock";
+import { startHome } from "./home";
 import { startIntro } from "./intro";
 import { type Login, startLogin } from "./login";
 import { sessionUrlFor, withToken } from "./login/session";
@@ -72,11 +74,15 @@ export function startV2(G: Game): void {
   guard("score", () => startScore(G)); // the music (G.score)
   guard("intro", () => startIntro(G)); // the opening film on the first DEPLOY, and the drop point it leaves (G.intro)
   guard("raid", () => startRaid(G)); // sign-on, the owned gun in the shooter, loot, the invoice and its thresholds (G.raid)
-  guard("dock", () => mountDock(G)); // the hub: loadout, armoury, market, vendors, the ledger
+  let dock: Dock | null = null;
+  guard("dock", () => Promise.resolve(mountDock(G)).then((d) => void (dock = d ?? null))); // the hub: loadout, armoury, market, vendors, the ledger
   guard("coach", () => startCoach(G)); // the rifle in its crate, the first raid's checklist, the once-ever moments (G.coach)
 
   // Last, so its lock wraps the raid's own start: nobody deploys or opens the dock before signing on (G.login).
-  if (guest && privyAppId) guard("login", () => void (login = startLogin(G, { appId: privyAppId, sessionUrl: sessionUrlFor(cfg.faucetUrl), wallet: guest })));
+  if (guest && privyAppId) guard("login", () => void (login = startLogin(G, { appId: privyAppId, sessionUrl: sessionUrlFor(cfg.faucetUrl), wallet: guest, sheet: true })));
+  // The start screen: a lobby over the title card (G.home). Its buttons press the title's own, so everything above
+  // starts as it did.
+  guard("home", () => startHome(G, { v2, offline: !!mock, login: () => login, dock: () => dock }));
 
   console.info(cfg.mode === "mock" ? "[v2] offline mock: not the chain" : `[v2] testnet, contract ${cfg.contractId}`);
   G.events?.emit("v2:ready", v2);
