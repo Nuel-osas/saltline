@@ -544,11 +544,11 @@ export function createModel(G: Game, cores: number, start: { x: number; z: numbe
     leg.shin.quaternion.setFromUnitVectors(Y, end.sub(knee).normalize());
   }
 
-  function placeLight(on: number, color: number[], at: any, n: any) {
+  function placeLight(on: number, color: number[], at: any, n: any, lock: boolean) {
     if (!light?.light) return;
     light.light.position.copy(at).addScaledVector(n, 1.4);
     light.light.color.setRGB(color[0], color[1], color[2]);
-    light.light.intensity += (on * 55 - light.light.intensity) * 0.3;
+    light.light.intensity += (on * (lock ? 40 : 55) - light.light.intensity) * 0.3;
   }
 
   return {
@@ -821,7 +821,7 @@ export function createModel(G: Game, cores: number, start: { x: number; z: numbe
         spotMat.uniforms.uColor.value.setRGB(col[0], col[1], col[2]);
         spotMat.uniforms.uGain.value = 0.9 * on;
       }
-      placeLight(on, col, hit, n);
+      placeLight(on, col, hit, n, B.lock);
 
       // ---- cores ----
       for (let i = 0; i < cores; i++) {
