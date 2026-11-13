@@ -17,6 +17,7 @@
 //   returned: every log line and response body passes through redact().
 //
 // Relative imports carry .js so the compiled function also resolves them under Node's ES module rules on Vercel.
+import { type AuthConfig, authConfig, bearer, deriveWallet, verifyToken } from "./auth.js";
 import { isPrivateKey, isValidAccountId } from "near-kit";
 import { type Executed, decodeProfile, executeTx, isTransient, nearKitPort } from "../src/economy/chain.js";
 import { TESTNET_RPC_URLS } from "../src/economy/config.js";
@@ -90,6 +91,8 @@ export interface FaucetLimits {
 export const newLimits = (): FaucetLimits => ({ ip: new RateLimiter(3, 3_600_000), account: new RateLimiter(3, 3_600_000) });
 
 export interface FaucetDeps {
+  /** Checks a sign-in token and answers the Privy user id (server/auth.ts verifyToken). For tests. */
+  verify?: (token: string, cfg: AuthConfig) => Promise<string>;
   chain?: (cfg: FaucetConfig) => FaucetChain;
   limits?: FaucetLimits;
   now?: () => number;
@@ -183,7 +186,7 @@ function nearFaucetChain(cfg: FaucetConfig): FaucetChain {
   return chain;
 }
 
-function defaultIp(request: Request): string {
+export function defaultIp(request: Request): string {
   // On Vercel both headers are set by the platform from the connection; the dev middleware sets x-forwarded-for.
   const h = request.headers;
   const ip = h.get("x-real-ip") || h.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -241,6 +244,28 @@ export async function handleFaucet(request: Request, env: FaucetEnv, deps: Fauce
     const t = now();
     if (!limits.ip.take(ip, t)) {
       return reply(429, { ok: false, error: "Too many dock passes from here. Try again later." }, { "retry-after": String(limits.ip.retryAfter(ip, t)) });
+    }
+    // v2 with sign-in switched on: a dock pass goes to the signed-in player's own account and to no other, so one
+    // sign-in gets one pass. The account is derived from the sign-in (server/auth.ts), which makes this check
+    // stateless. A half-set sign-in config closes the office rather than handing out passes unsigned.
+    if (cfg.game === "v2") {
+      const auth = authConfig(env);
+      if (auth.state === "broken") {
+        log("sign-in not configured", { problems: auth.problems });
+        return reply(503, { ok: false, error: "The dock office is closed: sign-in isn't configured." });
+      }
+      if (auth.state === "on") {
+        const token = bearer(request);
+        if (!token) return reply(401, { ok: false, error: "Sign in to get a dock pass." });
+        let userId: string;
+        try {
+          userId = await (deps.verify ?? verifyToken)(token, auth.cfg);
+        } catch (e) {
+          log("sign-in refused", { error: (e as Error)?.message });
+          return reply(401, { ok: false, error: "Your sign-in has expired. Sign in again." });
+        }
+        if (deriveWallet(auth.cfg, userId).accountId !== accountId) return reply(403, { ok: false, error: "That isn't this sign-in's account." });
+      }
     }
     if (!limits.account.take(accountId, t)) {
       return reply(429, { ok: false, error: "Too many tries for this account. Try again later." }, { "retry-after": String(limits.account.retryAfter(accountId, t)) });
