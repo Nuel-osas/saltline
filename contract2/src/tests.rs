@@ -269,10 +269,13 @@ fn the_invoice_matches_items_ts() {
     let total = |start, seconds, seals, weight, uplinks, gulls, hounds| {
         invoice_total(&InvoiceFacts { start, seconds, seals, weight, uplinks, gulls, hounds })
     };
-    assert_eq!(total(150, 300, 4, 5, 1, 6, 2), 1_650);
-    assert_eq!(total(650, 59, 0, 0, 0, 0, 0), 709);
-    assert_eq!(total(150, 90, 2, 3, 0, 0, 0), 520);
-    assert_eq!(total(150, 480, 8, 6, 3, 30, 15), 150 + 480 + 640 + 240 + 600 + 1_200 + 1_800);
+    // 40 a minute, 60 a seal, 30 a unit of weight, 50 an uplink, 15 a gull, 35 a hound.
+    assert_eq!(total(150, 300, 4, 5, 1, 6, 2), 150 + 200 + 240 + 150 + 50 + 90 + 70);
+    assert_eq!(total(650, 59, 0, 0, 0, 0, 0), 689); // 59 s at 40 a minute is 39.33
+    assert_eq!(total(150, 90, 2, 3, 0, 0, 0), 420);
+    assert_eq!(total(150, 480, 8, 6, 3, 30, 15), 150 + 320 + 480 + 180 + 150 + 450 + 525);
+    // Five minutes, three uplinks, eight gulls and three hounds, nothing carried: well under the Bailiff's 1,200.
+    assert_eq!(total(150, 300, 0, 0, 3, 8, 3), 150 + 200 + 150 + 120 + 105);
 }
 
 #[test]
@@ -816,7 +819,7 @@ fn extract_and_die_are_timed() {
     });
     w.wait(1);
     let out = w.as_(ROOK).extract(id, opened(spots.clone()));
-    assert_eq!(out.invoice.0, 150 + (8 * n + 45) as u128 + 80 * n as u128 + 40 * pick(&r, 4).2);
+    assert_eq!(out.invoice.0, 150 + (8 * n + 45) as u128 * 40 / 60 + 60 * n as u128 + 30 * pick(&r, 4).2);
     refuses("E_RAID_CLOSED", || w.as_(ROOK).extract(id, Report::default()));
     refuses("E_RAID_CLOSED", || w.as_(ROOK).die(id, Report::default(), 0, "machines".into()));
 }
@@ -843,10 +846,10 @@ fn extract_mints_the_haul_returns_the_kit_and_bills_the_invoice() {
         used: Used { plates: 1, charges: 1, mags: 4 },
     };
     let out = w.as_(ROOK).extract(r.raid_id, report);
-    // The invoice, by hand: 150 at the fence, a scrip a second, 80 a seal, 40 a unit of weight, 200 an uplink,
-    // 40 a gull, 120 a hound.
+    // The invoice, by hand: 150 at the fence, 40 a minute, 60 a seal, 30 a unit of weight, 50 an uplink, 15 a gull,
+    // 35 a hound.
     let carried = weight + 2;
-    let invoice = 150 + seconds as u128 + 80 * spots.len() as u128 + 40 * carried + 200 + 4 * 40 + 2 * 120;
+    let invoice = 150 + seconds as u128 * 40 / 60 + 60 * spots.len() as u128 + 30 * carried + 50 + 4 * 15 + 2 * 35;
     assert_eq!(out.invoice.0, invoice);
     assert_eq!(out.arrears.0, invoice * 25 / 100);
     // Cargo and parts are new tokens, in the caller's hands.
@@ -902,7 +905,7 @@ fn dying_to_machines_leaves_a_wreck_with_the_gun_cargo_and_unused_kit() {
         ..Default::default()
     };
     let out = w.as_(ROOK).die(id, report, 3, "machines".into());
-    let invoice = 150 + 100 + 80 * spots.len() as u128 + 40 * (weight + 1) + 40;
+    let invoice = 150 + 100 * 40 / 60 + 60 * spots.len() as u128 + 30 * (weight + 1) + 15;
     assert_eq!((out.wreck_id, out.impounded, out.invoice.0, out.arrears.0), (Some(1), false, invoice, invoice / 10));
     // Nothing reached the player; the wreck holds the gun, the cargo, the rotor and the unused charge.
     for &t in MATERIALS.iter() {
@@ -944,7 +947,7 @@ fn dying_with_the_issue_rifle_and_nothing_carried_leaves_no_wreck() {
     w.wait(20);
     let out = w.as_(ROOK).die(r.raid_id, Report::default(), 9, "machines".into());
     assert_eq!((out.wreck_id, out.impounded), (None, false));
-    assert_eq!(out.arrears.0, (150 + 20) / 10);
+    assert_eq!(out.arrears.0, (150 + 20 * 40 / 60) / 10);
     assert!(w.c.wrecks().is_empty());
     // With nothing but the Bailiff to blame, nothing is impounded either.
     w.wait(30);
@@ -991,7 +994,7 @@ fn a_wreck_is_carried_out_and_changes_hands() {
     let supply = w.c.supply;
     let out =
         w.as_(MARLOWE).extract(r.raid_id, Report { opened: spots.clone(), wrecks: vec![wreck], ..Default::default() });
-    assert_eq!(out.invoice.0, 150 + 200 + 80 * spots.len() as u128 + 40 * (weight + 2));
+    assert_eq!(out.invoice.0, 150 + 200 * 40 / 60 + 60 * spots.len() as u128 + 30 * (weight + 2));
     assert_eq!(out.recovered.len(), 1);
     let g = &out.recovered[0];
     assert_eq!((g.serial.as_str(), g.owner.as_str(), g.state.as_str()), (gun.as_str(), MARLOWE, "held"));
@@ -1078,7 +1081,7 @@ fn the_bailiff_impounds_the_gun_and_destroys_the_rest() {
     let supply = w.c.supply;
     let value = w.c.gun(n).value();
     let out = w.as_(ROOK).die(r.raid_id, opened(spots.clone()), 4, "bailiff".into());
-    let invoice = 150 + 300 + 80 * spots.len() as u128 + 40 * weight;
+    let invoice = 150 + 300 * 40 / 60 + 60 * spots.len() as u128 + 30 * weight;
     assert_eq!((out.wreck_id, out.impounded, out.invoice.0, out.arrears.0), (None, true, invoice, invoice / 10));
     // No cargo was ever minted, and the whole kit is gone.
     for &t in MATERIALS.iter() {

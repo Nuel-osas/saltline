@@ -386,12 +386,14 @@ pub const INVOICE_ENTRY: u128 = 150;
 pub const INVOICE_PER_EXTRACTION: u128 = 25;
 /// Past extractions counted toward the entry charge, so it tops out at 500.
 pub const MAX_EXTRACTIONS_COUNTED: u32 = 14;
-pub const INVOICE_PER_MINUTE: u128 = 60;
-pub const INVOICE_SEAL: u128 = 80;
-pub const INVOICE_PER_WEIGHT: u128 = 40;
-pub const INVOICE_UPLINK: u128 = 200;
-pub const INVOICE_GULL: u128 = 40;
-pub const INVOICE_HOUND: u128 = 120;
+// Tuned so that what every raid must do (three uplinks, the machines they bring) costs little and greed costs
+// most: a minimal raid ends near 800, a careful full load near 1,130, and a greedy one passes 1,200.
+pub const INVOICE_PER_MINUTE: u128 = 40;
+pub const INVOICE_SEAL: u128 = 60;
+pub const INVOICE_PER_WEIGHT: u128 = 30;
+pub const INVOICE_UPLINK: u128 = 50;
+pub const INVOICE_GULL: u128 = 15;
+pub const INVOICE_HOUND: u128 = 35;
 pub const SECOND_NOTICE_AT: u128 = 600;
 pub const BAILIFF_AT: u128 = 1_200;
 pub const SECOND_BAILIFF_AT: u128 = 2_400;

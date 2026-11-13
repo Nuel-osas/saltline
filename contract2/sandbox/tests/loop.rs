@@ -310,7 +310,7 @@ async fn the_whole_loop_on_the_sandbox() -> anyhow::Result<()> {
             .await?;
         let (out, g) = call(&contract, &rook, "extract", args, 0).await?;
         g_extract = g_extract.max(g);
-        assert!(amount(&out["invoice"]) >= 150 + 45);
+        assert!(amount(&out["invoice"]) >= 150 + 30, "150 at the fence and at least 45 s at 40 a minute");
     }
     println!("{raids} raids to gather a Stevedore's parts");
 
