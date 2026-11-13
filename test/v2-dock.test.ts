@@ -4,12 +4,23 @@ import { createDock, type Dock, type GameLike } from "../src/economy/v2/dock/doc
 import { createFake, type FakeV2 } from "../src/economy/v2/dock/fake";
 import { gunSvg } from "../src/economy/v2/dock/gunart";
 import { bandPct, gunCard, historyLine, issueCard, prepareReveal, revealBuild, REVEAL_STEPS } from "../src/economy/v2/dock/guncard";
-import { clampLoadout } from "../src/economy/v2/dock/loadout";
+import { clampLoadout, invoiceParts } from "../src/economy/v2/dock/loadout";
 import { repairCost } from "../src/economy/v2/dock/armoury";
 import { saleSplit } from "../src/economy/v2/dock/market";
-import { maxSettle } from "../src/economy/v2/dock/ledger";
-import { appraise, effective, FRAMES, invoiceStart, RAID, STAT_KEYS } from "../src/economy/v2/items";
-import type { Weapon } from "../src/economy/v2/types";
+import { hmBuys, maxSettle } from "../src/economy/v2/dock/ledger";
+import { appraise, BLUEPRINTS, CONDITION, effective, FRAMES, HARBORMASTER, INVOICE, invoiceStart, MARKET, MATERIALS, RAID, STAT_KEYS, VENDORS } from "../src/economy/v2/items";
+import type { MaterialId, Stats, Weapon } from "../src/economy/v2/types";
+
+// Every expected figure below is worked out from items.ts as it stands (the lead tunes those numbers), or read off
+// the screen and checked against what the stand-in then holds. Only the stand-in's own state is typed in: 2,400
+// scrip, 1,240 arrears, 9 extractions, 14 copper, 9 electronics, 2 relay cores, 1 plate, 2 charges, 6 magazines.
+const n = (v: number) => v.toLocaleString("en-US");
+const num = (el: Element) => Number((el.textContent ?? "").replace(/[^\d.-]/g, ""));
+/** A stat `t` of the way from the band's low end to its high end. */
+const inBand = (k: keyof Stats, t: number) => {
+  const [lo, hi] = FRAMES.pilot.bands[k];
+  return Math.round(lo + (hi - lo) * t);
+};
 
 // ---- a stand-in for the game: its menu cards and event bus, nothing else ----
 function fakeGame(state = "title") {
@@ -70,7 +81,8 @@ const rook = (o: Partial<Weapon> = {}): Weapon => ({
   frame: "pilot",
   grade: "A",
   quality: 90,
-  stats: { damage: 56, rpm: 370, mag: 16, recoil: 118, reload: 102, range: 450 },
+  // A good roll: high where high is good, low where low is good (recoil, reload).
+  stats: { damage: inBand("damage", 0.85), rpm: inBand("rpm", 0.9), mag: inBand("mag", 1), recoil: inBand("recoil", 0.12), reload: inBand("reload", 0.1), range: inBand("range", 0.9) },
   mods: [],
   condition: 82,
   maker: "rook.testnet",
@@ -110,11 +122,16 @@ describe("the gun card", () => {
       expect(pct).toBeLessThanOrEqual(100);
       expect(q(b, ".d2-stat-fill").getAttribute("style")).toBe(`width:${pct}%`);
     }
-    // Recoil is better when lower: 118 in 115–140 sits near the good end, and the bar's ends read worst to best.
+    // Recoil is better when lower: a roll near the band's low end fills most of the bar, and the bar's ends read
+    // worst to best (the high number on the left).
     const recoil = q(card, '.d2-stat[data-stat="recoil"]');
-    expect(+recoil.dataset.pct!).toBe(88);
-    expect([...recoil.querySelectorAll(".d2-stat-end")].map((e) => e.textContent)).toEqual(["140", "115"]);
-    expect(q(card, ".d2-gun-val").textContent).toContain(w.value.toLocaleString("en-US"));
+    const [rlo, rhi] = FRAMES.pilot.bands.recoil;
+    expect(+recoil.dataset.pct!).toBe(Math.round(100 - ((w.stats.recoil - rlo) * 100) / (rhi - rlo)));
+    expect(+recoil.dataset.pct!).toBeGreaterThan(80);
+    expect([...recoil.querySelectorAll(".d2-stat-end")].map((e) => e.textContent)).toEqual([String(rhi), String(rlo)]);
+    // Damage is better when higher: its ends read low to high.
+    expect([...q(card, '.d2-stat[data-stat="damage"]').querySelectorAll(".d2-stat-end")].map((e) => e.textContent)).toEqual(FRAMES.pilot.bands.damage.map(String));
+    expect(q(card, ".d2-gun-val").textContent).toContain(n(w.value));
     expect(q(card, ".d2-cond").dataset.cond).toBe("82");
   });
 
@@ -182,9 +199,9 @@ describe("the gun card", () => {
     expect(q(card, ".d2-grade").classList.contains("stamped")).toBe(true);
     expect(q(card, ".d2-serial").textContent).toBe("S-000099");
     expect(q(card, ".d2-history").textContent).toBe("Built by YOU · never over the fence · 1 owner");
-    expect(q(card, '.d2-stat[data-stat="damage"] .d2-stat-v').textContent).toBe("56");
-    expect(q(card, '.d2-stat[data-stat="range"] .d2-stat-v').textContent).toBe("450m");
-    expect(q(card, ".d2-gun-val b").textContent).toBe(w.value.toLocaleString("en-US"));
+    expect(q(card, '.d2-stat[data-stat="damage"] .d2-stat-v').textContent).toBe(String(w.stats.damage));
+    expect(q(card, '.d2-stat[data-stat="range"] .d2-stat-v').textContent).toBe(`${w.stats.range}m`);
+    expect(q(card, ".d2-gun-val b").textContent).toBe(n(w.value));
   });
 });
 
@@ -288,28 +305,51 @@ describe("LOADOUT", () => {
 
   it("limits plates, charges and magazines by what is held and by the raid's rules", async () => {
     const { root, v2 } = await opened(); // holds 1 plate, 2 charges, 6 magazines
-    k(root, "kit:plate:+").click();
-    expect(v2.loadout.plates).toBe(1);
-    expect(k(root, "kit:plate:+").disabled).toBe(true);
-    k(root, "kit:charge:+").click();
-    k(root, "kit:charge:+").click();
-    expect(v2.loadout.charges).toBe(2);
-    expect(k(root, "kit:charge:+").disabled).toBe(true); // holds 2, though a raid allows 3
-    for (let i = 0; i < 6; i++) k(root, "kit:ammo:+").click();
-    expect(v2.loadout.mags).toBe(6);
-    expect(k(root, "kit:ammo:+").disabled).toBe(true);
+    const fill = (id: string) => {
+      let presses = 0;
+      while (!k(root, `kit:${id}:+`).disabled && presses < 20) (k(root, `kit:${id}:+`).click(), presses++);
+      return presses;
+    };
+    const want = { plates: Math.min(1, RAID.maxPlates), charges: Math.min(2, RAID.maxCharges), mags: Math.min(6, RAID.maxMags) };
+    expect(fill("plate")).toBe(want.plates);
+    expect(fill("charge")).toBe(want.charges);
+    expect(fill("ammo")).toBe(want.mags);
+    expect(v2.loadout).toEqual({ weapon: null, ...want });
+    // Every "more" is now refused, by the stash or by the raid's cap, whichever is lower.
+    for (const id of ["plate", "charge", "ammo"]) expect(k(root, `kit:${id}:+`).disabled).toBe(true);
     k(root, "kit:ammo:-").click();
-    expect(v2.loadout).toEqual({ weapon: null, plates: 1, charges: 2, mags: 5 });
+    expect(v2.loadout).toEqual({ weapon: null, ...want, mags: want.mags - 1 });
+  });
+
+  it("breaks the invoice at the fence into parts that follow items.ts, whatever its rule is", () => {
+    for (const [extractions, arrears] of [
+      [0, 0],
+      [9, 1240],
+      [40, 0],
+      [200, 90_000],
+    ]) {
+      const p = invoiceParts(extractions, arrears);
+      expect(p.total).toBe(invoiceStart(extractions, arrears));
+      expect(p.entry + p.history + p.carried).toBe(p.total);
+      expect(p.entry).toBe(invoiceStart(0, 0));
+      expect(p.carried).toBeLessThanOrEqual(INVOICE.carryInMax);
+      // "capped" says exactly this: one more extraction on file would add nothing.
+      expect(p.capped).toBe(extractions > 0 && invoiceStart(extractions + 1, 0) === invoiceStart(extractions, 0));
+    }
   });
 
   it("says what is already on the invoice at the fence and how far that is from the Bailiff", async () => {
     const { root, fake } = await opened();
     const start = invoiceStart(fake.profile!.extractions, fake.profile!.arrears);
     await vi.waitFor(() => expect(q(root, ".d2-fence").dataset.gap).toBeTruthy());
-    expect(start).toBe(150 + 25 * 9 + 620);
     expect(q(root, ".d2-fence").dataset.start).toBe(String(start));
-    expect(q(root, ".d2-fence-n b").textContent).toBe("995");
-    expect(q(root, ".d2-fence-n span").textContent).toBe("205 from the Bailiff");
+    expect(q(root, ".d2-fence-n b").textContent).toBe(n(start));
+    const gap = fake.harbormaster.bailiffAt - start;
+    expect(q(root, ".d2-fence").dataset.gap).toBe(String(gap));
+    expect(q(root, ".d2-fence-n span").textContent).toBe(gap > 0 ? `${n(gap)} from the Bailiff` : "The Bailiff is sent the moment you cross");
+    // The parts printed under the meter add up to the figure above them.
+    const rows = q(root, ".d2-fence-rows");
+    expect(+rows.dataset.entry! + +rows.dataset.history! + +rows.dataset.carried!).toBe(start);
   });
 });
 
@@ -318,11 +358,18 @@ describe("ARMOURY", () => {
     const { dock, root } = await opened();
     dock.setTab("armoury");
     await vi.waitFor(() => expect(root.querySelector('.d2-bp[data-bp="pilot"]')).toBeTruthy());
-    const need = (bp: string, tok: string) => q(root, `.d2-bp[data-bp="${bp}"] .d2-need[data-tok="${tok}"]`);
-    expect(need("pilot", "copper").textContent).toBe("Copper5/14");
-    expect(need("pilot", "copper").dataset.ok).toBe("1");
+    // Every blueprint in items.ts has a row, with one chip per input showing what it needs, and its fee.
+    for (const [id, b] of Object.entries(BLUEPRINTS)) {
+      const row = q(root, `.d2-bp[data-bp="${id}"]`);
+      for (const [m, need] of Object.entries(b.inputs)) expect(q(row, `.d2-need[data-tok="${m}"] b`).textContent).toBe(String(need));
+      expect(q(row, ".d2-need.fee b").textContent).toBe(n(b.fee));
+      expect(row.querySelectorAll(".d2-need").length).toBe(Object.keys(b.inputs).length + 1);
+    }
+    // Against what is held: the stand-in holds 14 copper.
+    const copper = q(root, '.d2-bp[data-bp="pilot"] .d2-need[data-tok="copper"]');
+    expect(copper.textContent).toBe(`Copper${BLUEPRINTS.pilot.inputs.copper}/14`);
+    expect(copper.dataset.ok).toBe(BLUEPRINTS.pilot.inputs.copper! <= 14 ? "1" : "0");
     expect(q(root, '.d2-bp[data-bp="pilot"]').dataset.can).toBe("1");
-    expect(need("plate", "fuel").textContent).toBe("Fuel cells1/3");
   });
 
   it("BUILD rolls a gun: the bars land, the grade stamps, the serial is engraved, Built by YOU", async () => {
@@ -346,8 +393,10 @@ describe("ARMOURY", () => {
     for (const s of STAT_KEYS) expect(+q(card, `.d2-stat[data-stat="${s}"]`).dataset.v!).toBe(built.stats[s]);
     expect(status(root).textContent).toContain(`Built an A-grade Pilot, ${built.serial}`);
     expect(emitted).toContain("stash:changed");
-    expect(fake.balances.core).toBe(1); // the inputs were burned
-    expect(fake.balances.scrip).toBe(2400 - 180);
+    // The inputs and the fee were burned.
+    const held: Record<string, number> = { copper: 14, chips: 9, servo: 5, core: 2, rotor: 4, fuel: 3, meds: 4 };
+    for (const [m, need] of Object.entries(BLUEPRINTS.pilot.inputs)) expect(fake.balances[m as MaterialId]).toBe(held[m] - need);
+    expect(fake.balances.scrip).toBe(2400 - BLUEPRINTS.pilot.fee);
   });
 
   it("fits a mod into its slot", async () => {
@@ -368,16 +417,18 @@ describe("ARMOURY", () => {
     dock.setTab("armoury");
     await vi.waitFor(() => expect(root.querySelector(".d2-bench .d2-gun")).toBeTruthy());
     k(root, "bench:S-000052").click(); // condition 24
-    expect(repairCost(24)).toEqual({ points: 76, scrip: 152, copper: 4 });
-    expect(q(root, ".d2-repair").dataset.scrip).toBe("152");
-    expect(q(root, ".d2-repair").dataset.copper).toBe("4");
-    expect(q(root, ".d2-repair").textContent).toContain("152 scrip");
+    const cost = { points: 76, scrip: 76 * CONDITION.scripPerPoint, copper: Math.ceil(76 / CONDITION.pointsPerCopper) };
+    expect(repairCost(24)).toEqual(cost);
+    expect(repairCost(100)).toEqual({ points: 0, scrip: 0, copper: 0 });
+    expect(q(root, ".d2-repair").dataset.scrip).toBe(String(cost.scrip));
+    expect(q(root, ".d2-repair").dataset.copper).toBe(String(cost.copper));
+    expect(q(root, ".d2-repair").textContent).toContain(`${n(cost.scrip)} scrip`);
     k(root, "repair:S-000052").click();
     await settled(root);
     expect(fake.weapons.find((w) => w.serial === "S-000052")!.condition).toBe(100);
-    expect(fake.balances.scrip).toBe(2400 - 152);
-    expect(fake.balances.copper).toBe(14 - 4);
-    expect(status(root).textContent).toContain("S-000052 repaired to 100. Cost 152 scrip.");
+    expect(fake.balances.scrip).toBe(2400 - cost.scrip);
+    expect(fake.balances.copper).toBe(14 - cost.copper);
+    expect(status(root).textContent).toContain(`S-000052 repaired to 100. Cost ${n(cost.scrip)} scrip.`);
   });
 
   it("scraps a gun only after it is confirmed", async () => {
@@ -395,8 +446,8 @@ describe("ARMOURY", () => {
     k(root, "scrap:S-000052").click();
     await settled(root);
     expect(fake.weapons.some((w) => w.serial === "S-000052")).toBe(false);
-    expect(fake.balances.copper).toBe(16);
-    expect(fake.balances.chips).toBe(10);
+    expect(fake.balances.copper).toBe(14 + (CONDITION.scrap.copper ?? 0));
+    expect(fake.balances.chips).toBe(9 + (CONDITION.scrap.chips ?? 0));
   });
 });
 
@@ -438,17 +489,25 @@ describe("MARKET", () => {
 
   it("lists a gun with the fee and the maker's 2% shown before it is listed", async () => {
     const { root, fake } = await market();
-    expect(saleSplit(1500)).toEqual({ fee: 60, maker: 30, burned: 30, seller: 1440 });
-    expect(saleSplit(999)).toEqual({ fee: 38, maker: 19, burned: 19, seller: 961 });
+    // The split follows items.ts's MARKET: the maker's share, the rest of the fee burned, the remainder to the
+    // seller, in whole scrip with nothing lost to rounding.
+    for (const price of [1, 49, 999, 1500, 2500]) {
+      const s = saleSplit(price);
+      expect(s.maker).toBe(Math.floor((price * MARKET.makerPct) / 100));
+      expect(s.burned).toBe(Math.floor((price * (MARKET.feePct - MARKET.makerPct)) / 100));
+      expect(s.fee).toBe(s.maker + s.burned);
+      expect(s.maker + s.burned + s.seller).toBe(price);
+    }
     k(root, "list:S-000041").click(); // built by ROOK
     const input = k(root, "list:price") as unknown as HTMLInputElement;
     expect(input.value).toBe(String(fake.weapons.find((w) => w.serial === "S-000041")!.value)); // the appraisal is the starting guide
     input.value = "2500";
     input.dispatchEvent(new Event("input", { bubbles: true }));
+    const want = saleSplit(2500);
     const split = q(root, ".d2-split");
-    expect([split.dataset.fee, split.dataset.maker, split.dataset.burned, split.dataset.seller]).toEqual(["100", "50", "50", "2400"]);
-    expect(split.textContent).toContain("Maker's 2% (ROOK)−50");
-    expect(split.textContent).toContain("You receive2,400");
+    expect([split.dataset.fee, split.dataset.maker, split.dataset.burned, split.dataset.seller]).toEqual([want.fee, want.maker, want.burned, want.seller].map(String));
+    expect(split.textContent).toContain(`Maker's ${MARKET.makerPct}% (ROOK)−${n(want.maker)}`);
+    expect(split.textContent).toContain(`You receive${n(want.seller)}`);
     expect(q(root, ".d2-guides").textContent).toContain("2,480 · 2,710 · 2,390");
     k(root, "list:go").click();
     await settled(root);
@@ -479,7 +538,8 @@ describe("VENDORS", () => {
     const { root } = await vendors();
     expect(q(root, ".d2-person-name").textContent).toBe("Moss");
     expect(q(root, ".d2-memo p").textContent).toContain("Servos are short");
-    expect(q(root, '.d2-bid[data-tok="servo"] .d2-bid-why').textContent).toBe("“No servos, no Longshores. I'm paying over the odds.”");
+    // Her reason is printed as the chain gives it, with no quotation marks added (the agents write in the third person).
+    expect(q(root, '.d2-bid[data-tok="servo"] .d2-bid-why').textContent).toBe("No servos, no Longshores. I'm paying over the odds.");
     expect(root.querySelectorAll(".d2-shop-guns .d2-gun").length).toBe(2);
     expect(q(root, ".d2-shop-guns .d2-history").textContent).toContain("Built by MOSS");
   });
@@ -487,30 +547,48 @@ describe("VENDORS", () => {
   it("sells parts to Moss and buys kit from Ines", async () => {
     const { root, fake } = await vendors();
     const before = fake.balances.scrip!;
+    // What Moss says she pays is what she pays.
+    const bid = num(q(root, '.d2-bid[data-to="moss"][data-tok="servo"] .d2-scrip b'));
+    expect(bid).toBeGreaterThan(0);
     k(root, "sell:moss:servo:1").click();
     await settled(root);
     expect(fake.balances.servo).toBe(4);
-    expect(fake.balances.scrip).toBe(before + 101);
-    expect(status(root).textContent).toContain("Moss paid 101 scrip for 1 hound servo.");
+    expect(fake.balances.scrip).toBe(before + bid);
+    expect(status(root).textContent).toContain(`Moss paid ${n(bid)} scrip for 1 hound servo.`);
     k(root, "door:ines").click();
     expect(q(root, ".d2-person-name").textContent).toBe("Ines");
+    // Ines's price is for one unit, and one unit is what arrives.
+    const price = num(q(root, '.d2-good[data-tok="plate"] .d2-scrip b'));
+    expect(price).toBeGreaterThan(0);
     k(root, "buy:ines:plate").click();
     await settled(root);
     expect(fake.balances.plate).toBe(2);
-    expect(fake.balances.scrip).toBe(before + 101 - 62);
+    expect(fake.balances.scrip).toBe(before + bid - price);
+    expect(status(root).textContent).toContain(`Bought 1 armour plate from Ines for ${n(price)} scrip.`);
+  });
+
+  it("offers a sale for every material a vendor buys in items.ts", async () => {
+    const { root } = await vendors();
+    for (const who of ["moss", "ines"] as const) {
+      k(root, `door:${who}`).click();
+      const shown = [...root.querySelectorAll<HTMLElement>(`.d2-bid[data-to="${who}"]`)].map((b) => b.dataset.tok);
+      expect(shown).toEqual([...VENDORS[who].buys]);
+    }
   });
 
   it("the export desk pays less for every unit already aboard", async () => {
     const { root, fake } = await vendors();
     k(root, "door:export").click();
     await vi.waitFor(() => expect(root.querySelector('.d2-bid[data-to="export"][data-tok="copper"]')).toBeTruthy());
-    const price = () => q(root, '.d2-bid[data-to="export"][data-tok="copper"] .d2-scrip b').textContent;
-    expect(price()).toBe("18"); // 25 × 100 ÷ (100 + 4 × 9 already loaded)
+    const price = () => num(q(root, '.d2-bid[data-to="export"][data-tok="copper"] .d2-scrip b'));
+    const first = price();
+    expect(first).toBeGreaterThan(0);
+    expect(first).toBeLessThan(MATERIALS.copper.export); // 9 are already aboard today, so it is under list
     const before = fake.balances.scrip!;
     k(root, "sell:export:copper:1").click();
     await settled(root);
-    expect(fake.balances.scrip).toBe(before + 18);
-    await vi.waitFor(() => expect(price()).toBe("17"));
+    expect(fake.balances.scrip).toBe(before + first); // paid what the window said
+    await vi.waitFor(() => expect(price()).toBeLessThan(first)); // and the next one is worth less
   });
 });
 
@@ -523,13 +601,19 @@ describe("THE LEDGER", () => {
   }
 
   it("shows the arrears and what they do, the Harbormaster's wallet, and the economy in four numbers", async () => {
-    const { root } = await ledger();
+    const { root, fake } = await ledger();
     expect(q(root, ".d2-owed b").textContent).toBe("1,240");
-    expect(q(root, ".d2-does").textContent).toContain("+620");
-    expect(q(root, ".d2-does .bonded").dataset.on).toBe("1");
+    expect(q(root, ".d2-does").textContent).toContain(`+${n(invoiceStart(0, 1240) - invoiceStart(0, 0))}`);
+    expect(q(root, ".d2-does .bonded").dataset.on).toBe(1240 >= INVOICE.bondedAt ? "1" : "0");
     expect(q(root, ".d2-truth").textContent).toContain("Every scrip you pay goes into the Harbormaster's wallet. It spends it on machines.");
     expect(q(root, ".d2-hm-bal").textContent).toBe("1,180");
-    expect(q(root, ".d2-hm-rows .buys dd").textContent).toBe("+2 Inspection Units every wave");
+    // What its wallet buys, in both postures, from items.ts's own rates.
+    const hm = fake.harbormaster;
+    expect(hm.strength).toBe(Math.min(100, Math.floor(1180 / HARBORMASTER.scripPerStrength)));
+    expect(q(root, ".d2-hm-rows .buys dd").textContent).toBe(hmBuys(hm));
+    const drones = Math.min(4, Math.floor(hm.strength / HARBORMASTER.strengthPerDrone));
+    expect(hmBuys(hm)).toBe(drones ? `+${drones} Inspection Unit${drones === 1 ? "" : "s"} every wave` : "No extra Inspection Units");
+    expect(hmBuys({ ...hm, posture: "pursuit", bailiffAt: 960 })).toBe("Bailiff at 960");
     await vi.waitFor(() => expect(q(root, '[data-eco="supply"] dd').textContent).toBe("48,250"));
     expect(root.querySelectorAll(".d2-eco [data-eco]").length).toBe(4);
     expect(q(root, '[data-eco="flow"] dd').textContent).toBe("+6,420 · −5,130");
@@ -537,20 +621,25 @@ describe("THE LEDGER", () => {
 
   it("SETTLE clears twice what is paid, and the Harbormaster's balance rises by it", async () => {
     const { root, fake } = await ledger();
-    expect(maxSettle(1240, 2400)).toBe(620);
-    expect(maxSettle(1240, 100)).toBe(100);
+    const max = Math.ceil(1240 / INVOICE.settleRate); // the most a settle takes: what clears the lot
+    expect(maxSettle(1240, 2400)).toBe(max);
+    expect(maxSettle(1240, 100)).toBe(100); // never more than the purse
+    expect(maxSettle(0, 2400)).toBe(0);
+    const pay = Math.floor(max / 2);
+    const cleared = Math.min(1240, pay * INVOICE.settleRate);
+    const owed = 1240 - cleared;
     k(root, "pay:Half").click();
-    expect(q(root, ".d2-settle").dataset.pay).toBe("310");
-    expect(q(root, ".d2-settle").dataset.clears).toBe("620");
+    expect(q(root, ".d2-settle").dataset.pay).toBe(String(pay));
+    expect(q(root, ".d2-settle").dataset.clears).toBe(String(cleared));
     k(root, "settle").click();
     await settled(root);
-    expect(fake.profile!.arrears).toBe(620);
-    expect(fake.balances.scrip).toBe(2400 - 310);
-    expect(fake.harbormaster.balance).toBe(1180 + 310);
-    expect(status(root).textContent).toContain("620 of arrears cleared; you now owe 620.");
-    await vi.waitFor(() => expect(q(root, ".d2-hm-bal").textContent).toBe("1,490"));
-    expect(q(root, ".d2-owed b").textContent).toBe("620");
-    expect(q(root, ".d2-does .bonded").dataset.on).toBe("0");
+    expect(fake.profile!.arrears).toBe(owed);
+    expect(fake.balances.scrip).toBe(2400 - pay);
+    expect(fake.harbormaster.balance).toBe(1180 + pay); // every scrip paid is in its wallet
+    expect(status(root).textContent).toContain(`${n(cleared)} of arrears cleared; you now owe ${n(owed)}.`);
+    await vi.waitFor(() => expect(q(root, ".d2-hm-bal").textContent).toBe(n(1180 + pay)));
+    expect(q(root, ".d2-owed b").textContent).toBe(n(owed));
+    expect(q(root, ".d2-does .bonded").dataset.on).toBe(owed >= INVOICE.bondedAt ? "1" : "0");
   });
 
   it("buys an impounded gun back for its fee", async () => {
@@ -608,9 +697,12 @@ describe("unknown, pending and refused", () => {
       expect(status(s.root).textContent).not.toMatch(/fail/i);
       await vi.waitFor(() => expect(k(s.root, "settle").disabled).toBe(false)); // nothing freezes
     }
-    // The first one had landed after all (155 paid, 310 cleared): the stash was read again, so the screen shows it.
-    expect(s.fake.profile!.arrears).toBe(930);
-    await vi.waitFor(() => expect(q(s.root, ".d2-owed b").textContent).toBe("930"));
+    // The first one had landed after all (a quarter of the most a settle takes): the stash was read again, so the
+    // screen shows it. The second never left, so it changed nothing.
+    const quarter = Math.floor(Math.ceil(1240 / INVOICE.settleRate) / 4);
+    const owed = 1240 - quarter * INVOICE.settleRate;
+    expect(s.fake.profile!.arrears).toBe(owed);
+    await vi.waitFor(() => expect(q(s.root, ".d2-owed b").textContent).toBe(n(owed)));
   });
 
   it("says why when the contract refuses a call", async () => {

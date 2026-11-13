@@ -2,7 +2,7 @@
 // attached. It is loaded only in dev (index.ts imports it dynamically under import.meta.env.DEV) and by the tests;
 // a production build never ships it. It is NOT the contract: it follows docs/CONTRACT_V2.md closely enough for the
 // screens to behave, holds everything in memory, and its calls land after a short delay.
-import { appraise, BLUEPRINTS, CONDITION, FRAMES, gradeOf, HARBORMASTER, INVOICE, MARKET, MATERIALS, MODS, quality, RAID, STAT_KEYS, TOKEN_NAMES, VENDORS } from "../items";
+import { appraise, BLUEPRINTS, CONDITION, FRAMES, goodsPrice, gradeOf, HARBORMASTER, INVOICE, LOWER_IS_BETTER, MARKET, MATERIALS, MODS, quality, RAID, STAT_KEYS, TOKEN_NAMES, VENDOR_PRICING, VENDORS } from "../items";
 import type {
   Amounts,
   BlueprintId,
@@ -83,7 +83,7 @@ function roll(frame: FrameId, t: number, rand: () => number): Stats {
   const out = {} as Stats;
   for (const k of STAT_KEYS) {
     const [lo, hi] = FRAMES[frame].bands[k];
-    const lower = k === "recoil" || k === "reload";
+    const lower = LOWER_IS_BETTER.includes(k);
     const g = Math.max(0, Math.min(1, t + (rand() - 0.5) * 0.24));
     out[k] = Math.round(lower ? hi - (hi - lo) * g : lo + (hi - lo) * g);
   }
@@ -162,15 +162,19 @@ export function createFake(opts: FakeOptions = {}): FakeV2 {
   listings.push({ id: ++listingNo, seller: "bosun.testnet", callsign: "BOSUN", price: 95, at: now() - 7 * HOUR, item: { tokenId: "optic", amount: 1 } });
   listings.sort((a, b) => b.at - a.at);
 
+  /** Something on a vendor's shelf, at items.ts's own default price for one unit at that stock (`goodsPrice`), so the
+   *  stand-in's prices follow the blueprints and the pricing rule as they are tuned. */
+  const good = (tokenId: ModId | ConsumableId, stock: number, reason: string): Vendor["goods"][number] => ({ tokenId, price: goodsPrice(tokenId, stock), stock, reason });
+
   const vendorState: Record<VendorId, { scrip: number; stock: Amounts<MaterialId>; goods: Vendor["goods"]; guns: Vendor["guns"]; memo: string }> = {
     moss: {
       scrip: 1320,
       stock: { copper: 12, chips: 14, servo: 3, rotor: 7, core: 2 },
       goods: [
-        { tokenId: "barrel2", price: 215, stock: 2, reason: "Rifled it myself. It shoots where you point it." },
-        { tokenId: "comp", price: 150, stock: 3, reason: "Three on the shelf. I'd rather they were on rifles." },
-        { tokenId: "mag2", price: 165, stock: 1, reason: "Last one. Springs are hard to come by." },
-        { tokenId: "optic", price: 290, stock: 1, reason: "Glass off a crane camera. You won't find better." },
+        good("barrel2", 2, "Rifled it myself. It shoots where you point it."),
+        good("comp", 3, "Three on the shelf. I'd rather they were on rifles."),
+        good("mag2", 1, "Last one. Springs are hard to come by."),
+        good("optic", 1, "Glass off a crane camera. You won't find better."),
       ],
       guns: [],
       memo: "Servos are short and everyone wants a Longshore. Bring me servos and I'll build two more this week.",
@@ -179,9 +183,9 @@ export function createFake(opts: FakeOptions = {}): FakeV2 {
       scrip: 940,
       stock: { meds: 6, fuel: 5, chips: 9 },
       goods: [
-        { tokenId: "plate", price: 62, stock: 8, reason: "Steel is steel. Wear it." },
-        { tokenId: "charge", price: 48, stock: 6, reason: "Fuel cells are dear this week, so these are too." },
-        { tokenId: "ammo", price: 12, stock: 34, reason: "Take more than you think. Everyone runs dry at the cranes." },
+        good("plate", 8, "Steel is steel. Wear it."),
+        good("charge", 6, "Fuel cells are dear this week, so these are too."),
+        good("ammo", 34, "Take more than you think. Everyone runs dry at the cranes."),
       ],
       guns: [],
       memo: "Three Breachers came back without their rifles yesterday. All three skipped the plate.",
@@ -190,7 +194,8 @@ export function createFake(opts: FakeOptions = {}): FakeV2 {
   {
     const a = gun("longshore", "C", { serial: "S-000070", owner: "moss.saltline.testnet", maker: "moss.saltline.testnet", makerCallsign: "MOSS", state: "vendor" });
     const b = gun("stevedore", "B", { serial: "S-000071", owner: "moss.saltline.testnet", maker: "moss.saltline.testnet", makerCallsign: "MOSS", state: "vendor", mods: ["comp"] });
-    vendorState.moss.guns.push({ weapon: a, price: Math.floor(a.value * 1.25) }, { weapon: b, price: Math.floor(b.value * 1.25) });
+    const asks = (w: Weapon) => Math.floor((w.value * VENDOR_PRICING.gunPct) / 100);
+    vendorState.moss.guns.push({ weapon: a, price: asks(a) }, { weapon: b, price: asks(b) });
   }
   const BID_WHY: Record<MaterialId, [string, string]> = {
     copper: ["Every rifle starts as a coil of this.", "I'm stacked with coil. Price drops till I use it."],
@@ -223,6 +228,8 @@ export function createFake(opts: FakeOptions = {}): FakeV2 {
     hm.bonusDrones = hm.posture === "patrols" ? Math.min(4, Math.floor(hm.strength / HARBORMASTER.strengthPerDrone)) : 0;
     hm.bailiffAt = hm.posture === "pursuit" ? INVOICE.bailiff - HARBORMASTER.bailiffDropPerStrength * hm.strength : INVOICE.bailiff;
   }
+
+  restrength(); // strength, extra units and the Bailiff's threshold follow items.ts, not the figures typed above
 
   const economy: EconomyView = {
     scripSupply: 48_250,
@@ -323,7 +330,7 @@ export function createFake(opts: FakeOptions = {}): FakeV2 {
             id,
             accountId: `${id}.saltline.testnet`,
             name: VENDORS[id].name,
-            open: v.scrip >= 100,
+            open: v.scrip >= VENDOR_PRICING.float,
             scrip: v.scrip,
             stock: v.stock,
             bids: VENDORS[id].buys.map((m) => {
@@ -430,7 +437,7 @@ export function createFake(opts: FakeOptions = {}): FakeV2 {
         let paid = 0;
         let stock = v.stock[tokenId] ?? 0;
         for (let i = 0; i < amount; i++) paid += bidOf(vendor, tokenId, stock++);
-        if (v.scrip - paid < 100) return no("E_VENDOR_BROKE", `${VENDORS[vendor].name} can't cover that`);
+        if (v.scrip - paid < VENDOR_PRICING.float) return no("E_VENDOR_BROKE", `${VENDORS[vendor].name} can't cover that`);
         v.stock[tokenId] = stock;
         v.scrip -= paid;
         add(tokenId, -amount);
@@ -446,6 +453,7 @@ export function createFake(opts: FakeOptions = {}): FakeV2 {
         const cost = g.price * amount;
         if (have("scrip") < cost) return no("E_FUNDS", "Not enough scrip");
         g.stock -= amount;
+        g.price = goodsPrice(g.tokenId, g.stock); // dearer as the shelf empties, by items.ts's rule
         add("scrip", -cost);
         add(tokenId, amount);
         vendorState[vendor].scrip += cost;

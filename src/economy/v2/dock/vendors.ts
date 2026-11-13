@@ -3,7 +3,7 @@
 // where the freighter pays in new scrip and pays less for every crate already aboard.
 import { h } from "../../dockside/dom";
 import { fmt, UNKNOWN } from "../../dockside/format";
-import { CONSUMABLES, MATERIALS, MODS, TOKEN_NAMES, VENDORS } from "../items";
+import { CONSUMABLES, MATERIALS, MODS, TOKEN_NAMES, VENDOR_PRICING, VENDORS } from "../items";
 import type { ConsumableId, MaterialId, ModId, Quote, Vendor, VendorGood, VendorId } from "../types";
 import { gunCard } from "./guncard";
 import { actBtn, emptyLine, head, okv, painter, scripEl, SHORT, type Ctx } from "./store";
@@ -65,7 +65,9 @@ export function createVendors(ctx: Ctx) {
       { class: "d2-bid", "data-tok": id, "data-to": to },
       h("div", { class: "d2-bid-n" }, h("b", null, TOKEN_NAMES[id]), h("i", { class: held == null ? "unk" : "", "data-unknown": held == null ? "1" : null }, held == null ? `you hold ${UNKNOWN}` : `you hold ${fmt(held)}`)),
       h("div", { class: "d2-bid-p", "data-dir": q.price > base ? "up" : q.price < base ? "down" : "flat" }, scripEl(q.price), h("em", null, q.price === base ? (to === "export" ? "at list" : "her usual") : q.price > base ? `${fmt(q.price - base)} over ${to === "export" ? "list" : "her usual"}` : `${fmt(base - q.price)} under ${to === "export" ? "list" : "her usual"}`)),
-      h("p", { class: "d2-bid-why" }, to === "export" ? q.reason : `“${q.reason}”`),
+      // The reason is printed as the chain gives it: the agents write them in the third person ("Ines holds the 10 she
+      // wants"), so putting them in quotation marks made a vendor talk about herself by name.
+      h("p", { class: "d2-bid-why" }, q.reason),
       h(
         "div",
         { class: "d2-bid-b" },
@@ -85,7 +87,7 @@ export function createVendors(ctx: Ctx) {
       { class: "d2-good", "data-tok": g.tokenId, "data-stock": g.stock },
       h("div", { class: "d2-bid-n" }, h("b", null, TOKEN_NAMES[g.tokenId]), h("i", null, `${line} · ${g.stock ? `${g.stock} on the shelf` : "sold out"}${held == null ? "" : ` · you hold ${held}`}`)),
       h("div", { class: "d2-bid-p" }, scripEl(g.price)),
-      h("p", { class: "d2-bid-why" }, `“${g.reason}”`),
+      h("p", { class: "d2-bid-why" }, g.reason),
       h(
         "div",
         { class: "d2-bid-b" },
@@ -121,7 +123,7 @@ export function createVendors(ctx: Ctx) {
         h("h3", { class: "d2-person-name" }, p.name),
         h("p", { class: "d2-person-line" }, p.line),
         note ? h("blockquote", { class: "d2-memo" }, h("span", null, w === "export" ? "Posted at the window" : `${p.name}'s last note`), h("p", null, note)) : null,
-        v ? h("p", { class: "d2-till" }, "Her till: ", h("b", null, fmt(v.scrip)), " scrip. She can't pay out below 100.") : null,
+        v ? h("p", { class: "d2-till" }, "Her till: ", h("b", null, fmt(v.scrip)), ` scrip. She can't pay out below ${fmt(VENDOR_PRICING.float)}.`) : null,
       ),
     );
   }
