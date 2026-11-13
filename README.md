@@ -62,7 +62,7 @@ to jump, Shift to sprint, C to crouch, Esc to pause. There are on-screen control
 
 ```sh
 npm ci
-npm run check              # typecheck, 300 tests (Vitest), production build
+npm run check              # typecheck, 352 tests (Vitest), production build
 npm run verify:testnet     # reads the live contract, no wallet needed: each broker's prices and reasons, its agent's last
                            # note, the ledger, the leaderboard, a simulated week, the faucet's balance
 cd contract && cargo test  # 46 contract tests (pricing, closing and reopening, runs, wrecks, market, limits, simulate, the town)
@@ -75,8 +75,13 @@ the live site too: https://saltline-lac.vercel.app/?mock=1&act=3
 
 **Browser smoke test:** run `npm run dev -- --port 5290`, then `node scripts/smoke-salvage.mjs`. It makes 17 checks:
 manifest, seal, weight, wreck, extract, death, 60 fps, and the baseline unchanged with `?noeconomy=1`. It uses Chrome
-from `CHROME_PATH` or the usual install path. `node scripts/smoke-story.mjs` (dev server on 5295) checks the story in
-30 steps: the briefing, the radio, the Harbormaster's channel, extra drones in Chapter 3, and the town's lights.
+from `CHROME_PATH` or the usual install path.
+
+Two more smoke tests:
+- `node scripts/smoke-story.mjs` checks the story in 50 steps: the briefing, the chapter cards, Control's and the
+  Harbormaster's lines, extra drones in Chapter 3, and the town's lights.
+- `node scripts/smoke-boss.mjs` fights the Assessor from its arrival to the boat: cores, calls, its lines, the boat
+  held and released, and no boss in Chapter 1.
 
 ## On chain (NEAR testnet)
 
@@ -172,7 +177,7 @@ deploying the contract, and `agents/README.md` covers running the brokers.
   [`pre-hackathon...main`](https://github.com/Nuel-osas/saltline/compare/pre-hackathon...main) was built from 11 Nov
   2026: the contract, the economy layer, the agents, the faucet, the docs and the tests. Each piece came in as its
   own pull request.
-  - The only changes to the baseline game's code are in `src/game.js` (+22/−11 lines): extension points marked
+  - The only changes to the baseline game's code are in `src/game.js` (+31/−18 lines): extension points marked
     `// ext:`, plus the new premise and radio strings marked `story:`.
   - With `?noeconomy=1`, the baseline plays exactly as before.
 - **AI-generated code.** The hackathon work was written with Claude Code (Anthropic), with several agents working in
