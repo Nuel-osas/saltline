@@ -52534,6 +52534,7 @@ void main() {
           e.shots++;
           let l = i.physics.raycast(n, s, r),
             c = i.enemies.raycast(n, s, l ? l.dist : r);
+          c = i.ext?.raycast?.(n, s, c ? c.dist : l ? l.dist : r) || c; // ext: other targets (the Assessor) take shots
           if (c) {
             e.hits++;
             let u = c.part === "weak" ? 2.2 : 1,
@@ -59176,7 +59177,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       if (Y && Y.pos) {
         let L = Math.hypot(Y.pos.x - n.pos.x, Y.pos.z - n.pos.z),
           Z = L < (Y.radius || 2.5) && Math.abs(Y.pos.y - n.pos.y) < 3.5;
-        (Z && c.allCut && n.alive
+        (Z && c.allCut && n.alive && !a(i.ext, "extractBlocked") // ext: the boat holds off while the Assessor stands
           ? ee()
           : Z &&
             !c.allCut &&
