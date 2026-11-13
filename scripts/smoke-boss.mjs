@@ -48,7 +48,7 @@ async function open(query) {
     localStorage.clear(); // a fresh mock economy, wallet and story memory every time
     localStorage.setItem("saltline.story.v1", JSON.stringify({ v: 1, briefed: true, heard: ["act2", "reveal"], peak: 0 }));
   });
-  await page.goto(`${base}/?${query}`, { waitUntil: "load" });
+  await page.goto(`${base}/play/?${query}`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
   await page.waitForFunction(() => !!window.__G.economy && !!window.__G.story && "boss" in window.__G, null, { timeout: 15000 });
   await page.evaluate(async () => {

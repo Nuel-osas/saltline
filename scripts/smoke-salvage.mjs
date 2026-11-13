@@ -35,7 +35,7 @@ async function open(query, { economy = false } = {}) {
     window.__skew = 0;
     Date.now = () => real() + window.__skew;
   });
-  await page.goto(`${base}/?${query}`, { waitUntil: "load" });
+  await page.goto(`${base}/play/?${query}`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
   if (economy) {
     // Claim a dock pass on the mock, record the run calls salvage makes, then deploy.

@@ -34,7 +34,7 @@ Every delivery also moves one story that all players share, in three chapters na
 
 The full story bible is in [`docs/STORY.md`](docs/STORY.md).
 
-- **Play:** https://saltline-lac.vercel.app (NEAR testnet; no wallet or install needed)
+- **Play:** https://saltline-lac.vercel.app (NEAR testnet; no wallet or install needed). The front page introduces the game and shows the live economy; the game itself is at `/play/`.
 - **Built for:** NEAR HACKATHON, November 2026, track 09 Games With Real Economies
 - **Contract:** [`saltline.testnet`](https://testnet.nearblocks.io/address/saltline.testnet)
 - **Hackathon work:** [`pre-hackathon...main`](https://github.com/Nuel-osas/saltline/compare/pre-hackathon...main)
@@ -43,7 +43,7 @@ The full story bible is in [`docs/STORY.md`](docs/STORY.md).
 
 | # | Do | See |
 | --- | --- | --- |
-| 1 | Open https://saltline-lac.vercel.app | The title screen. The small dock board at the top right shows the brokers' live prices, read from the contract. |
+| 1 | Open https://saltline-lac.vercel.app/play/ | The title screen. The small dock board at the top right shows the brokers' live prices, read from the contract. |
 | 2 | Press **DEPLOY** | A "Sign on" card from the Dock Office. Type a callsign and press **Claim pass and deploy**. |
 | 3 | Wait a moment | The pass is stamped "150 scrip". There's no wallet popup and no seed phrase: the faucet created a NEAR testnet account for you and registered your callsign. Then the five-card briefing tells the story, a chapter card opens the run, and the Harbormaster bills you on its own channel (Esc skips it; **BRIEFING** on the title replays it), and the run starts. |
 | 4 | Listen to the radio, then look at the bottom left and the compass | "Manifest's in. 8 sealed boxes…" Eight containers are marked, with a cargo readout (`CARGO 0/6`). |
@@ -68,10 +68,10 @@ npm run verify:testnet     # reads the live contract, no wallet needed: each bro
 cd contract && cargo test  # 46 contract tests (pricing, closing and reopening, runs, wrecks, market, limits, simulate, the town)
 ```
 
-**Offline:** run `npm run dev`, then open http://127.0.0.1:5280/?mock=1. The whole economy runs in memory, with simulated
+**Offline:** run `npm run dev`, then open http://127.0.0.1:5280/play/?mock=1. The whole economy runs in memory, with simulated
 players, so every screen works without the chain. Add `&act=2` or `&act=3` to see Chapter 2 (the town lit) or Chapter 3
 (the Harbormaster revealed, extra drones, and the Assessor at the quay), without waiting for the shared arc. This works on
-the live site too: https://saltline-lac.vercel.app/?mock=1&act=3
+the live site too: https://saltline-lac.vercel.app/play/?mock=1&act=3
 
 **Browser smoke test:** run `npm run dev -- --port 5290`, then `node scripts/smoke-salvage.mjs`. It makes 17 checks:
 manifest, seal, weight, wreck, extract, death, 60 fps, and the baseline unchanged with `?noeconomy=1`. It uses Chrome
@@ -147,7 +147,7 @@ docs/                  STORY.md (the story bible), ECONOMY.md (the design, writt
 
 ```sh
 npm ci
-npm run dev        # http://127.0.0.1:5280 (offline mock unless .env names a contract)
+npm run dev        # http://127.0.0.1:5280 is the front page; the game is at /play/ (offline mock unless .env names a contract)
 npm run build      # dist/
 ```
 

@@ -35,7 +35,7 @@ const salvage = [...readFileSync(new URL("../src/economy/salvage/spots.ts", impo
 const browser = await launch();
 try {
   const page = await browser.newPage({ viewport: { width: 640, height: 360 } });
-  await page.goto(url + "/?noeconomy=1&noaudio=1&q=low", { waitUntil: "load" });
+  await page.goto(url + "/play/?noeconomy=1&noaudio=1&q=low", { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
   const found = await page.evaluate((salvage) => {
     const G = window.__G;
