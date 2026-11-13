@@ -28,6 +28,9 @@ export interface ShooterSpec {
 
 const whole = (n: unknown, lo: number, hi: number) => (typeof n === "number" && Number.isFinite(n) ? Math.max(lo, Math.min(hi, Math.floor(n))) : lo);
 
+/** The view model's furniture per frame (game.js's `pac9_polymer_tan`, the Longshore's tan): the issue rifle is plain black. */
+export const FINISH: Record<string, number> = { longshore: 0x5a4f3f, stevedore: 0x2b3a42, pilot: 0x3b4630, issue: 0x151515 };
+
 /** The gun's name as the HUD shows it: its frame and grade, or the issue rifle's. */
 export const gunName = (w: Pick<Weapon, "frame" | "grade"> | null) => (w ? `${FRAMES[w.frame].name} · ${w.grade}` : ISSUE.name);
 /** A gun in a sentence or on a board: `Longshore S-000041`. */
