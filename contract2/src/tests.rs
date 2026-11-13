@@ -1942,11 +1942,22 @@ enum Who {
     Faucet,
     Player,
     PlayerOrVendor,
+    /// Moss's or Ines's own account.
+    Vendor,
+    Harbormaster,
 }
 
 /// Every public method of the contract, and who may call it. `every_public_method_is_in_the_access_table` checks
 /// this list against the source.
-const ACCESS: [(&str, Who); 48] = [
+const ACCESS: [(&str, Who); 56] = [
+    ("vendor_build", Who::Vendor),
+    ("vendor_price", Who::Vendor),
+    ("hm_posture", Who::Harbormaster),
+    ("economy", Who::View),
+    ("leaderboard", Who::View),
+    ("nft_tokens", Who::View),
+    ("nft_metadata", Who::View),
+    ("nft_payout", Who::View),
     ("new", Who::Init),
     ("pause", Who::Owner),
     ("unpause", Who::Owner),
@@ -2072,6 +2083,14 @@ fn invoke(w: &mut World, who: &str, method: &str) {
         "mt_transfer" => c.mt_transfer(acc(MARLOWE), "copper".into(), U128(1), None, None),
         "mt_batch_transfer" => c.mt_batch_transfer(acc(MARLOWE), vec!["copper".into()], vec![U128(1)], None, None),
         "export" => drop(c.export("copper".into(), U128(1))),
+        "vendor_build" => drop(c.vendor_build("ammo".into(), "Restocking.".into())),
+        "vendor_price" => drop(c.vendor_price(None, Some("ammo".into()), U128(15), "Holding the price.".into())),
+        "hm_posture" => drop(c.hm_posture("pursuit".into(), "They are paying.".into())),
+        "economy" => drop(c.economy()),
+        "leaderboard" => drop(c.leaderboard()),
+        "nft_tokens" => drop(c.nft_tokens(None, None)),
+        "nft_metadata" => drop(c.nft_metadata()),
+        "nft_payout" => drop(c.nft_payout(gun, U128(1_000), None)),
         "paused" => drop(c.paused()),
         "rules" => drop(c.rules()),
         "materials" => drop(c.materials()),
@@ -2141,6 +2160,8 @@ fn every_public_method_checks_who_is_calling() {
                 Who::Faucet => ("E_NOT_FAUCET", caller == FAUCET),
                 Who::Player => ("E_NOT_REGISTERED", caller == ROOK),
                 Who::PlayerOrVendor => ("E_NOT_REGISTERED", [ROOK, MOSS_ACC, INES_ACC].contains(&caller)),
+                Who::Vendor => ("E_NOT_VENDOR", [MOSS_ACC, INES_ACC].contains(&caller)),
+                Who::Harbormaster => ("E_NOT_HARBORMASTER", caller == HM),
             };
             let got = refusal(|| invoke(&mut w, caller, method));
             match (who, allowed, got) {
@@ -2176,6 +2197,8 @@ fn the_owner_can_pause_and_nothing_else() {
             Who::Faucet => FAUCET,
             Who::Player => ROOK,
             Who::PlayerOrVendor => MOSS_ACC,
+            Who::Vendor => INES_ACC,
+            Who::Harbormaster => HM,
         };
         let got = refusal(|| invoke(&mut w, caller, method));
         if who == Who::View {
@@ -2198,7 +2221,7 @@ fn may_mint(method: &str, t: usize, n: u128) -> bool {
         // Cargo and parts, within the carry limit.
         "extract" | "die" => is_material(t) && n <= CARRY_LIMIT as u128,
         "scrap" => SCRAP.contains(&(t, n)),
-        "build" => blueprint_for(t).is_some_and(|b| BLUEPRINTS[b].yields as u128 == n),
+        "build" | "vendor_build" => blueprint_for(t).is_some_and(|b| BLUEPRINTS[b].yields as u128 == n),
         _ => false,
     }
 }
@@ -2219,7 +2242,7 @@ fn watched<R>(
         }
     }
     let guns = w.c.guns_built - built;
-    assert!(guns == 0 || (method == "build" && guns == 1), "{method} made {guns} guns");
+    assert!(guns == 0 || (matches!(method, "build" | "vendor_build") && guns == 1), "{method} made {guns} guns");
     w.check();
     seen.insert(method);
     out
@@ -2311,6 +2334,14 @@ fn no_call_mints_scrip_materials_or_guns_outside_the_rules() {
         )
     });
     watched(&mut w, s, "scrap", |w| w.as_(ROOK).scrap(gun.clone()));
+    // The vendors' and the Harbormaster's own calls: a vendor's build mints by the same yields, from its own
+    // stock; a price or a posture mints nothing.
+    let rack = watched(&mut w, s, "vendor_build", |w| w.as_(MOSS_ACC).vendor_build("stevedore".into(), "".into()));
+    let rack = rack.weapon.unwrap().serial;
+    watched(&mut w, s, "vendor_build", |w| w.as_(INES_ACC).vendor_build("ammo".into(), "".into()));
+    watched(&mut w, s, "vendor_price", |w| w.as_(MOSS_ACC).vendor_price(Some(rack.clone()), None, U128(1), "".into()));
+    watched(&mut w, s, "vendor_price", |w| w.as_(INES_ACC).vendor_price(None, Some("ammo".into()), U128(1), "".into()));
+    watched(&mut w, s, "hm_posture", |w| w.as_(HM).hm_posture("pursuit".into(), "".into()));
     watched(&mut w, s, "pause", |w| w.as_(OWNER).pause());
     watched(&mut w, s, "unpause", |w| w.as_(OWNER).unpause());
     // Time alone mints nothing: a day and a half of expiry and decay only burns.
@@ -2327,4 +2358,341 @@ fn no_call_mints_scrip_materials_or_guns_outside_the_rules() {
     // And the owner, the faucet and the Harbormaster hold nothing they weren't paid by a rule.
     assert!(w.c.balances(acc(OWNER)).is_empty() && w.c.balances(acc(FAUCET)).is_empty());
     assert!(w.c.balances(acc(CONTRACT)).is_empty(), "nothing is left in escrow");
+}
+
+// -----------------------------------------------------------------------------------------------------------------
+// The vendors' and the Harbormaster's own calls
+// -----------------------------------------------------------------------------------------------------------------
+
+#[test]
+fn a_vendor_builds_from_its_own_stock() {
+    let mut w = World::new();
+    let (rook, _, _) = w.crew();
+    refuses("E_NOT_VENDOR", || w.as_(ROOK).vendor_build("stevedore".into(), "".into()));
+    refuses("E_NOT_VENDOR", || w.as_(HM).vendor_build("stevedore".into(), "".into()));
+    refuses("E_DOESNT_SELL", || w.as_(INES_ACC).vendor_build("stevedore".into(), "".into()));
+    refuses("E_DOESNT_SELL", || w.as_(MOSS_ACC).vendor_build("ammo".into(), "".into()));
+    refuses("E_DOESNT_SELL", || w.as_(MOSS_ACC).vendor_build("railgun".into(), "".into()));
+    refuses("E_BAD_AMOUNT", || w.as_(MOSS_ACC).vendor_build("stevedore".into(), "x".repeat(141)));
+    // Moss starts with 15 copper, 12 electronics, 6 rotors and 1,500 scrip.
+    let supply = w.c.supply;
+    let out = w.as_(MOSS_ACC).vendor_build("stevedore".into(), "Short guns are selling.".into());
+    let g = out.weapon.unwrap();
+    assert!(out.minted.is_empty());
+    assert_eq!((g.serial.as_str(), g.frame.as_str(), g.state.as_str()), ("S-000003", "stevedore", "vendor"));
+    assert_eq!(
+        (g.owner.as_str(), g.maker.as_str(), g.maker_callsign.as_str(), g.owners),
+        (MOSS_ACC, MOSS_ACC, "MOSS", 1)
+    );
+    let ev = &events("saltline", "vendor_build")[0];
+    assert_eq!(ev["text"], format!("Moss built a {}-grade Stevedore, S-000003.", g.grade));
+    assert_eq!(ev["memo"], "Short guns are selling.");
+    assert_eq!(events("nep171", "nft_mint")[0]["owner_id"], MOSS_ACC);
+    let moss = &w.c.vendors[MOSS];
+    assert_eq!(
+        (moss.bal[COPPER], moss.bal[CHIPS], moss.bal[ROTOR], moss.bal[SCRIP]),
+        (11, 9, 3, 1_500),
+        "parts, no fee"
+    );
+    assert_eq!((supply[COPPER] - w.c.supply[COPPER], w.c.supply[SCRIP]), (4, supply[SCRIP]));
+    let view = &w.c.vendors()[0];
+    assert_eq!((view.guns.len(), view.last_memo.as_deref()), (3, Some("Short guns are selling.")));
+    assert_eq!(view.guns[2].price.0, g.value.0 * 125 / 100);
+    // A second takes the last three rotors; there are none for a third.
+    w.as_(MOSS_ACC).vendor_build("stevedore".into(), "".into());
+    refuses("E_NO_STOCK", || w.as_(MOSS_ACC).vendor_build("stevedore".into(), "".into()));
+    // A player buys what she built.
+    w.give(rook, SCRIP, 3_000);
+    let bought = w.as_(ROOK).buy_gun("moss".into(), "S-000003".into());
+    assert_eq!((bought.weapon.owner.as_str(), bought.weapon.owners, bought.weapon.state.as_str()), (ROOK, 2, "held"));
+    // Goods by the yield: mods for Moss, consumables for Ines.
+    let out = w.as_(MOSS_ACC).vendor_build("mag2".into(), "".into());
+    assert!(out.weapon.is_none());
+    assert_eq!((out.minted["mag2"], w.c.vendors[MOSS].bal[MAG2]), (U128(1), 1));
+    let out = w.as_(INES_ACC).vendor_build("plate".into(), "Plates are low.".into());
+    assert_eq!(out.minted["plate"], U128(3));
+    let ines = &w.c.vendors[INES];
+    assert_eq!((ines.bal[PLATE], ines.bal[COPPER], ines.bal[FUEL], ines.bal[SCRIP]), (13, 14, 5, 1_500));
+    w.as_(INES_ACC).vendor_build("charge".into(), "".into());
+    w.as_(INES_ACC).vendor_build("ammo".into(), "".into());
+    assert_eq!(events("saltline", "vendor_build")[0]["text"], "Ines built 4 ammo.");
+    assert_eq!((w.c.vendors[INES].bal[CHARGE], w.c.vendors[INES].bal[AMMO]), (16, 44));
+    // No blueprint takes meds, so a build never has to count what the clinic used.
+    assert!(BLUEPRINTS.iter().all(|b| b.inputs.iter().all(|i| i.0 != MEDS)));
+    w.check();
+}
+
+#[test]
+fn a_vendor_sets_its_own_prices() {
+    let mut w = World::new();
+    let (rook, _, _) = w.crew();
+    w.give(rook, SCRIP, 5_000);
+    let ammo = || Some("ammo".to_string());
+    refuses("E_NOT_VENDOR", || w.as_(ROOK).vendor_price(None, ammo(), U128(1), "".into()));
+    refuses("E_NOT_VENDOR", || w.as_(OWNER).vendor_price(None, ammo(), U128(1), "".into()));
+    refuses("E_BAD_AMOUNT", || w.as_(INES_ACC).vendor_price(None, None, U128(10), "".into()));
+    refuses("E_BAD_AMOUNT", || {
+        w.as_(MOSS_ACC).vendor_price(Some("S-000001".into()), Some("comp".into()), U128(10), "".into())
+    });
+    refuses("E_BAD_AMOUNT", || w.as_(INES_ACC).vendor_price(None, ammo(), U128(0), "".into()));
+    refuses("E_BAD_AMOUNT", || w.as_(INES_ACC).vendor_price(None, ammo(), U128(MAX_PRICE + 1), "".into()));
+    refuses("E_BAD_AMOUNT", || w.as_(INES_ACC).vendor_price(None, ammo(), U128(10), "x".repeat(141)));
+    refuses("E_DOESNT_SELL", || w.as_(INES_ACC).vendor_price(None, Some("comp".into()), U128(10), "".into()));
+    refuses("E_DOESNT_SELL", || w.as_(INES_ACC).vendor_price(None, Some("meds".into()), U128(10), "".into()));
+    refuses("E_DOESNT_SELL", || w.as_(INES_ACC).vendor_price(Some("S-000001".into()), None, U128(10), "".into()));
+    refuses("E_NO_WEAPON", || w.as_(MOSS_ACC).vendor_price(Some("S-000099".into()), None, U128(10), "".into()));
+    // Goods: one flat price, however full the shelf.
+    w.as_(INES_ACC).vendor_price(None, ammo(), U128(20), "Everyone wants magazines.".into());
+    assert_eq!(events("saltline", "vendor_price")[0]["text"], "Ines priced ammo at 20 each.");
+    let ines = &w.c.vendors()[1];
+    assert_eq!((ines.goods[2].token_id.as_str(), ines.goods[2].price.0), ("ammo", 20));
+    assert!(ines.goods[2].reason.ends_with("Ines's own price."), "{}", ines.goods[2].reason);
+    assert_eq!((ines.goods[0].price.0, ines.last_memo.as_deref()), (54, Some("Everyone wants magazines.")));
+    assert_eq!(w.as_(ROOK).buy("ines".into(), "ammo".into(), U128(38)).cost.0, 38 * 20);
+    assert_eq!(w.c.vendors()[1].goods[2].price.0, 20, "no scarcity mark-up on a price she set");
+    // A gun: her price stands in for 125% of the appraisal until it is sold.
+    w.as_(MOSS_ACC).vendor_price(Some("S-000002".into()), None, U128(444), "Clearing the rack.".into());
+    assert!(events("saltline", "vendor_price")[0]["text"].as_str().unwrap().ends_with("Stevedore S-000002 at 444."));
+    let moss = &w.c.vendors()[0];
+    assert_eq!((moss.guns[1].price.0, moss.guns[0].price.0), (444, moss.guns[0].weapon.value.0 * 125 / 100));
+    assert_eq!(w.as_(ROOK).buy_gun("moss".into(), "S-000002".into()).cost.0, 444);
+    assert_eq!(w.c.gun(2).ask, None, "the price doesn't follow the gun");
+    refuses("E_DOESNT_SELL", || w.as_(MOSS_ACC).vendor_price(Some("S-000002".into()), None, U128(10), "".into()));
+    w.check();
+}
+
+#[test]
+fn the_harbormaster_chooses_patrols_or_pursuit() {
+    let mut w = World::new();
+    let (rook, _, _) = w.crew();
+    refuses("E_NOT_HARBORMASTER", || w.as_(ROOK).hm_posture("pursuit".into(), "".into()));
+    refuses("E_NOT_HARBORMASTER", || w.as_(OWNER).hm_posture("pursuit".into(), "".into()));
+    refuses("E_NOT_HARBORMASTER", || w.as_(MOSS_ACC).hm_posture("pursuit".into(), "".into()));
+    refuses("E_BAD_AMOUNT", || w.as_(HM).hm_posture("siege".into(), "".into()));
+    refuses("E_BAD_AMOUNT", || w.as_(HM).hm_posture("pursuit".into(), "x".repeat(141)));
+    // 1,000 in its wallet: strength 50.
+    w.give(rook, SCRIP, 2_000);
+    w.c.player_mut(rook).arrears = 5_000;
+    w.as_(ROOK).settle(U128(1_000));
+    let hm = w.c.harbormaster();
+    assert_eq!((hm.strength, hm.posture.as_str(), hm.bonus_drones, hm.bailiff_at.0), (50, "patrols", 2, 1_200));
+    let hm = w.as_(HM).hm_posture("pursuit".into(), "They keep paying. Send the Bailiff sooner.".into());
+    assert_eq!((hm.posture.as_str(), hm.bonus_drones, hm.bailiff_at.0), ("pursuit", 0, 1_000));
+    assert_eq!((hm.second_notice_at.0, hm.second_bailiff_at.0, hm.foreclosure_at.0), (600, 2_400, 4_000));
+    assert_eq!(hm.last_memo.as_deref(), Some("They keep paying. Send the Bailiff sooner."));
+    let ev = &events("saltline", "posture")[0];
+    assert_eq!(ev["text"], "The Harbormaster turned to pursuit. The Bailiff is sent at 1000.");
+    assert_eq!((ev["account"].as_str().unwrap(), ev["bailiff_at"].as_str().unwrap()), (HM, "1000"));
+    // Every raid reads it.
+    assert_eq!(w.start(ROOK, None).harbormaster.bailiff_at.0, 1_000);
+    // The threshold follows the wallet: 800 at full strength, and back toward 1,200 as the balance decays.
+    w.as_(ROOK).settle(U128(1_000));
+    assert_eq!(w.c.harbormaster().bailiff_at.0, 800);
+    w.wait(24 * HOUR);
+    assert_eq!((w.c.harbormaster().strength, w.c.harbormaster().bailiff_at.0), (25, 1_100));
+    let hm = w.as_(HM).hm_posture("patrols".into(), "".into());
+    assert_eq!((hm.posture.as_str(), hm.bonus_drones, hm.bailiff_at.0, hm.balance.0), ("patrols", 1, 1_200, 500));
+    assert_eq!(
+        events("saltline", "posture")[0]["text"],
+        "The Harbormaster turned to patrols: 1 more Inspection Units on every raid."
+    );
+    w.check();
+}
+
+// -----------------------------------------------------------------------------------------------------------------
+// The public economy
+// -----------------------------------------------------------------------------------------------------------------
+
+#[test]
+fn the_economy_is_public() {
+    let mut w = World::new();
+    let e = w.c.economy();
+    assert_eq!((e.scrip_supply.0, e.minted_24h.0, e.burned_24h.0, e.players), (3_000, 3_000, 0, 0));
+    assert_eq!((e.weapons_built, e.weapons_alive, e.weapons_destroyed), (2, 2, 0));
+    assert!(e.last_sales.is_empty());
+    // Three dock passes (450). The test's own hand-outs go through the same ledger, so they count as minted:
+    // a Pilot's fee (180) and a Stevedore's (90), both burned by the builds. The Stevedore is then scrapped.
+    let (rook, marlowe, _) = w.crew();
+    let gun = w.build(ROOK, rook, "pilot");
+    let spare = w.build(ROOK, rook, "stevedore");
+    w.as_(ROOK).scrap(spare);
+    let e = w.c.economy();
+    assert_eq!((e.scrip_supply.0, e.minted_24h.0, e.burned_24h.0, e.players), (3_450, 3_720, 270, 3));
+    assert_eq!((e.weapons_built, e.weapons_alive, e.weapons_destroyed), (4, 3, 1));
+    // A market sale: 2% is burned, and the price is kept under the gun's frame and grade.
+    w.give(marlowe, SCRIP, 850);
+    let id = w.as_(ROOK).list_weapon(gun.clone(), U128(1_000)).id;
+    w.as_(MARLOWE).buy_listing(id);
+    let grade = GRADES[w.c.gun(parse_serial(&gun).unwrap()).grade()].0;
+    let e = w.c.economy();
+    assert_eq!((e.scrip_supply.0, e.minted_24h.0, e.burned_24h.0), (4_280, 4_570, 290));
+    assert_eq!(e.last_sales.len(), 1);
+    let sale = &e.last_sales[0];
+    assert_eq!((sale.frame.as_str(), sale.grade.as_str(), sale.prices.clone()), ("pilot", grade, vec![U128(1_000)]));
+    // The day's totals are the current hour and the 23 before it. An export in the 24th hour is in; an hour later
+    // everything from the first hour has dropped out.
+    w.wait(23 * HOUR);
+    w.c.mint(Holder::Player(rook), COPPER, 1);
+    w.as_(ROOK).export("copper".into(), U128(1));
+    let e = w.c.economy();
+    assert_eq!((e.scrip_supply.0, e.minted_24h.0, e.burned_24h.0), (4_305, 4_595, 290));
+    w.wait(HOUR);
+    let e = w.c.economy();
+    assert_eq!((e.scrip_supply.0, e.minted_24h.0, e.burned_24h.0), (4_305, 25, 0));
+    w.wait(24 * HOUR);
+    assert_eq!((w.c.economy().minted_24h.0, w.c.economy().burned_24h.0), (0, 0));
+    // The supply counts the Harbormaster's decay before the ledger logs it.
+    w.c.player_mut(rook).arrears = 1_000;
+    w.as_(ROOK).settle(U128(100));
+    w.wait(12 * HOUR);
+    assert_eq!((w.c.economy().scrip_supply.0, w.c.supply[SCRIP]), (4_305 - 50, 4_305));
+    w.check();
+}
+
+#[test]
+fn the_leaderboard_ranks_worth_extractions_and_makers() {
+    let mut w = World::new();
+    let (rook, _, _) = w.crew();
+    let rows =
+        |rows: &[crate::views::LeaderRow]| rows.iter().map(|r| (r.callsign.clone(), r.value.0)).collect::<Vec<_>>();
+    let row = |callsign: &str, value: u128| (callsign.to_string(), value);
+    let board = w.c.leaderboard();
+    assert_eq!((board.scanned, board.players), (3, 3));
+    // Equal worth: whoever registered first comes first.
+    assert_eq!(rows(&board.net_worth), vec![row("ROOK", 150), row("MARLOWE", 150), row("VANE", 150)]);
+    assert!(board.extractions.is_empty() && board.makers.is_empty(), "nobody on a board with nothing");
+    // A gun in hand counts at its appraisal; on the market it doesn't.
+    let gun = w.build(ROOK, rook, "pilot");
+    let value = w.c.gun(parse_serial(&gun).unwrap()).value();
+    assert_eq!(rows(&w.c.leaderboard().net_worth)[0], row("ROOK", 150 + value));
+    let id = w.as_(ROOK).list_weapon(gun.clone(), U128(100)).id;
+    assert_eq!(rows(&w.c.leaderboard().net_worth)[0], row("ROOK", 150));
+    // VANE buys it for 100: the gun's worth is VANE's, the price and the royalty are ROOK's.
+    w.as_(VANE).buy_listing(id);
+    let board = w.c.leaderboard();
+    assert_eq!(rows(&board.net_worth), vec![row("VANE", 50 + value), row("ROOK", 248), row("MARLOWE", 150)]);
+    assert_eq!(rows(&board.makers), vec![row("ROOK", 2)]);
+    assert_eq!(board.net_worth[0].account_id.as_str(), VANE);
+    let r = w.start(MARLOWE, None);
+    w.wait(MIN_SECONDS);
+    w.as_(MARLOWE).extract(r.raid_id, Report::default());
+    assert_eq!(rows(&w.c.leaderboard().extractions), vec![row("MARLOWE", 1)]);
+    // Ten rows at most.
+    for i in 0..12u32 {
+        let ix = w.register(&format!("p{i}.testnet"), &format!("P{i:04}"));
+        w.give(ix, SCRIP, 1_000 + i as u128);
+    }
+    let board = w.c.leaderboard();
+    assert_eq!((board.scanned, board.players, board.net_worth.len()), (15, 15, 10));
+    assert_eq!(rows(&board.net_worth)[..2], [row("P0011", 1_161), row("P0010", 1_160)]);
+    assert!(!rows(&board.net_worth).iter().any(|r| r.0 == "MARLOWE"));
+}
+
+#[test]
+fn the_leaderboard_does_bounded_work() {
+    // Players: it reads the first 300 and says so.
+    let mut w = World::new();
+    for i in 0..LEADER_SCAN_PLAYERS + 5 {
+        w.as_(FAUCET).register(acc(&format!("p{i}.testnet")), format!("P{i:04}"));
+    }
+    let board = w.c.leaderboard();
+    assert_eq!((board.scanned, board.players, board.net_worth.len()), (300, 305, 10));
+    // Guns: it appraises 600 at most, and stops at the first locker that would take it past that.
+    let mut w = World::new();
+    for i in 0..13u32 {
+        let who = format!("p{i}.testnet");
+        let ix = w.register(&who, &format!("P{i:04}"));
+        context(&who, w.now, 0, 7);
+        for _ in 0..MAX_GUNS_PER_OWNER {
+            w.c.mint_gun(Holder::Player(ix), STEVEDORE, &acc(&who), "P", HELD); // test setup
+        }
+    }
+    let board = w.c.leaderboard();
+    assert_eq!((board.scanned, board.players, board.net_worth.len()), (12, 13, 10));
+}
+
+// -----------------------------------------------------------------------------------------------------------------
+// NEP-171 metadata, the drawing and the payout
+// -----------------------------------------------------------------------------------------------------------------
+
+fn decode(media: &str) -> String {
+    use near_sdk::base64::Engine;
+    let b64 = media.strip_prefix("data:image/svg+xml;base64,").expect("an SVG data URI");
+    String::from_utf8(near_sdk::base64::engine::general_purpose::STANDARD.decode(b64).unwrap()).unwrap()
+}
+
+#[test]
+fn every_gun_carries_its_own_drawing() {
+    let mut w = World::new();
+    let (rook, _, _) = w.crew();
+    let gun = w.build(ROOK, rook, "pilot");
+    let n = parse_serial(&gun).unwrap();
+    let meta = w.c.nft_metadata();
+    assert_eq!(
+        (meta.spec.as_str(), meta.name.as_str(), meta.symbol.as_str()),
+        ("nft-1.0.0", "Saltline Armoury", "PAC9")
+    );
+    let media = w.c.nft_token(gun.clone()).unwrap().metadata.unwrap().media.unwrap();
+    let svg = decode(&media);
+    assert!(svg.starts_with("<svg xmlns='http://www.w3.org/2000/svg'") && svg.ends_with("</svg>"), "{svg}");
+    assert!(svg.is_ascii() && !svg.contains('"'));
+    let grade = w.c.weapon(gun.clone()).unwrap().grade;
+    for part in
+        [gun.as_str(), "PAC-9M Pilot", "built by ROOK", &format!(">{grade}</text>"), "condition 100 | 0 out | 1 owners"]
+    {
+        assert!(svg.contains(part), "{part} is missing from {svg}");
+    }
+    // The drawing is read off the record: wear and history show without anything being stored for it.
+    w.c.gun_mut(n).condition = 40;
+    w.c.gun_mut(n).extractions = 14;
+    let worn = decode(&w.c.nft_token(gun.clone()).unwrap().metadata.unwrap().media.unwrap());
+    assert!(worn.contains("condition 40 | 14 out") && worn.contains("width='112' height='7'"), "{worn}");
+    // Never over 1.5 kB, whatever the record holds.
+    let mut worst = w.c.gun(n).clone();
+    worst.frame = STEVEDORE as u8;
+    worst.serial = 999_999_999;
+    worst.maker_callsign = "W".repeat(16);
+    (worst.extractions, worst.owners, worst.recovered) = (u32::MAX, u32::MAX, u32::MAX);
+    let longest = crate::nft::drawing(&worst).len();
+    assert!(longest <= 1_500, "the longest drawing is {longest} bytes");
+    // Every gun, a page at a time.
+    let all = w.c.nft_tokens(None, None);
+    assert_eq!(all.iter().map(|t| t.token_id.as_str()).collect::<Vec<_>>(), vec!["S-000001", "S-000002", "S-000003"]);
+    assert_eq!((all[0].owner_id.as_str(), all[2].owner_id.as_str()), (MOSS_ACC, ROOK));
+    for t in &all {
+        let m = t.metadata.as_ref().unwrap();
+        assert!(decode(m.media.as_ref().unwrap()).contains(&t.token_id));
+        assert!(m.extra.as_ref().unwrap().contains(&t.token_id));
+    }
+    assert_eq!(w.c.nft_tokens(Some(U128(1)), Some(1))[0].token_id, "S-000002");
+    assert!(w.c.nft_tokens(Some(U128(3)), None).is_empty());
+    assert_eq!(w.c.nft_tokens(None, Some(100_000)).len(), 3);
+    assert_eq!(
+        w.c.nft_tokens_for_owner(acc(ROOK), None, None)[0].metadata.as_ref().unwrap().media.as_ref().unwrap().len(),
+        media.len()
+    );
+}
+
+#[test]
+fn nft_payout_gives_the_maker_two_percent() {
+    let mut w = World::new();
+    let (rook, _, _) = w.crew();
+    let gun = w.build(ROOK, rook, "longshore");
+    // While the maker still owns it there is one payee.
+    let p = w.c.nft_payout(gun.clone(), U128(1_000), Some(1)).payout;
+    assert_eq!((p.len(), p[&acc(ROOK)]), (1, U128(1_000)));
+    w.as_yocto(ROOK).nft_transfer(acc(MARLOWE), gun.clone(), None, None);
+    let p = w.c.nft_payout(gun.clone(), U128(1_000), None).payout;
+    assert_eq!((p.len(), p[&acc(MARLOWE)], p[&acc(ROOK)]), (2, U128(980), U128(20)));
+    // Rounded down, and the parts always add up to the balance, however large.
+    for balance in [0u128, 1, 49, 50, 99, 12_345, 10u128.pow(27) + 7, u128::MAX] {
+        let p = w.c.nft_payout(gun.clone(), U128(balance), None).payout;
+        let maker = p.get(&acc(ROOK)).map(|x| x.0).unwrap_or(0);
+        assert_eq!(maker, balance / 100 * 2 + balance % 100 * 2 / 100, "2% of {balance}");
+        assert_eq!(maker + p[&acc(MARLOWE)].0, balance);
+    }
+    refuses("E_BAD_AMOUNT", || w.c.nft_payout(gun.clone(), U128(1_000), Some(1)));
+    refuses("E_NO_WEAPON", || w.c.nft_payout("S-000404".into(), U128(1_000), None));
+    // A gun a vendor built pays the vendor.
+    assert_eq!(w.c.nft_payout("S-000001".into(), U128(500), None).payout[&acc(MOSS_ACC)], U128(500));
 }
