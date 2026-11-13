@@ -148,7 +148,10 @@ function nearFaucetChain(cfg: FaucetConfig): FaucetChain {
   const hit = cached.get(sig);
   if (hit && hit.key === cfg.privateKey) return hit.chain;
   const profileOf = cfg.game === "v2" ? v2Profile : decodeProfile;
-  const port = nearKitPort({ rpcUrls: cfg.rpcUrls });
+  // The faucet answers only when its transactions are final. A new player's game signs its first call a moment
+  // after this returns, and the node looks the signer's key up at final state: answering at optimistic execution
+  // left a gap of a few seconds in which that first call (their first raid) was refused or timed out.
+  const port = nearKitPort({ rpcUrls: cfg.rpcUrls, waitUntil: "FINAL" });
   const read = async <T>(fn: (attempt: number) => Promise<T>): Promise<T> => {
     for (let attempt = 0; ; attempt++) {
       try {
