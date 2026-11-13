@@ -1,11 +1,12 @@
 // The Town: the story's home in the Dockside (docs/STORY.md, "The Open Ledger"). The town across the water is drawn
-// as a skyline whose windows come on with its districts; under it the three acts as a timeline, the two districts'
+// as a skyline whose windows come on with its districts; under it the three chapters as a timeline, the two districts'
 // deliveries, the Quartermaster's client and the Harbormaster's strength. It is all one read, chain.town(). When that
 // read fails, or the contract has no town yet, the numbers go and the tab says the Dock Office ledger is unreachable:
 // never a zero, never a guessed act.
 //
 // The client is a secret until the ledger names him, so nothing here says "Harbormaster" about the Quartermaster's
 // buyer, or what a core does once sold, before `client.revealed`.
+import { CHAPTERS } from "../story/copy";
 import type { District, TownView } from "../types";
 import { okv, type Ctx } from "./ctx";
 import { fill, h, text, toggle } from "./dom";
@@ -18,31 +19,40 @@ export const MOTTO = "We let one machine keep the books once. Never again.";
 
 interface ActCopy {
   n: 1 | 2 | 3;
-  numeral: string;
+  /** "Chapter 1": the act's label, and `chip` its short form on the Town tab. */
+  label: string;
+  chip: string;
+  /** The chapter's title, after a shipping document (docs/STORY.md → Chapters). */
   name: string;
-  /** What every player sees once the act has begun (docs/STORY.md → The arc). */
+  /** The chapter card's line. Shown once the chapter has begun: the third's would name the client early. */
+  line: string;
+  /** What every player sees once the chapter has begun (docs/STORY.md → Chapters). */
   sees: string;
   /** What starts it, shown while it's still ahead. */
   needs: string;
 }
 
-export const ACTS: ActCopy[] = [
-  { n: 1, numeral: "I", name: "Lockdown", sees: "The town across the water is dark. Ines is rationing.", needs: "" },
-  {
-    n: 2,
-    numeral: "II",
-    name: "Lights on the Water",
+const SEES: Record<1 | 2 | 3, Pick<ActCopy, "sees" | "needs">> = {
+  1: { sees: "The town across the water is dark. Ines is rationing.", needs: "" },
+  2: {
     sees: "The clinic and the generators are lit. The lights are back across the water.",
     needs: "When the clinic and the generators are lit",
   },
-  {
-    n: 3,
-    numeral: "III",
-    name: "The Client",
-    sees: "The Harbormaster is buying itself back, and has started talking to Breachers.",
+  3: {
+    sees: "The Harbormaster is buying its own cores back through a broker, to rebuild.",
     needs: "When the lights are on and 8 relay cores have gone to the Quartermaster",
   },
-];
+};
+
+/** The town's acts as chapters; the titles and lines are the story's own (story/copy.ts). */
+export const ACTS: ActCopy[] = CHAPTERS.map((c) => ({
+  n: c.n,
+  label: `Chapter ${c.n}`,
+  chip: `Ch ${c.n}`,
+  name: c.title,
+  line: c.line,
+  ...SEES[c.n],
+}));
 
 const DISTRICT_COPY: Record<District["id"], { name: string; unit: string; note: string; lit: string }> = {
   clinic: { name: "The clinic", unit: "meds", note: "Every crate of meds sold at the dock counts.", lit: "The clinic's lights are back on." },
@@ -224,7 +234,7 @@ export function createTown(ctx: Ctx) {
     const el = h(
       "li",
       { class: "dk-tw-act", "data-n": a.n, "data-state": "next" },
-      h("span", { class: "dk-tw-act-k" }, h("i", { "aria-hidden": "true" }), `Act ${a.numeral}`, h("em", null, "Now")),
+      h("span", { class: "dk-tw-act-k" }, h("i", { "aria-hidden": "true" }), a.label, h("em", null, "Now")),
       h("b", { class: "dk-tw-act-n" }, a.name),
       when,
     );
@@ -295,7 +305,7 @@ export function createTown(ctx: Ctx) {
   const body = h(
     "div",
     { class: "dk-tw-body" },
-    h("header", { class: "dk-tw-head" }, h("ol", { class: "dk-tw-acts", "aria-label": "The town's acts" }, ...acts.map((x) => x.el)), sees),
+    h("header", { class: "dk-tw-head" }, h("ol", { class: "dk-tw-acts", "aria-label": "The town's chapters" }, ...acts.map((x) => x.el)), sees),
     h("div", { class: "dk-tw-left" }, view, h("div", { class: "dk-tw-ds" }, ...districts.map((d) => d.el))),
     h("div", { class: "dk-tw-right" }, client, hm),
     foot,
@@ -347,15 +357,19 @@ export function createTown(ctx: Ctx) {
     el.dataset.gen = lit("generators") ? "lit" : "dark";
     el.style.setProperty("--hm", String(t.harbormaster.strength / 100));
 
-    // acts
+    // the chapters
     for (const x of acts) {
       const state = x.a.n < t.act ? "past" : x.a.n === t.act ? "now" : "next";
       x.el.dataset.state = state;
       x.el.setAttribute("aria-current", state === "now" ? "step" : "false");
       const at = actReachedAt(t, x.a.n);
-      text(x.when, x.a.n === 1 ? (t.act === 1 ? "Since the gates locked" : "The gates locked") : state === "next" ? x.a.needs : at != null ? `Reached ${stamp(at)}` : "Reached");
+      text(x.when, x.a.n === 1 ? (t.act === 1 ? "Since the town was impounded" : "The town was impounded") : state === "next" ? x.a.needs : at != null ? `Reached ${stamp(at)}` : "Reached");
     }
-    text(sees, ACTS[t.act - 1].sees);
+    const now = ACTS[t.act - 1];
+    if (sees.dataset.act !== String(t.act)) {
+      sees.dataset.act = String(t.act);
+      fill(sees, h("span", { class: "dk-tw-line" }, now.line), " ", now.sees);
+    }
     text(status, t.act >= 2 ? "Lights on the water" : lit("clinic") ? "The clinic is lit" : lit("generators") ? "The generators are turning" : "Dark");
 
     // districts
@@ -395,13 +409,13 @@ export function createTown(ctx: Ctx) {
 
     // the Harbormaster
     const hmv = t.harbormaster;
-    text(hmState, cl.revealed ? (hmv.strength > 0 ? "Rebuilding" : "Starved") : "Silent");
+    text(hmState, cl.revealed ? (hmv.strength > 0 ? "Rebuilding" : "Starved") : "Billing");
     text(strength, String(hmv.strength));
     text(drones, dronesLine(hmv.bonusDrones));
     fillBar.style.width = `${hmv.strength}%`;
     meter.setAttribute("aria-valuenow", String(hmv.strength));
     meter.setAttribute("aria-valuetext", `${hmv.strength} of 100, ${dronesLine(hmv.bonusDrones)}`);
-    text(hmLine, cl.revealed ? DILEMMA : "Silent. It holds the berth and counts every crate.");
+    text(hmLine, cl.revealed ? DILEMMA : "It holds the town as unclaimed cargo and bills every Breacher who comes near. It has never been paid.");
     text(hmNote, cl.revealed ? "Unfed, it halves every 12 hours. Starve it, and every wave gets lighter." : "Blind for minutes at a time while the Breachers keep cutting its uplinks.");
   }
 
