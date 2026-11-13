@@ -107,6 +107,12 @@ function executedFailure(e: unknown): boolean {
   return code === "FUNCTION_CALL_ERROR" || code === "CONTRACT_EXECUTION_ERROR";
 }
 
+/** The signer's account or key isn't on this node yet: true for a moment after the faucet creates a guest account. */
+function notYetVisible(e: unknown): boolean {
+  const code = errCode(e);
+  return code === "ACCOUNT_NOT_FOUND" || code === "ACCESS_KEY_NOT_FOUND";
+}
+
 /** Safe to try again: the request never produced an outcome. near-kit flags these `retryable`. */
 export function isTransient(e: unknown): boolean {
   if (!(e instanceof Error)) return false;
@@ -594,6 +600,12 @@ export async function executeTx(tx: PreparedTx, opts: ExecOptions = {}): Promise
       if (executedFailure(e)) return refusal(e, hashOf());
       // A re-send refused for its nonce means the first copy (or another tab's call) used it: ask by hash.
       if (errCode(e) === "INVALID_NONCE" && mayHaveLanded) return reconcile(attempt + 1);
+      // A node that hasn't yet seen a just-created account or its key (a dock pass claimed a second ago): nothing was
+      // signed, so waiting and trying again is safe. Seen on testnet on 13 Nov 2026 as a refused first raid.
+      if (notYetVisible(e) && !tx.hash() && attempt < retries) {
+        await sleep(backoff * 2 ** attempt + Math.floor(Math.random() * backoff));
+        continue;
+      }
       if (isTransient(e)) {
         if (tx.hash()) mayHaveLanded = true;
         if (attempt < retries) {
