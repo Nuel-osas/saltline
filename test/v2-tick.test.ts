@@ -91,3 +91,20 @@ describe("the game's v2 tick", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("the dev server's /api/tick", () => {
+  it("passes the query string through to the handler, and nothing else of the URL", async () => {
+    const config = "../vite.config.js";
+    const { tickRequestUrl } = (await import(/* @vite-ignore */ config)) as { tickRequestUrl(url?: string): string };
+    expect(tickRequestUrl("/?game=v2")).toBe("http://localhost/api/tick?game=v2");
+    expect(tickRequestUrl("?game=v2")).toBe("http://localhost/api/tick?game=v2");
+    expect(tickRequestUrl("/")).toBe("http://localhost/api/tick");
+    expect(tickRequestUrl(undefined)).toBe("http://localhost/api/tick");
+    expect(tickRequestUrl("//elsewhere.example/x?game=v2")).toBe("http://localhost/api/tick?game=v2");
+    // With only a v1 key set, the same POST is v1's round without the query and v2's 503 with it.
+    const env = { BROKER_QM_KEY: KEYS.moss };
+    const deps = { round: async () => [], roundV2: async () => [], log: () => {} };
+    expect((await handleTick(new Request(tickRequestUrl("/"), { method: "POST" }), env, deps)).status).toBe(200);
+    expect((await handleTick(new Request(tickRequestUrl("/?game=v2"), { method: "POST" }), env, deps)).status).toBe(503);
+  });
+});

@@ -3,6 +3,15 @@ import { defineConfig, loadEnv } from "vite";
 // Dev only: serves POST /api/faucet through server/faucet.ts, as api/faucet.ts does on Vercel. The env is loaded
 // here with every prefix, on the dev server, so the handler can read FAUCET_PRIVATE_KEY; the browser still only
 // sees VITE_ variables, as Vite always does.
+/**
+ * The URL handleTick is given for a dev request. Connect hands the middleware the path after its mount point
+ * ("/?game=v2", or "?game=v2"), so only the query is taken from it; the host and path are fixed.
+ */
+export function tickRequestUrl(url) {
+  const at = typeof url === "string" ? url.indexOf("?") : -1;
+  return `http://localhost/api/tick${at < 0 ? "" : url.slice(at)}`;
+}
+
 function faucetDev() {
   let env = {};
   return {
@@ -13,11 +22,12 @@ function faucetDev() {
     },
     configureServer(server) {
       // POST /api/tick wakes the broker agents (server/tick.ts), as api/tick.ts does on Vercel. With no broker keys
-      // in .env it answers 503, so local play never signs as a broker by accident.
+      // in .env it answers 503, so local play never signs as a broker by accident. The query string goes through, so
+      // /api/tick?game=v2 wakes v2's characters here as it does on Vercel.
       server.middlewares.use("/api/tick", async (req, res) => {
         try {
           const { handleTick } = await server.ssrLoadModule("/server/tick.ts");
-          const response = await handleTick(new Request("http://localhost/api/tick", { method: req.method }), env);
+          const response = await handleTick(new Request(tickRequestUrl(req.url), { method: req.method }), env);
           res.statusCode = response.status;
           response.headers.forEach((value, key) => res.setHeader(key, value));
           res.end(Buffer.from(await response.arrayBuffer()));
