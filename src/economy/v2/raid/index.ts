@@ -28,6 +28,7 @@ import { LAPSED, LINES, SIGN, THRESHOLD_NOTE, THRESHOLD_WARN } from "./copy";
 import { createRaidHud, type Marker, type RaidHud, type Row } from "./hud";
 import { openChannel } from "./radio";
 import {
+  FINISH,
   HOLD,
   PART_OF,
   RAID_MINUTES,
@@ -76,8 +77,6 @@ const PART_REACH = 1.35;
 const CARD_MS = 900;
 /** How long each Harbormaster line may wait for its turn on the radio (ms). */
 const WAIT = { fence: 40_000, seal: 14_000, uplink: 16_000, evidence: 14_000, unit: 14_000, notice: 20_000, boat: 25_000 };
-/** The view model's furniture per frame (game.js's `pac9_polymer_tan`, the Longshore's tan): the issue rifle is plain black. */
-const FINISH: Record<string, number> = { longshore: 0x5a4f3f, stevedore: 0x2b3a42, pilot: 0x3b4630, issue: 0x151515 };
 
 interface Target {
   key: string;
@@ -91,6 +90,22 @@ interface Target {
   weight: number;
   callsign: string;
   slot: number;
+}
+
+/**
+ * Something else in the yard that is taken by holding E (the coach's rifle crate). It shares the one interaction slot
+ * with seals and wrecks, in any raid, signed or not, and is gone once taken.
+ */
+export interface YardTarget {
+  key: string;
+  at: Point;
+  /** The prompt after "Hold E — ". */
+  verb: string;
+  /** Seconds E is held; 0 takes it at the press. */
+  seconds: number;
+  /** Its HUD marker, if it has one. */
+  marker?: { short: string; label: string };
+  taken(): void;
 }
 
 interface Pending {
@@ -130,11 +145,17 @@ interface Live extends Pending {
 export interface RaidApi {
   /** Signs on now (as DEPLOY does) so the next start, however it is made, plays the signed raid. For tests. */
   prepare(): Promise<SignOn["kind"] | "closed">;
+  /** Puts something else in the interaction slot. Returns its undo. */
+  addTarget(t: YardTarget): () => void;
+  /** The nearest sealed container's marker stands out (the coach points a first raid at it), or none does. */
+  lead(on: boolean): void;
   readonly state: {
     mode: "none" | "signed" | "offbooks";
     raidId: number | null;
     total: number;
     weapon: string;
+    /** The gun this raid was signed with, or null for the issue rifle. */
+    gun: Weapon | null;
     opened: number[];
     wrecks: number[];
     parts: { servo: number; rotor: number };
@@ -537,24 +558,56 @@ export function createRaid(G: Game): RaidApi {
 
   // ---- interaction: G.ext.interact, called by the relay loop when no relay holds the prompt ----
   let interactedAt = -1;
-  function target(r: Live): Target | null {
+  let yard: YardTarget[] = [];
+  let leading = false;
+  /** How far `at` is when the player can use it from here (in reach and in front of them), or Infinity. */
+  function reach(at: Point): number {
     const p = G.player;
-    if (!p || !p.pos) return null;
+    if (!p || !p.pos) return Infinity;
     const f = p.forward || { x: 0, z: -1 };
-    const fl = Math.max(0.2, Math.hypot(f.x, f.z));
-    let best: Target | null = null,
-      bestD: number = RANGE;
-    for (const t of r.targets) {
-      const dx = t.at.x - p.pos.x,
-        dz = t.at.z - p.pos.z,
-        d = Math.hypot(dx, dz);
-      if (d > bestD || Math.abs(t.at.y - (p.pos.y || 0)) > 2.5) continue;
-      if (d > 0.9 && (dx * f.x + dz * f.z) / (d * fl) < FACING) continue;
-      if (t.kind === "seal" && -dx * t.out.x - dz * t.out.z < 0.15) continue; // never through the container
-      best = t;
-      bestD = d;
+    const dx = at.x - p.pos.x,
+      dz = at.z - p.pos.z,
+      d = Math.hypot(dx, dz);
+    if (d > RANGE || Math.abs(at.y - (p.pos.y || 0)) > 2.5) return Infinity;
+    if (d > 0.9 && (dx * f.x + dz * f.z) / (d * Math.max(0.2, Math.hypot(f.x, f.z))) < FACING) return Infinity;
+    return d;
+  }
+  /** The nearest thing in the slot: a seal or a wreck of a signed raid, or something another module put there. */
+  function target(r: Live): { t: Target | null; y: YardTarget | null } {
+    let t: Target | null = null,
+      y: YardTarget | null = null,
+      best = Infinity;
+    const p = G.player?.pos;
+    for (const e of r.ledger ? r.targets : []) {
+      const d = reach(e.at);
+      if (d >= best) continue;
+      if (e.kind === "seal" && p && -(e.at.x - p.x) * e.out.x - (e.at.z - p.z) * e.out.z < 0.15) continue; // never through the container
+      ((t = e), (best = d));
     }
-    return best;
+    for (const e of yard) {
+      const d = reach(e.at);
+      if (d < best) ((y = e), (t = null), (best = d));
+    }
+    return { t, y };
+  }
+  /** Holding E on something another module put in the slot: no weight, no ledger, its own time. */
+  function holdYard(r: Live, y: YardTarget, dt: number): boolean {
+    const key = "y:" + y.key;
+    if (!r.hold || r.hold.key !== key) r.hold = { key, t: 0, refused: false, spark: 0 };
+    const h = r.hold;
+    if (call(G.input, "down", "interact")) {
+      h.t = y.seconds > 0 ? h.t + dt / y.seconds : 1;
+      if (h.t >= 1) {
+        r.hold = null;
+        yard = yard.filter((e) => e !== y);
+        call(G.hud, "setPrompt", null);
+        guard("taken " + y.key, () => y.taken());
+        refreshMarkers(true);
+        return true;
+      }
+    } else h.t = Math.max(0, h.t - dt * 1.6);
+    call(G.hud, "setPrompt", y.verb, Math.min(1, h.t));
+    return true;
   }
   const release = () => {
     if (live) live.hold = null;
@@ -565,9 +618,10 @@ export function createRaid(G: Game): RaidApi {
     return (
       guard("interact", () => {
         const r = live;
-        if (!r || !r.ledger || r.ended || !G.player?.alive) return release();
-        const t = target(r);
-        if (!t) return release();
+        if (!r || r.ended || !G.player?.alive) return release();
+        const { t, y } = target(r);
+        if (y) return holdYard(r, y, dt);
+        if (!t || !r.ledger) return release();
         if (!r.hold || r.hold.key !== t.key) r.hold = { key: t.key, t: 0, refused: false, spark: 0 };
         const h = r.hold;
         const held = !!call(G.input, "down", "interact");
@@ -871,18 +925,24 @@ export function createRaid(G: Game): RaidApi {
   let markT = 0;
   function refreshMarkers(force = false) {
     const r = live;
-    if (!r || r.ended || !r.ledger) return;
+    if (!r || r.ended) return;
     if (force) markT = 0.5;
     const p = G.player?.pos;
     const by = (t: Target) => (p ? Math.hypot(t.at.x - p.x, t.at.z - p.z) : 0);
-    const near = new Set([...r.targets].sort((a, b) => by(a) - by(b)).slice(0, NEAR_MARKERS));
-    const list: Marker[] = r.targets.map((t) => ({
-      id: t.key + (near.has(t) ? "" : "~"),
+    const targets = r.ledger ? r.targets : [];
+    const sorted = [...targets].sort((a, b) => by(a) - by(b));
+    const near = new Set(sorted.slice(0, NEAR_MARKERS));
+    // The coach's lead: the nearest plain seal that still fits, so a first raid is never sent to one it can't lift.
+    const first = leading ? (sorted.find((t) => t.kind === "seal" && !t.bonded && r.ledger!.fits(t.weight)) ?? sorted.find((t) => t.kind === "seal")) : undefined;
+    const list: Marker[] = targets.map((t) => ({
+      id: t.key + (near.has(t) || t === first ? "" : "~"),
       short: t.kind === "seal" ? (t.bonded ? "BOND" : t.what.split(" ")[0]) : "WRECK",
       label: t.kind === "seal" ? `${t.bonded ? "Bonded" : "Sealed"} · ${t.what}` : `Wreck · ${t.callsign}`,
       pos: { x: t.at.x, y: t.kind === "seal" ? 1 : 0, z: t.at.z },
-      kind: (t.kind === "seal" ? (t.bonded ? "cargo bonded" : "cargo") : "wreck") + (near.has(t) ? "" : " far"),
+      kind: (t.kind === "seal" ? (t.bonded ? "cargo bonded" : "cargo") : "wreck") + (t === first ? " lead" : near.has(t) ? "" : " far"),
     }));
+    // The HUD draws a marker 1.9 m over its point: this one floats about a metre over the thing itself.
+    for (const y of yard) if (y.marker) list.push({ id: "y:" + y.key, short: y.marker.short, label: y.marker.label, pos: { x: y.at.x, y: y.at.y - 0.9, z: y.at.z }, kind: "cargo lead" });
     hud.setMarkers(list);
   }
 
@@ -931,6 +991,7 @@ export function createRaid(G: Game): RaidApi {
         raidId: r?.raid?.raidId ?? null,
         total: r?.total ?? 0,
         weapon: ext.weapon?.name ?? "",
+        gun: r?.weapon ?? null,
         opened: r?.ledger ? [...r.ledger.opened] : [],
         wrecks: r?.ledger ? [...r.ledger.wrecks] : [],
         parts: r?.ledger ? { ...r.ledger.parts } : { servo: 0, rotor: 0 },
@@ -941,6 +1002,20 @@ export function createRaid(G: Game): RaidApi {
         fired: r?.thresholds ? r.thresholds.list.filter((t) => r.thresholds!.has(t.id)).map((t) => t.id) : [],
         ended: r?.ended ?? null,
       };
+    },
+    addTarget(t: YardTarget) {
+      yard = [...yard.filter((e) => e.key !== t.key), t];
+      refreshMarkers(true);
+      return () => {
+        if (!yard.includes(t)) return;
+        yard = yard.filter((e) => e !== t);
+        refreshMarkers(true);
+      };
+    },
+    lead(on: boolean) {
+      if (leading === on) return;
+      leading = on;
+      refreshMarkers(true);
     },
     briefing,
     update(dt: number) {
@@ -954,7 +1029,11 @@ export function createRaid(G: Game): RaidApi {
           call(G.hud, "radio", r.note, 5); // Control, on why this one is off the books
           r.note = null;
         }
-        if (!r || r.ended || !r.ledger) return;
+        if (!r || r.ended) return;
+        // The relay loop stopped calling us (a relay took the slot, or the raid ended): let go of what was held.
+        if (r.hold && now() - interactedAt > 150) r.hold = null;
+        if ((markT -= dt) <= 0) ((markT = 0.5), refreshMarkers());
+        if (!r.ledger) return;
         if (state === "playing") {
           // The contract closes a raid by itself after RAID_MINUTES: say so before, and when it has.
           const minutes = elapsed(r) / 60;
@@ -963,8 +1042,6 @@ export function createRaid(G: Game): RaidApi {
           if (r.due.length) for (const t of r.due.splice(0)) fire(r, t);
           pickParts(r);
         }
-        // The relay loop stopped calling us (a relay took the slot, or the raid ended): let go of the seal.
-        if (r.hold && now() - interactedAt > 150) r.hold = null;
         const total = current(r);
         if (total !== r.total) {
           const added = total - r.total;
@@ -973,7 +1050,6 @@ export function createRaid(G: Game): RaidApi {
           emit("invoice:changed", { total, added, why: "TIME ON SITE", next: r.thresholds!.next() });
           showInvoice();
         }
-        if ((markT -= dt) <= 0) ((markT = 0.5), refreshMarkers());
         if ((cargoT -= dt) <= 0) ((cargoT = 0.25), refreshCargo());
       });
     },

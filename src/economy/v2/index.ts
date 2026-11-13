@@ -6,6 +6,7 @@ import { startBailiff } from "../bailiff";
 import type { EconomyConfig } from "../config";
 import { startScore } from "../score";
 import { createTestnetChain2 } from "./chain";
+import { startCoach } from "./coach";
 import { resolveV2Config } from "./config";
 import { mountDock } from "./dock";
 import { startIntro } from "./intro";
@@ -63,6 +64,7 @@ export function startV2(G: Game): void {
   guard("intro", () => startIntro(G)); // the opening film on the first DEPLOY, and the drop point it leaves (G.intro)
   guard("raid", () => startRaid(G)); // sign-on, the owned gun in the shooter, loot, the invoice and its thresholds (G.raid)
   guard("dock", () => mountDock(G)); // the hub: loadout, armoury, market, vendors, the ledger
+  guard("coach", () => startCoach(G)); // the rifle in its crate, the first raid's checklist, the once-ever moments (G.coach)
 
   console.info(cfg.mode === "mock" ? "[v2] offline mock: not the chain" : `[v2] testnet, contract ${cfg.contractId}`);
   G.events?.emit("v2:ready", v2);

@@ -55350,7 +55350,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
             Re(We),
             i.fx.smoke(We, { size: 0.1 + k.smoke * 0.06, life: 1.3, rise: 0.5, count: 1, alpha: 0.22 }))),
         (k.heat = Math.max(0, k.heat - Me * 0.2)));
-      let Os = !!be.ads && !k.reload && k.sprintT < 0.35;
+      let Os = !!be.ads && !k.reload && k.sprintT < 0.35 && !i.ext?.unarmed; // ext: no sights to raise before the rifle is out of its crate (src/economy/v2/coach)
       ((k.adsLin = Zn(k.adsLin + (Os ? Me : -Me) / 0.18, 0, 1)), (k.adsE = Yo(k.adsLin)), (ve.ads = k.adsE));
       let pn = we.speed || 0,
         Ti = Fo(pn / 6),
@@ -55502,6 +55502,8 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
           0.55 * zo +
           Math.sin(he * 0.5) * 0.004 * te;
       (e.position.set(it, gt, Ot), e.rotation.set(xn, $t, Ht, "YXZ"));
+      let Dw = i.ext?.draw || 0; // ext: the rifle coming up into the hands (src/economy/v2/coach): 1 is below the frame, 0 is home
+      Dw && ((e.position.y -= 0.15 * Dw), (e.position.x += 0.03 * Dw), (e.rotation.x -= 0.5 * Dw), (e.rotation.z += 0.3 * Dw)); // ext: the draw
     }
     return (_e(), ve);
   }

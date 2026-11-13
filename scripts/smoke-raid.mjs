@@ -49,10 +49,12 @@ async function open(query, setup = {}) {
     localStorage.clear();
     localStorage.setItem("saltline.story.v1", JSON.stringify({ v: 1, briefed: true, heard: [], peak: 0 }));
     localStorage.setItem("saltline.intro.v1", "1"); // the opening film has been seen: DEPLOY goes to the sign-on
+    // A player past their first raid: no checklist, and the coach's once-ever lines already said.
+    localStorage.setItem("saltline.coach.v1", JSON.stringify({ v: 1, done: true, taught: [], seen: ["bailiff", "wreck", "death", "debrief"] }));
   });
   await page.goto(`${base}/?game=v2&mock=1&noaudio=1${query}`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
-  await page.waitForFunction(() => !!window.__G.raid && !!window.__G.bailiff && !!window.__G.v2, null, { timeout: 15000 });
+  await page.waitForFunction(() => !!window.__G.raid && !!window.__G.bailiff && !!window.__G.v2 && !!window.__G.coach, null, { timeout: 15000 });
   await page.evaluate(async (setup) => {
     const G = window.__G;
     const chain = G.v2.chain;
@@ -109,6 +111,9 @@ async function open(query, setup = {}) {
       return true;
     };
     window.__prompt = () => (document.querySelector(".h-prompt, .h-int")?.textContent ?? document.querySelector("[class*=prompt]")?.textContent ?? "").replace(/\s+/g, " ").trim();
+    // Every v2 raid starts with the rifle in its crate (src/economy/v2/coach; scripts/smoke-coach.mjs covers it). This
+    // test is the raid's, so each run takes the rifle the moment play begins.
+    G.events.on("game:state", (e) => e.state === "playing" && G.coach?.take());
     window.__quiet = true; // the drones are not this test's business, except where it makes its own
     setInterval(() => window.__quiet && G.game.state === "playing" && G.enemies.clear(), 150);
   }, setup);
@@ -367,7 +372,7 @@ try {
   await page.evaluate(() => window.__G.game.start({ skipIntro: true }));
   await playing(page);
   const startedAt = Date.now();
-  await page.evaluate(() => ((window.__G.player.invulnerable = true), window.__stand(-30, 6)));
+  await page.evaluate(() => ((window.__G.player.invulnerable = true), window.__stand(-30, 8))); // beside the rifle crate, not in it
   await page.waitForFunction(() => window.__ev.some((e) => e.name === "bailiff:spawned"), null, { timeout: 6000 }).catch(() => {});
   const hunted = await raidOf(page);
   const th = (await ev(page, "invoice:threshold")).map((e) => e.e);
@@ -437,7 +442,7 @@ try {
   await page.evaluate(() => window.__G.raid.prepare());
   await page.evaluate(() => window.__G.game.start({ skipIntro: true }));
   await playing(page);
-  await page.evaluate(() => ((window.__G.player.invulnerable = true), window.__stand(-30, 6)));
+  await page.evaluate(() => ((window.__G.player.invulnerable = true), window.__stand(-30, 8))); // beside the rifle crate, not in it
   await page.waitForFunction(() => !!window.__G.boss?.fight, null, { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(1500);
   const last = await raidOf(page);
