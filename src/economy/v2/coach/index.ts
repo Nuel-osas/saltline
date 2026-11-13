@@ -226,6 +226,9 @@ export function createCoach(G: Game, opts: CoachOptions = {}): Coach {
       return Number.isFinite(y) && Math.abs(y) < 1.5 ? y : 0;
     });
     const instant = diedLast;
+    // The raid opens looking down at the crate (2 m ahead, at the player's feet), so the first thing in view is the
+    // rifle, not the horizon over it. Only where the rifle still has to be taken by hand.
+    if (!instant) quiet(() => G.player && (G.player.pitch = -0.4));
     const list = memory.done ? null : new Checklist(memory.taught, (id) => (memory.taught.includes(id) || memory.taught.push(id), save()));
     list?.begin({ signed: state.mode === "signed", device: device() });
     run = { armed: false, instant, place, gun, undo: null, draw: null, bolt: false, played: 0, say: null, list, ended: false, last: null, poll: 0, grabs: [] };

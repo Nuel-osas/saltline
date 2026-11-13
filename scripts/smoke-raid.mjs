@@ -48,6 +48,7 @@ async function open(query, setup = {}) {
   await page.addInitScript(() => {
     localStorage.clear();
     localStorage.setItem("saltline.story.v1", JSON.stringify({ v: 1, briefed: true, heard: [], peak: 0 }));
+    localStorage.setItem("saltline.intro.v1", "1"); // the opening film has been seen: DEPLOY goes to the sign-on
     // A player past their first raid: no checklist, and the coach's once-ever lines already said.
     localStorage.setItem("saltline.coach.v1", JSON.stringify({ v: 1, done: true, taught: [], seen: ["bailiff", "wreck", "death", "debrief"] }));
   });

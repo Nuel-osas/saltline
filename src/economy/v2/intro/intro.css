@@ -1,0 +1,56 @@
+/* The opening film's overlay (src/economy/v2/intro): the letterbox, subtitles, SKIP, the uplink marks and the title
+   card, over the game's own 3D scene. The game's tokens and type (src/ui.css); the Harbormaster keeps its one cold
+   colour (story.css, --st-cold). */
+.in-film { --in-bar: clamp(34px, 12vh, 118px); --in-cold: var(--st-cold, #8fd3ff); position: absolute; inset: 0; z-index: 31; pointer-events: auto; color: var(--bone); opacity: 0; transition: opacity .35s ease; cursor: default; overflow: hidden; }
+.in-film[hidden] { display: none; }
+.in-film.on { opacity: 1; }
+.in-film.out { opacity: 0; transition-duration: .5s; pointer-events: none; }
+.in-black { position: absolute; inset: 0; background: #000; opacity: 1; }
+.in-bars i { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--in-bar) + var(--sat)); background: #000; }
+.in-bars i + i { top: auto; bottom: 0; height: calc(var(--in-bar) + var(--sab)); }
+
+/* where and when */
+.in-slug { position: absolute; left: max(var(--gl), 5vw); top: calc(var(--in-bar) + var(--sat) + 22px); display: flex; align-items: center; gap: 12px; opacity: 0; transform: translateY(4px); transition: opacity .6s ease, transform .9s cubic-bezier(.2, .7, .2, 1);
+  font: 600 13px/1 var(--f-label); letter-spacing: .26em; text-transform: uppercase; color: var(--bone); text-shadow: 0 1px 12px rgba(0, 0, 0, .7); }
+.in-slug.on { opacity: 1; transform: none; }
+.in-tag { font: 900 15px/1 var(--f-display); letter-spacing: .06em; color: var(--ink); background: var(--signal); padding: 4px 7px 3px; text-shadow: none; }
+
+/* subtitles: who, then the line, sitting on the lower bar */
+.in-sub { position: absolute; left: 50%; bottom: calc(var(--in-bar) + var(--sab) + clamp(12px, 3vh, 30px)); width: min(46em, 86vw); transform: translate(-50%, 6px); text-align: center; opacity: 0; transition: opacity .28s ease, transform .5s cubic-bezier(.2, .7, .2, 1); }
+.in-sub.on { opacity: 1; transform: translate(-50%, 0); }
+.in-who { display: inline-block; margin-bottom: 7px; font: 600 12px/1 var(--f-label); letter-spacing: .3em; margin-right: -.3em; text-transform: uppercase; color: var(--signal); text-shadow: 0 1px 10px rgba(0, 0, 0, .8); }
+.in-sub[data-who="moss"] .in-who { color: var(--bone-dim); }
+.in-line { margin: 0; font: 500 clamp(18px, 2.05vw, 28px)/1.22 var(--f-label); letter-spacing: .014em; color: var(--bone); text-wrap: balance; text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 2px 22px rgba(0, 0, 0, .75); }
+
+/* the uplinks, picked out one by one (stage.ts places them) */
+.in-marks { position: absolute; inset: 0; pointer-events: none; }
+.in-mark { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: 0; transition: opacity .25s ease; will-change: transform; }
+.in-mark.on { opacity: 1; }
+.in-mark i { position: absolute; left: -11px; top: -11px; width: 22px; height: 22px; border: 2px solid var(--signal); transform: rotate(45deg) scale(2.2); opacity: 0; box-shadow: 0 0 14px rgba(255, 179, 71, .45); }
+.in-mark.on i { animation: in-mark-in .55s cubic-bezier(.2, .7, .2, 1) forwards; }
+.in-mark i::after { content: ''; position: absolute; inset: 6px; background: var(--signal); }
+.in-mark span { position: absolute; left: 24px; top: -8px; white-space: nowrap; font: 600 13px/1 var(--f-label); letter-spacing: .26em; text-transform: uppercase; color: var(--bone); text-shadow: 0 1px 8px rgba(0, 0, 0, .9); }
+.in-mark span b { margin-right: 8px; font: 900 15px/1 var(--f-display); letter-spacing: .06em; color: var(--ink); background: var(--signal); padding: 3px 6px 2px; text-shadow: none; }
+@keyframes in-mark-in { from { opacity: 0; transform: rotate(45deg) scale(2.2); } to { opacity: 1; transform: rotate(45deg) scale(1); } }
+
+/* the title card */
+.in-title { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; transition: opacity .7s ease; }
+.in-title.on { opacity: 1; }
+.in-title b { font: 900 clamp(56px, 13vw, 190px)/.82 var(--f-display); letter-spacing: .15em; margin-right: -.15em; color: var(--bone); transform: scale(.985); transition: transform 4.5s cubic-bezier(.2, .6, .2, 1); }
+.in-title.on b { transform: none; }
+.in-hm { min-height: 1.45em; margin: clamp(16px, 3.4vh, 34px) 0 0; font: 500 clamp(13px, 1.25vw, 17px)/1.45 var(--f-mono); letter-spacing: .08em; color: var(--in-cold); opacity: 0; transition: opacity .5s ease; text-shadow: 0 0 18px rgba(80, 180, 255, .35); }
+.in-hm.on { opacity: 1; }
+.in-hm::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 12px; vertical-align: 1px; background: var(--in-cold); }
+
+.in-skip { position: absolute; right: max(var(--gr), 4vw); bottom: calc((var(--in-bar) + var(--sab)) / 2 - 14px); display: flex; align-items: center; gap: 10px; padding: 8px 0; background: none; border: 0; cursor: pointer; font: 600 12px/1 var(--f-label); letter-spacing: .24em; text-transform: uppercase; color: var(--bone-dim); }
+.in-skip:hover, .in-skip:focus-visible { color: var(--bone); outline: none; }
+.in-skip kbd { background: rgba(11, 13, 15, .45); }
+
+/* INTRO, on its own line under the title's actions (the briefing's button, story.css .st-replay) */
+#app .menu { transition: opacity .4s ease; }
+#app.in-playing .menu, #app.in-playing .hud, #app.in-playing .comms { opacity: 0; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .in-film, .in-sub, .in-slug, .in-title, .in-title b, .in-hm { transition-duration: .01ms !important; }
+  .in-mark.on i { animation-duration: .01ms; }
+}

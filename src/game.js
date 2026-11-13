@@ -58861,6 +58861,7 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       return Y.set(k(fe.x, le.x, R.x, I.x), k(fe.y, le.y, R.y, I.y), k(fe.z, le.z, R.z, I.z));
     }
     function z(P) {
+      if (a(i.ext, "camera", P) === !0) return; // ext: a module (v2's opening film) takes the camera's position, look-at, field of view and the fade while it runs
       let V = Math.max(26, E.len / Yi.titleSpeed);
       ((E.t += P), E.t >= V && (E.t = 0));
       let Y = E.t / V,

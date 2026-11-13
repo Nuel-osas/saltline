@@ -324,10 +324,14 @@ export function createRaid(G: Game): RaidApi {
             }
             const title = res.kind === "unconfirmed" ? SIGN.unconfirmed : SIGN.refused;
             console.info(`[raid] sign-on ${res.kind}: ${res.why}`);
+            // DEPLOY captured the mouse for the raid. The card's two buttons need it back: a captured mouse has no
+            // cursor and its clicks never reach them. Choosing the raid is a gesture, so it is captured again there.
+            call(G.input, "exitLock");
             hud.offer(
               title,
               res.why,
               () => {
+                guard("lock", () => G.input?.mode === "lock" && !G.input.locked && G.input.requestLock?.());
                 goOffBooks("No raid signed. The issue rifle, and nothing to carry out.", null);
                 launch(go);
               },
@@ -344,7 +348,8 @@ export function createRaid(G: Game): RaidApi {
         },
       );
     };
-    if (guard("briefing", () => briefing.beforeRun(start, G.game?.state))) return true;
+    // The opening film (../intro) plays before the first sign-on; without it, the text briefing does.
+    if (guard("briefing", () => (G.intro?.film ?? briefing).beforeRun(start, G.game?.state))) return true;
     start();
     return true;
   }
