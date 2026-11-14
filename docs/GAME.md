@@ -80,7 +80,8 @@ Everything below is a token on NEAR, held by the player's own account.
   locked out. It is the worst gun in the game.
 - **It is a standard NFT.** NEP-171, with its picture stored on chain (a generated drawing with the serial and
   grade), so it shows in any NEAR wallet and can be listed on any NEAR marketplace.
-- **Maker royalty.** Whoever built a gun earns 2% every time it is resold, for as long as it exists.
+- **Maker royalty.** Whoever built a gun earns 2% of every sale on the game's market, the first one included, for as
+  long as it exists.
 
 ## Risk: what happens to what you bring
 
@@ -188,7 +189,7 @@ The Harbormaster is the headline: **the villain has a wallet, and its difficulty
 ## Ways to play the economy
 
 - **Raider:** go in, carry out, sell.
-- **Gunsmith:** buy parts, roll guns, sell the good grades, earn royalties on every resale.
+- **Gunsmith:** buy parts, roll guns, sell the good grades, earn royalties on every sale.
 - **Trader:** buy low from a vendor who is overstocked, sell on the market.
 - **Salvager:** go in light, find other players' wrecks, carry their guns out.
 - **Outlaw:** carry heavy arrears for the bonded containers, and live with the Bailiff.
