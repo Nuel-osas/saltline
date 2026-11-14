@@ -6,6 +6,11 @@
 **Play:** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich (Practice: no account, nothing to install, in
 the yard about five seconds after you press Deploy)
 
+| | |
+| --- | --- |
+| ![A raid: the invoice top right, a hound and a gull marked red because they have seen you](docs/shots/raid.jpg) | ![Skirmish: another player, armed, and the kill feed after one dropped another](docs/shots/skirmish.jpg) |
+| ![The debrief: what you carried out and what it is worth today, then the bill](docs/shots/debrief.jpg) | ![The dock: everything sold to the best buyer, and what the money buys next](docs/shots/dock.jpg) |
+
 **The problem.** Most games with a token keep the economy beside the game: a shop screen, a price chart, a coin you
 earn and never risk. Nothing you own can be lost, so nothing has value, and players feel the chain as friction.
 
