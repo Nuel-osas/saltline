@@ -58968,13 +58968,14 @@ vObjP = position; vONrm = normal; vWNrm = normalize(mat3(modelMatrix) * normal);
       ((n.enabled = !0), o.show(!0), r.setGameplay && r.setGameplay(!0), o.setObjective(D()), M("playing"), C(!0));
     }
     function D() {
+      // story: the objective says what the uplinks are for: the boat waits until all three are cut.
       if (c.allCut) return "Get to the boat";
       let P = c.relays.length - c.cut;
       return c.cut === 0
-        ? "Cut the three uplink relays"
+        ? "Cut 3 uplinks to open the boat"
         : P === 1
-          ? "Cut the last relay"
-          : `Cut the remaining ${P} relays`;
+          ? "Cut the last uplink to open the boat"
+          : `Cut ${P} more uplinks to open the boat`;
     }
     function C(P) {
       let V = r.describeMode ? r.describeMode() : "";
