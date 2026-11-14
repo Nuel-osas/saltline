@@ -250,3 +250,49 @@
 .rd-sec .rd-row.sv-refused dd {
   font-size: 13px;
 }
+
+/* ---- the card's lead: what was carried out (or lost), large, above the game's figures, and one line under it ---- */
+.rd-lead {
+  margin: 2px 0 0;
+  padding: 10px 0 14px;
+  border-top: 1px solid var(--line);
+}
+.rd-lead > .m-k {
+  margin-bottom: 6px;
+}
+.rd-lead-v {
+  margin: 0;
+  font: 800 28px/1 var(--f-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bone);
+  overflow-wrap: anywhere;
+}
+.rd-lead-s {
+  margin: 7px 0 0;
+  font: 600 15px/1.3 var(--f-label);
+  letter-spacing: 0.02em;
+  color: var(--signal);
+}
+.rd-lost .rd-lead-s {
+  color: var(--bone);
+}
+.rd-lead.sv-pending .rd-lead-s {
+  color: var(--bone-dim);
+}
+.rd-lead.sv-refused .rd-lead-s {
+  color: var(--alarm);
+}
+.rd-note {
+  margin: 8px 0 0;
+  font: 400 12px/1.45 var(--f-mono);
+  color: var(--steel);
+}
+@media (max-height: 760px) {
+  .rd-lead {
+    padding: 7px 0 10px;
+  }
+  .rd-lead-v {
+    font-size: 24px;
+  }
+}
