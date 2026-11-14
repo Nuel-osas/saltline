@@ -163,7 +163,42 @@ export const CONDITION = {
 } as const;
 
 /** The numbers the shooter uses: the rolled stats with mods and wear applied. */
-export function effective(w: Pick<Weapon, "stats" | "mods" | "condition">): Stats & { zoom: boolean } {
+/**
+ * A gun's level. It comes from the raids the gun has come home from (the contract's `extractions`), so it is on the
+ * chain, it can't be bought, and it stays with the gun when the gun is sold or carried out of a wreck. Each level
+ * above the first makes the gun a little better in the hands: the game applies that on top of the rolled stats and
+ * the mods (`effective`). The contract's appraisal doesn't count it: what a level is worth is the market's to say.
+ */
+export const GUN_LEVELS = {
+  /** Raids home needed to reach levels 1 to 6. */
+  at: [0, 1, 3, 6, 10, 15],
+  names: ["New", "Broken in", "Seasoned", "Veteran", "Storied", "Notorious"],
+  /** Percent per level above the first: more damage, less recoil, a quicker reload. */
+  pctPerLevel: 2,
+} as const;
+
+export interface GunLevel {
+  /** 1 to GUN_LEVELS.at.length. */
+  level: number;
+  name: string;
+  /** Raids home since this level began, and how many this level takes. At the top level the two are equal. */
+  into: number;
+  need: number;
+  max: boolean;
+  /** The percent this level adds to damage and takes off recoil and reload. */
+  bonusPct: number;
+}
+
+export function gunLevel(extractions: number | null | undefined): GunLevel {
+  const n = Number.isFinite(extractions) ? Math.max(0, Math.floor(extractions as number)) : 0;
+  const at = GUN_LEVELS.at;
+  let i = 0;
+  while (i + 1 < at.length && n >= at[i + 1]) i++;
+  const max = i + 1 >= at.length;
+  return { level: i + 1, name: GUN_LEVELS.names[i], into: max ? 1 : n - at[i], need: max ? 1 : at[i + 1] - at[i], max, bonusPct: i * GUN_LEVELS.pctPerLevel };
+}
+
+export function effective(w: Pick<Weapon, "stats" | "mods" | "condition"> & { extractions?: number }): Stats & { zoom: boolean } {
   const s = { ...w.stats };
   if (w.mods.includes("mag2")) s.mag += 10;
   if (w.mods.includes("barrel2")) {
@@ -173,6 +208,12 @@ export function effective(w: Pick<Weapon, "stats" | "mods" | "condition">): Stat
   }
   if (w.mods.includes("comp")) s.recoil = Math.round(s.recoil * 0.75);
   if (w.mods.includes("optic")) s.range = Math.round(s.range * 1.05);
+  const bonus = gunLevel(w.extractions).bonusPct;
+  if (bonus > 0) {
+    s.damage = Math.round((s.damage * (100 + bonus)) / 100);
+    s.recoil = Math.round((s.recoil * (100 - bonus)) / 100);
+    s.reload = Math.round((s.reload * (100 - bonus)) / 100);
+  }
   if (w.condition < CONDITION.worn) {
     s.damage = Math.round(s.damage * 0.85);
     s.recoil = Math.round(s.recoil * 1.2);

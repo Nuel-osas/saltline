@@ -524,7 +524,7 @@ export interface MockDebug {
   /** Puts tokens in the player's locker from nowhere. Scrip given this way counts as minted. */
   give(what: TokenId | Amounts, amount?: number): void;
   /** Puts a gun in the player's locker: the frame, and the grade, condition and mods asked for. */
-  giveGun(frame: FrameId, o?: { grade?: Grade; condition?: number; mods?: ModId[]; impound?: boolean }): Weapon;
+  giveGun(frame: FrameId, o?: { grade?: Grade; condition?: number; mods?: ModId[]; impound?: boolean; extractions?: number }): Weapon;
   /** Moves the mock's clock on, so wrecks and impounds expire and the Harbormaster's balance decays. */
   advance(hours: number): void;
   setArrears(amount: number): void;
@@ -1829,6 +1829,11 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
         const w = mintWeapon(frame, debugStats(frame, o.grade), a.accountId, a.callsign, "held", at);
         if (o.condition !== undefined) setCondition(w, o.condition);
         for (const m of o.mods ?? []) if (!w.mods.some((x) => MODS[x].slot === MODS[m].slot)) w.mods.push(m);
+        if (o.extractions) {
+          // A history: raids it came home from (its level, items.ts gunLevel) and a few it nearly didn't.
+          w.extractions = Math.max(0, Math.floor(o.extractions));
+          w.raids = w.extractions + Math.ceil(w.extractions / 4);
+        }
         if (o.impound) {
           w.state = "impound";
           S.impound.push({ serial: w.serial, owner: a.accountId, fee: Math.floor((w.value * RAID.buyBackPct) / 100), expiresAt: at + RAID.impoundHours * HOUR });
@@ -1879,9 +1884,9 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
     }
     S.rich = true;
     debug.give({ scrip: 2400, copper: 14, chips: 10, servo: 4, rotor: 4, core: 2, fuel: 3, meds: 3, comp: 1, optic: 1, barrel2: 1, plate: 2, charge: 3, ammo: 8 });
-    debug.giveGun("longshore", { grade: "A", condition: 96, mods: ["mag2", "comp"] });
-    debug.giveGun("stevedore", { grade: "C", condition: 24 });
-    debug.giveGun("pilot", { grade: "B", condition: 78 });
+    debug.giveGun("longshore", { grade: "A", condition: 96, mods: ["mag2", "comp"], extractions: 7 });
+    debug.giveGun("stevedore", { grade: "C", condition: 24, extractions: 2 });
+    debug.giveGun("pilot", { grade: "B", condition: 78, extractions: 16 });
     debug.giveGun("longshore", { grade: "D", condition: 88, impound: true });
     debug.setArrears(1150);
     debug.addWreck({ frame: "stevedore", grade: "B", items: { copper: 2, ammo: 2 } });

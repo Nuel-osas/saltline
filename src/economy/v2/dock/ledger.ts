@@ -8,6 +8,7 @@ import type { HarbormasterView, Impounded, Profile } from "../types";
 import { frameWord, gunCard } from "./guncard";
 import { carryShare, invoiceParts } from "./loadout";
 import { actBtn, countdown, emptyLine, head, numOr, okv, painter, plural, type Ctx } from "./store";
+import { weekPanel } from "./week";
 
 /** The most a settle can take: half the arrears (rounded up), and no more than the scrip in hand. */
 export const maxSettle = (arrears: number, scrip: number) => Math.max(0, Math.min(scrip, Math.ceil(arrears / INVOICE.settleRate)));
@@ -20,6 +21,7 @@ export function hmBuys(hm: HarbormasterView): string {
 
 export function createLedger(ctx: Ctx) {
   const el = h("div", { class: "d2-ledger" });
+  const week = weekPanel(ctx); // the fast-forward: one element, kept across repaints so a running week isn't lost
   let pay: number | null = null;
 
   function account(p: Profile | null, hm: HarbormasterView | null) {
@@ -177,6 +179,7 @@ export function createLedger(ctx: Ctx) {
               : emptyLine(ctx.reads.impound.s === "loading" ? "Checking the cage…" : `Your impounded guns: ${UNKNOWN}.`, ctx.reads.impound.s === "unknown"),
           ),
         ),
+        week.el,
         h(
           "dl",
           { class: "d2-eco", "aria-label": "The open economy" },

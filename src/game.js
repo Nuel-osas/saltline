@@ -30115,7 +30115,10 @@ void main() {
       /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ||
       (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900)
     )
-      return { ...Pr.low };
+      // ext: phones start lighter than plain "low": fewer pixels, no light-shaft or bloom passes, smaller shadows
+      // and textures, and shadows redrawn every fourth frame instead of every second. The name stays
+      // "low" so the low-only shortcuts elsewhere still apply. ?q=low asks for plain low on any device.
+      return { ...Pr.low, scale: 0.6, shadow: 1024, shadowEvery: 4, tex: 256, volSteps: 0, bloom: !1, rain: 0.3 };
     let t = "";
     try {
       let s = document.createElement("canvas"),
@@ -32077,7 +32080,8 @@ ${fe}`,
         (n.toneMappingExposure = 1),
         n.setRenderTarget(m),
         n.clear(!0, !0, !1),
-        (i.quality.name === "ultra" || e.shot || (T & 1) === 0 || !h.shadow.map) && (n.shadowMap.needsUpdate = !0),
+        // ext: shadows are redrawn every second frame; a phone's preset asks for every fourth (quality.shadowEvery).
+        (i.quality.name === "ultra" || e.shot || T % (i.quality.shadowEvery || 2) === 0 || !h.shadow.map) && (n.shadowMap.needsUpdate = !0),
         n.render(r, a),
         E && (A.copyDepth(b), n.setRenderTarget(m)),
         s.depthRange(0, 0.05));
