@@ -159,11 +159,13 @@ describe("the lobby", () => {
     w.home.root.querySelector<HTMLElement>(".hm-play")!.click();
     w.home.root.querySelector<HTMLElement>(".hm-signin")!.click();
     w.home.root.querySelector<HTMLElement>(".hm-tab")!.click(); // the dock needs a sign-in too
-    w.home.root.querySelector<HTMLElement>(".hm-start-b")!.click();
+    // "Start here" says to sign in, which the big button already does: it points at it, not a second button.
+    expect(w.home.root.querySelector(".hm-start-b")).toBeNull();
+    expect(w.text(".hm-start")).toContain("Press SIGN IN to go");
     w.home.root.querySelector<HTMLElement>('.hm-tile[data-mode="practice"]')!.click();
     expect(w.text(".hm-play")).toContain("Practice · sign in first");
     w.home.root.querySelector<HTMLElement>(".hm-play")!.click();
-    expect(w.opened).toEqual(["signin", "signin", "signin", "signin", "signin"]);
+    expect(w.opened).toEqual(["signin", "signin", "signin", "signin"]);
     expect(w.pressed).toEqual([]);
     expect(w.went).toEqual([]);
     expect(w.store.has(PRACTISED_KEY)).toBe(false);

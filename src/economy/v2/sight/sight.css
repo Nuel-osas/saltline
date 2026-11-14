@@ -1,0 +1,86 @@
+/* sight/: the red marker on a machine that has seen the player, held at the screen's edge when it is out of view.
+   Positioned by transform each frame (no layout); uses the game's tokens (src/ui.css). */
+.sg-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+  overflow: hidden;
+}
+.sg-mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+.sg-mark i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+.sg-mark i::before {
+  content: "";
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--alarm, #ff5a40);
+  filter: drop-shadow(0 0 3px rgba(255, 90, 64, 0.85)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+}
+.sg-mark b {
+  position: absolute;
+  left: 0;
+  font: 600 12px/1 var(--f-label, "Barlow Condensed", "Arial Narrow", sans-serif);
+  letter-spacing: 0.06em;
+  color: var(--alarm, #ff5a40);
+  text-shadow: var(--shadow, 0 0 2px rgba(0, 0, 0, 0.75));
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+/* On the machine: an open diamond just above its lamp, the distance over it. */
+.sg-mark.on i::before {
+  width: 13px;
+  height: 13px;
+  left: -6.5px;
+  top: -30px;
+  transform: rotate(45deg);
+  background: rgba(255, 90, 64, 0.16);
+}
+.sg-mark.on b {
+  top: -48px;
+}
+
+/* Off screen: a chevron on the edge pointing at it (the element is turned toward the machine), the distance beside. */
+.sg-mark.edge i::before {
+  width: 18px;
+  height: 18px;
+  left: -6px;
+  top: -9px;
+  border-left: 0;
+  border-bottom: 0;
+  border-width: 3px;
+  transform: rotate(45deg);
+  background: transparent;
+}
+.sg-mark.edge b {
+  top: 16px;
+}
+.sg-mark.edge {
+  animation: sg-throb 0.9s ease-in-out infinite alternate;
+}
+@keyframes sg-throb {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sg-mark.edge {
+    animation: none;
+  }
+}

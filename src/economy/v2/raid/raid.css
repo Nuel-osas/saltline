@@ -1,6 +1,12 @@
 /* The raid: the invoice meter and its line items (h- look), the sign-on card (the briefing's look), and the rows on
    the debrief and dead cards (m- look, with salvage.css's sv- rows). Uses the game's tokens from src/ui.css. */
 
+/* ---- markers pinned to the screen's edge: the diamond only ----
+   A target behind the player or off to the side is pinned to the edge of the screen, where the objective, the cargo
+   readout and the invoice are. Its name and distance there were drawn over those panels; the compass along the top
+   already names every target and its distance, so at the edge the diamond alone points the way. */
+.h-wm.offscreen b, .h-wm.offscreen span { display: none; }
+
 /* ---- the invoice: top right, under nothing else ---- */
 .rd-inv {
   position: absolute;
