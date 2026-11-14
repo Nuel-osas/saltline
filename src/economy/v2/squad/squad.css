@@ -1,0 +1,3 @@
+/* squad.css: the one line of HUD that live presence adds (squad/index.ts): who else is in your yard right now. */
+.sq-chip { position: absolute; left: 50%; top: calc(86px + var(--sat)); transform: translateX(-50%); max-width: min(92vw, 720px); padding: 6px 12px 5px; background: rgba(0, 0, 0, .72); border: 1px solid var(--line); border-left: 3px solid var(--signal); color: var(--bone); font: 600 12px/1.2 var(--f-label); letter-spacing: .18em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.sq-chip[hidden] { display: none; }
