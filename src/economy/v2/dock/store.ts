@@ -85,6 +85,8 @@ export interface Ctx {
   note(state: NoteState, text: string): void;
   /** Redraw every screen from the reads. */
   render(): void;
+  /** Switch the dock to another tab (a next step that lives there). */
+  go(tab: "loadout" | "armoury" | "market" | "vendors" | "ledger"): void;
   emit(name: string, e?: unknown): void;
   /** Ms per step of the build reveal (tests shorten it; reduced motion makes it 0). */
   revealMs: number;

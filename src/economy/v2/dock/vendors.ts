@@ -1,11 +1,14 @@
-// THE VENDORS: people, not price boards. Moss the armourer (what she pays for parts, each with her reason; the guns
+// THE VENDORS: first the haul (haul.ts): one line on what to do, who pays most for each lot and why, and one button
+// that sells it all, lot by lot through the chain; then what it made and the one thing that scrip unlocks. Below it,
+// the people, not price boards: Moss the armourer (what she pays for parts, each with her reason; the guns
 // and mods she has built; her last note), Ines the quartermaster (plates, charges, magazines), and the export desk,
 // where the freighter pays in new scrip and pays less for every crate already aboard.
 import { h } from "../../dockside/dom";
 import { fmt, UNKNOWN } from "../../dockside/format";
 import { CONSUMABLES, MATERIALS, MODS, TOKEN_NAMES, VENDOR_PRICING, VENDORS } from "../items";
-import type { ConsumableId, MaterialId, ModId, Quote, Vendor, VendorGood, VendorId } from "../types";
+import type { ConsumableId, MaterialId, ModId, Quote, TxResult, Vendor, VendorGood, VendorId } from "../types";
 import { gunCard } from "./guncard";
+import { BUYER, haulOf, nextStep, planSale, type HaulPlan, type Lot } from "./haul";
 import { actBtn, emptyLine, head, okv, painter, scripEl, SHORT, type Ctx } from "./store";
 
 type Who = VendorId | "export";
@@ -42,9 +45,147 @@ function portrait(who: Who): HTMLElement {
   return el;
 }
 
+/** Where the last SELL EVERYTHING got to. Only confirmed sales count towards `paid`; no answer is pending, never failed. */
+type SaleRun =
+  | { s: "idle" }
+  | { s: "running"; i: number; n: number; paid: number }
+  | { s: "done"; paid: number; sold: Lot[]; unknownPaid: number }
+  | { s: "pending"; paid: number; sold: Lot[]; lot: Lot }
+  | { s: "refused"; paid: number; sold: Lot[]; lot: Lot; error: string }
+  | { s: "stopped"; paid: number; sold: Lot[] };
+
+const lotName = (l: { tokenId: MaterialId; amount: number }) => `${TOKEN_NAMES[l.tokenId]} ×${fmt(l.amount)}`;
+
 export function createVendors(ctx: Ctx) {
   const el = h("div", { class: "d2-vendors" });
   let who: Who = "moss";
+  let run: SaleRun = { s: "idle" };
+
+  /**
+   * SELL EVERYTHING: one sale per lot, one at a time, each through the chain (sell or exportGoods) and each answer
+   * checked before the next is sent. A refusal stops the run with what was sold; no answer stops it as pending.
+   */
+  async function sellAll(plan: HaulPlan) {
+    if (ctx.busy() || run.s === "running") return;
+    let paid = 0;
+    let unknownPaid = 0;
+    const sold: Lot[] = [];
+    for (const [i, lot] of plan.lots.entries()) {
+      run = { s: "running", i, n: plan.lots.length, paid };
+      let res: (TxResult & { paid?: number }) | undefined;
+      let sent = false;
+      const r = await ctx.act({
+        key: "sellall",
+        settling: `Settling ${i + 1} of ${plan.lots.length}: ${lot.to === "export" ? `loading ${lotName(lot).toLowerCase()} onto the freighter` : `selling ${lotName(lot).toLowerCase()} to ${BUYER[lot.to].name}`}…`,
+        run: async () => {
+          sent = true;
+          res = await (lot.to === "export" ? ctx.chain.exportGoods(lot.tokenId, lot.amount) : ctx.chain.sell(lot.to, lot.tokenId, lot.amount));
+          return res;
+        },
+        done: (x) => `${BUYER[lot.to].name} paid ${x.paid == null ? UNKNOWN : `${fmt(x.paid)} scrip`} for ${lotName(lot).toLowerCase()}.`,
+        refresh: ["vendors", "exportPrices", "economy", "listings"],
+      });
+      if (!sent) {
+        // Another action was settling: nothing of this lot was sent.
+        run = { s: "stopped", paid, sold };
+        break;
+      }
+      if (!r) {
+        run = res && !res.ok && !res.pending ? { s: "refused", paid, sold, lot, error: res.error || "no reason given" } : { s: "pending", paid, sold, lot };
+        break;
+      }
+      sold.push(lot);
+      // What the chain says it paid, an integer; an answer without it is counted as a sale of unknown value, not 0.
+      if (typeof r.paid === "number" && Number.isSafeInteger(r.paid) && r.paid >= 0) paid += r.paid;
+      else unknownPaid++;
+      if (i === plan.lots.length - 1) run = { s: "done", paid, sold, unknownPaid };
+    }
+    if (run.s === "done") ctx.note("ok", `Sold ${plan.lots.length === 1 ? "the lot" : `all ${plan.lots.length} lots`} for ${fmt(paid)} scrip${run.unknownPaid ? " and an amount unknown" : ""}.`);
+    ctx.render();
+    paint(true);
+  }
+
+  /** What a finished run says: the scrip it made, then the one thing that scrip unlocks. */
+  function result(r: Exclude<SaleRun, { s: "idle" } | { s: "running" }>) {
+    const gain = h("p", { class: "d2-haul-gain", "data-state": r.s }, h("b", null, `+${fmt(r.paid)}`), h("i", null, "scrip"));
+    if (r.s === "pending") {
+      const to = r.lot.to === "export" ? "the export desk" : BUYER[r.lot.to].name;
+      return [gain, h("p", { class: "d2-haul-line warn", "data-state": "pending" }, `No answer yet on ${lotName(r.lot).toLowerCase()} to ${to}. It may still settle: check your stash before selling again.`)];
+    }
+    if (r.s === "refused") {
+      return [gain, h("p", { class: "d2-haul-line warn", "data-state": "refused" }, `${BUYER[r.lot.to].name} turned down ${lotName(r.lot).toLowerCase()}: ${r.error.replace(/\.$/, "")}. The rest is still yours.`)];
+    }
+    if (r.s === "stopped") return [gain, h("p", { class: "d2-haul-line warn" }, "Stopped: another sale was settling. Press again to sell the rest.")];
+    const step = nextStep({ balances: okv(ctx.reads.balances), vendors: okv(ctx.reads.vendors), listings: okv(ctx.reads.listings), me: ctx.me() });
+    return [
+      gain,
+      r.unknownPaid ? h("p", { class: "d2-haul-line warn" }, `${r.unknownPaid === 1 ? "One sale" : `${r.unknownPaid} sales`} landed without saying what it paid: check your scrip.`) : null,
+      step
+        ? h(
+            "div",
+            { class: "d2-haul-next" },
+            h("p", null, step.text),
+            step.go
+              ? actBtn(ctx, {
+                  k: "haul:next",
+                  label: step.go.label,
+                  cls: "solid",
+                  onclick: () => {
+                    if (step.go!.who) who = step.go!.who;
+                    ctx.go(step.go!.tab);
+                    ctx.render();
+                  },
+                })
+              : null,
+          )
+        : null,
+    ];
+  }
+
+  /** The first thing on the tab: what to do, who pays most for each lot and why, and one button that sells it all. */
+  function haulPanel() {
+    const bal = ctx.reads.balances;
+    const items = haulOf(okv(bal));
+    const plan = planSale(items, okv(ctx.reads.vendors), okv(ctx.reads.exportPrices));
+    const loading = bal.s === "loading" || ctx.reads.vendors.s === "loading" || ctx.reads.exportPrices.s === "loading";
+    const finished = run.s !== "idle" && run.s !== "running" ? run : null;
+    const body: (Node | null)[] = [];
+    if (bal.s === "unknown") body.push(emptyLine(`Your stash: ${UNKNOWN}. Nothing can be sold until it can be read.`, true));
+    else if (finished && !items.length) body.push(...result(finished));
+    else if (!items.length) body.push(h("p", { class: "d2-haul-line" }, loading ? "Reading your stash…" : "Nothing to sell. Carry cargo out of a raid, then sell it here."));
+    else if (!plan) body.push(emptyLine(loading ? "Reading the counters…" : `Who pays most: ${UNKNOWN}. The counters can't be read right now, so nothing is sold blind.`, !loading));
+    else {
+      if (finished) body.push(...result(finished));
+      body.push(
+        h(
+          "ul",
+          { class: "d2-lots" },
+          ...plan.lots.map((l) =>
+            h(
+              "li",
+              { class: "d2-lot", "data-tok": l.tokenId, "data-to": l.to },
+              h("b", { class: "d2-lot-n" }, lotName(l)),
+              h("span", { class: "d2-lot-to" }, `→ ${BUYER[l.to].name}`),
+              scripEl(l.total, "d2-lot-p"),
+              h("p", { class: "d2-lot-why" }, l.reason),
+            ),
+          ),
+          ...plan.unsold.map((u) => h("li", { class: "d2-lot none", "data-tok": u.tokenId }, h("b", { class: "d2-lot-n" }, lotName(u)), h("span", { class: "d2-lot-to" }, "nobody buying today"))),
+        ),
+        plan.lots.length
+          ? actBtn(ctx, {
+              k: "sellall",
+              cls: "primary d2-sellall",
+              disabled: run.s === "running",
+              label: run.s === "running" ? `Selling ${run.i + 1} of ${run.n}…` : h("span", null, "Sell everything to the best buyer", h("i", null, ` · about ${fmt(plan.total)} scrip`)),
+              onclick: () => void sellAll(plan),
+            })
+          : null,
+      );
+    }
+    const lede = items.length && plan?.lots.length ? "Sell what you carried out. Each lot goes to whoever pays most today." : finished?.s === "done" ? "Sold, each lot to the counter that paid most." : "What you carried out, and who pays most for it.";
+    return h("section", { class: "d2-haul", "aria-label": "Sell your haul" }, head("Sell your haul", "prices fall as each counter fills"), h("p", { class: "d2-haul-lede" }, lede), ...body);
+  }
 
   const sellRow = (to: Who, q: Quote, open: boolean) => {
     const id = q.tokenId as MaterialId;
@@ -199,11 +340,12 @@ export function createVendors(ctx: Ctx) {
 
   const paint = painter(
     el,
-    () => [ctx.reads.vendors, ctx.reads.exportPrices, ctx.reads.balances, who, ctx.busy() ? "busy" : ""],
+    () => [ctx.reads.vendors, ctx.reads.exportPrices, ctx.reads.balances, ctx.reads.listings, who, run, ctx.busy() ? "busy" : ""],
     () => {
       const vendors = okv(ctx.reads.vendors);
       const v = who === "export" ? null : (vendors?.find((x) => x.id === who) ?? null);
       return [
+        haulPanel(),
         h(
           "nav",
           { class: "d2-doors", "aria-label": "Who to see" },
@@ -236,6 +378,10 @@ export function createVendors(ctx: Ctx) {
     see(w: Who) {
       who = w;
       ctx.render();
+    },
+    /** A new visit to the dock: the last run's result is from before, unless it is still going. */
+    fresh() {
+      if (run.s !== "running") run = { s: "idle" };
     },
   };
 }

@@ -47,7 +47,8 @@ const NEEDS: Record<Tab, ReadKey[]> = {
   loadout: ["weapons"],
   armoury: ["weapons"],
   market: ["listings", "weapons", "economy"],
-  vendors: ["vendors", "exportPrices"],
+  // The listings and guns name the next step after a sale (a gun that can now be bought).
+  vendors: ["vendors", "exportPrices", "listings"],
   ledger: ["impound", "economy"],
 };
 const ALWAYS: ReadKey[] = ["profile", "balances", "harbormaster", "recent"];
@@ -201,6 +202,7 @@ export function createDock(G: GameLike, v2: V2, opts: DockOptions = {}): Dock {
     act,
     note,
     render: () => paint(),
+    go: (t) => setTab(t),
     emit,
     revealMs: opts.revealMs ?? (reducedMotion() ? 0 : 420),
   };
@@ -438,6 +440,7 @@ export function createDock(G: GameLike, v2: V2, opts: DockOptions = {}): Dock {
     const state = G.game?.state ?? "title";
     const o = from ?? (ORIGINS.includes(state as Origin) ? (state as Origin) : null);
     if (!o || !playable()) return; // never mid-raid
+    screens.vendors.fresh();
     show(o);
     await checkGate();
   }
