@@ -209,11 +209,16 @@ and `agents/README.md` covers running the characters.
   included; a local run without those settings stays open, which is how the smoke and end-to-end scripts run.
 - **Seeing other players is presence, not a shared raid.** Breachers who are in a raid at the same moment appear in
   each other's yard as figures with their callsign, moving as they move ([`src/economy/v2/squad/`](src/economy/v2/squad)).
-  That is all it is: each player's machines, containers and invoice are still their own, and nobody can hit or be
-  hit by another player. The browsers talk to each other directly (WebRTC), having met through public Nostr relays
-  this project doesn't run, so players in the same yard can see each other's network address, as in any
-  peer-to-peer game. What arrives from another browser is checked field by field and can only move a figure.
-  `?squad=0` switches it off.
+  Each player's machines, containers and invoice are still their own. The browsers talk to each other directly
+  (WebRTC), having met through public Nostr relays this project doesn't run, so players in the same yard can see
+  each other's network address, as in any peer-to-peer game. What arrives from another browser is checked field by
+  field. `?squad=0` switches it off.
+- **Players can shoot each other in Practice only.** A hit is the shooter's browser telling the other player's
+  browser "I hit you"; the one who was hit decides whether to believe it (in reach, no more than a gun does, no
+  faster than a gun fires). That is one browser's word against another's, and a changed client could ignore every
+  hit. In Practice nothing is at stake, so it is on there. In a raid on the chain a death costs a real gun, so
+  there players see each other and cannot hit or be hit, until a hit can be checked by something neither player
+  controls.
 - **The faucet's per-IP limits are kept in memory** on each serverless instance. The lasting guards are one
   registration per account and never funding an account that already exists.
 - **The studio keeps a small database of who signed in and how many came (v2), when one is configured.** One record
