@@ -32,6 +32,9 @@ Front page: https://saltline-lac.vercel.app · Contract: [`v2.saltline.testnet`]
 · Built for NEAR HACKATHON (November 2026), tracks **Games With Real Economies** and **NFTs That Do Something** ·
 Design written before the code: [`docs/GAME.md`](docs/GAME.md)
 
+**New here? Read [How to play](docs/PLAYING.md):** your first raid, the invoice, dying, the dock, guns, levels and
+ranks, the endgame, and what a player gains.
+
 ## The loop
 
 | Every | You |
@@ -39,6 +42,22 @@ Design written before the code: [`docs/GAME.md`](docs/GAME.md)
 | 30 seconds | Cut a seal, take a crate or shoot a machine. Each adds to the invoice, and you watch it climb. |
 | 5 minutes | Reach the boat with what you carried, or lose it and the gun with it. |
 | Session | Sell parts to Moss and Ines, build or buy a gun, level the one you have, trade on the market, pay the Harbormaster or don't. |
+
+## What a player gets
+
+Today, on testnet, nothing with cash value: testnet tokens are worth nothing. What a player gets is the game, and
+ownership that already works the way it would with real money:
+
+- **A gun that's theirs,** in their own NEAR account, moved only by the contract's published rules.
+- **The right to sell it** to another player, at a price they set.
+- **Income from what they build:** 2% of every sale of a gun they made, for as long as it exists.
+- **A record that can't be faked:** raids survived, owners and wrecks are on the gun, and a level can't be bought.
+- **Other players' guns to win,** by carrying a dead player's wreck to the boat.
+
+On mainnet guns would sell for NEAR or USDC and the maker's 2% would be real income, once a server checks raid
+results (see [Where it goes from here](#where-it-goes-from-here)). The endgame (a Notorious A-grade gun, the
+gunsmith's royalties, the outlaw's bonded containers, the Assessor, the Harbormaster's wallet, the boards) is in
+[How to play](docs/PLAYING.md#the-endgame).
 
 ## Try it: do X, see Y
 
@@ -175,7 +194,7 @@ src/economy/           shared pieces: the chain executor, the wallet, the Bailif
 contract2/             Rust (near-sdk 5.29.1): mt.rs, nft.rs, items.rs, weapons.rs, raids.rs, vendors.rs, export.rs, market.rs, harbormaster.rs
 agents/v2/             Moss, Ines and the Harbormaster: read the port, decide in character, sign their own moves
 server/, api/          the dock office: the faucet, sign-in and the studio's counts; each validates and fails closed
-docs/                  GAME.md (the design), CONTRACT_V2.md (the wire format), PROOF.md, STORY.md, LIMITS.md, V1.md
+docs/                  PLAYING.md (how to play), GAME.md (the design), CONTRACT_V2.md (the wire format), PROOF.md, STORY.md, LIMITS.md, V1.md
 ```
 
 ## Run it locally
