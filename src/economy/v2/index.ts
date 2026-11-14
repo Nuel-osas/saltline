@@ -88,7 +88,9 @@ export function startV2(G: Game): void {
   if (privyAppId) guard("login", () => void (login = startLogin(G, { appId: privyAppId, sheet: true, ...(guest ? { sessionUrl: sessionUrlFor(cfg.faucetUrl), wallet: guest } : {}) })));
   // The start screen: a lobby over the title card (G.home). Its buttons press the title's own, so everything above
   // starts as it did.
-  guard("home", () => startHome(G, { v2, offline: !!mock, login: () => login, dock: () => dock }));
+  // Skirmish is the offline game with fighting on (?mock&pvp=1): its own yard, so nobody in Practice can be shot.
+  const skirmish = !!mock && typeof location !== "undefined" && new URLSearchParams(location.search).get("pvp") === "1";
+  guard("home", () => startHome(G, { v2, offline: !!mock, skirmish, login: () => login, dock: () => dock }));
 
   // Live presence: other breachers in a raid right now appear in your yard (G.squad). Off for automated browsers.
   if (squadOn(typeof location === "undefined" ? "" : location.search, typeof navigator !== "undefined" && !!navigator.webdriver)) {
@@ -105,8 +107,8 @@ export function startV2(G: Game): void {
     look();
     guard("squad", () =>
       startSquad(G, {
-        room: mock ? "yard-practice-v1" : `yard-${cfg.contractId}`,
-        pvp: !!mock, // shooting each other only where nothing is at stake (squad/index.ts says why)
+        room: skirmish ? "yard-skirmish-v1" : mock ? "yard-practice-v1" : `yard-${cfg.contractId}`,
+        pvp: skirmish, // shooting each other only where the player chose it and nothing is at stake (squad/index.ts says why)
         callsign: () => callsign,
         frame: () => (G.v2?.raid?.weapon ? String((G.v2.raid.weapon as { frame?: string }).frame ?? "issue") : "issue"),
       }),

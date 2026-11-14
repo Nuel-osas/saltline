@@ -123,7 +123,7 @@ export function nearest<T extends { track: Track }>(peers: readonly T[], me: { x
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Shooting each other (Practice only: squad/index.ts says why).
+// Shooting each other (Skirmish only: squad/index.ts says why).
 
 interface P3 {
   x: number;

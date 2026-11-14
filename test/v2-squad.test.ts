@@ -175,7 +175,7 @@ describe("the module", () => {
     expect(w.hurt).toEqual([]);
   });
 
-  it("in Practice a shot that meets a breacher tells them, with what the gun does; a head hit does more", async () => {
+  it("in Skirmish a shot that meets a breacher tells them, with what the gun does; a head hit does more", async () => {
     const w = world(true);
     await w.step(16);
     w.say("peer-a", wire({ c: "ROOK", x: 0, z: -5 }));
@@ -191,7 +191,7 @@ describe("the module", () => {
     expect(w.hits).toHaveLength(2);
   });
 
-  it("in Practice a believed hit hurts this player, a drop is answered, and a lie is ignored", async () => {
+  it("in Skirmish a believed hit hurts this player, a drop is answered, and a lie is ignored", async () => {
     const w = world(true);
     await w.step(16);
     w.say("peer-a", wire({ c: "ROOK", x: 3, z: 0 }));
@@ -211,7 +211,22 @@ describe("the module", () => {
     expect(w.squad.here()).toEqual(["ROOK"]);
   });
 
-  it("in Practice a breacher this player dropped leaves the yard until they are back in a raid", async () => {
+  it("where fighting is on, the HUD says so even while the yard is empty", async () => {
+    const w = world(true);
+    await w.step(16);
+    await w.step(16);
+    expect(w.chip().hidden).toBe(false);
+    expect(w.chip().textContent).toBe("Live · PvP · nobody else in the yard yet");
+    w.say("peer-a", wire({ c: "ROOK" }));
+    await w.step(16);
+    expect(w.chip().textContent).toBe("Live · PvP · 1 breacher in your yard: ROOK");
+    const quiet = world(false);
+    await quiet.step(16);
+    await quiet.step(16);
+    expect(quiet.chip().hidden).toBe(true); // where players only see each other, an empty yard says nothing
+  });
+
+  it("in Skirmish a breacher this player dropped leaves the yard until they are back in a raid", async () => {
     const w = world(true);
     await w.step(16);
     w.say("peer-a", wire({ c: "ROOK", x: 0, z: -5 }));
