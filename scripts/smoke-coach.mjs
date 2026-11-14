@@ -43,7 +43,7 @@ async function open(query, { pass = true, storage = null } = {}) {
     localStorage.setItem("saltline.story.v1", JSON.stringify({ v: 1, briefed: true, heard: [], peak: 0 }));
     if (storage) for (const [k, v] of Object.entries(storage)) localStorage.setItem(k, v);
   }, storage);
-  await page.goto(`${base}/?${query}&noaudio=1`, { waitUntil: "load" });
+  await page.goto(`${base}/play/?${query}&noaudio=1`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
   if (/game=v2/.test(query)) await page.waitForFunction(() => !!window.__G.raid && !!window.__G.bailiff && !!window.__G.v2 && !!window.__G.coach, null, { timeout: 15000 });
   await page.evaluate(async (pass) => {

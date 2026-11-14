@@ -127,10 +127,11 @@ function faucetDev() {
   };
 }
 
-// Relative asset paths, so the built game in dist/ runs from any folder or static host.
+// Relative asset paths, so the built site in dist/ runs from any folder or static host.
+// Two pages: index.html is the front page, play/index.html is the game.
 export default defineConfig({
   base: "./",
-  build: { chunkSizeWarningLimit: 4000 },
+  build: { chunkSizeWarningLimit: 4000, rollupOptions: { input: { main: "index.html", play: "play/index.html" } } },
   test: { include: ["test/**/*.test.ts"], environment: "node" },
   plugins: [faucetDev()],
 });

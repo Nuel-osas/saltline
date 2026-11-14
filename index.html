@@ -2,23 +2,356 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Saltline</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Saltline: an extraction shooter with a real economy</title>
+    <meta
+      name="description"
+      content="Go over the fence, take what you can carry, and reach the boat. Every gun is an NFT somebody built from looted parts, and the port bills you for everything. Plays in your browser on NEAR testnet, with no wallet to install."
+    />
+    <meta property="og:title" content="Saltline: breach, haul, owe" />
+    <meta
+      property="og:description"
+      content="An extraction shooter where the gun in your hands is an NFT and the villain has a wallet. Plays in your browser."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://saltline-lac.vercel.app/og.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0b0d0f" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/src/fonts.css" />
-    <link rel="stylesheet" href="/src/ui.css" />
+    <link rel="stylesheet" href="/src/site/landing.css" />
+    <script>
+      // The game lived at this address until it moved to play/. A link that names a game option still opens the game.
+      if (/[?&](game|mock|noeconomy|intro|stash|noaudio)(=|&|$)/.test(location.search)) location.replace("play/" + location.search + location.hash);
+    </script>
   </head>
   <body>
-    <div id="app">
-  <canvas id="view" tabindex="0"></canvas>
-  <div id="ui"></div>
-  <div id="boot">
-    <div class="boot-mark">SALTLINE</div>
-    <div class="boot-sub" id="boot-msg">Raising the terminal</div>
-    <div class="boot-bar"><i id="boot-fill"></i></div>
-  </div>
-</div>
-    <script type="module" src="/src/game.js"></script>
-    <script type="module" src="/src/economy/main.ts"></script>
+    <a class="skip" href="#port">Skip to content</a>
+
+    <!-- The frame: the bar along the top and the invoice down the side sit over every section. -->
+    <header class="bar" data-bar>
+      <a class="brand" href="#top" aria-label="Saltline, back to the top"><b>B4</b><span>Saltline</span></a>
+      <nav class="nav" aria-label="Sections">
+        <a href="#port" data-nav="port">The port</a>
+        <a href="#raid" data-nav="raid">The raid</a>
+        <a href="#guns" data-nav="guns">The guns</a>
+        <a href="#town" data-nav="town">The town</a>
+        <a href="#ledger" data-nav="ledger">The ledger</a>
+      </nav>
+      <a class="btn play" href="play/?game=v2">Play now</a>
+    </header>
+
+    <aside class="meter" aria-hidden="true" data-meter>
+      <div class="meter-head"><i>Invoice</i><b data-meter-n>0</b></div>
+      <div class="meter-track">
+        <span class="meter-fill" data-meter-fill></span>
+        <u data-at="600"><em>2nd notice</em></u>
+        <u data-at="1200" class="hot"><em>Bailiff</em></u>
+        <u data-at="2400"><em>2nd Bailiff</em></u>
+        <u data-at="4000" class="hot"><em>Foreclosure</em></u>
+      </div>
+    </aside>
+    <p class="notice" role="status" aria-live="polite" data-notice hidden></p>
+
+    <main id="top">
+      <!-- Hero: the yard, full bleed. It folds back into a photograph as you scroll. -->
+      <section class="hero" data-hero aria-labelledby="hero-title">
+        <div class="hero-stage">
+          <div class="hero-art" data-hero-art>
+            <img
+              src="/src/site/art/yard.webp"
+              alt="A container yard at first light: a gantry crane, stacked containers and wet concrete"
+              width="1920"
+              height="1080"
+              fetchpriority="high"
+            />
+            <div class="hero-shade"></div>
+            <div class="rain" aria-hidden="true"></div>
+          </div>
+          <div class="hero-copy" data-hero-copy>
+            <p class="eyebrow"><b>B4</b> Port Authority Breach Unit <i>·</i> Saltline Terminal</p>
+            <p class="hero-intro">
+              An extraction shooter where the gun in your hands was built from parts somebody carried out, and the port bills you for everything you take.
+            </p>
+            <h1 id="hero-title" class="hero-title">
+              <span><i>Breach.</i></span>
+              <span><i>Haul.</i></span>
+              <span><i class="owe">Owe.</i></span>
+            </h1>
+            <div class="hero-cta">
+              <a class="btn play big" href="play/?game=v2">Play in your browser</a>
+              <p>No download <i>·</i> No wallet to install <i>·</i> No seed phrase</p>
+            </div>
+          </div>
+          <a class="cue" href="#port"
+            >Scroll<svg viewBox="0 0 14 14" aria-hidden="true">
+              <path d="M3 5.5 7 9.5l4-4" fill="none" stroke="currentColor" stroke-width="1.4" /></svg
+          ></a>
+        </div>
+      </section>
+
+      <!-- The port: paper. -->
+      <section id="port" class="paper" data-section="port" aria-labelledby="port-title">
+        <div class="form-head"><span>Port Authority</span><span>Form B4-17</span><span>Notice of trespass</span></div>
+        <div class="wrap port-grid">
+          <div class="port-head">
+            <p class="sec">§ 01 <i>The port</i></p>
+            <h2 id="port-title" class="h2" data-reveal>A machine runs this port. It is an insurance law, and it bills.</h2>
+          </div>
+          <div class="port-copy" data-reveal>
+            <p>
+              The Harbormaster kept the only ledger. Then it impounded the town. Now everything behind the fence is bonded cargo, and you are a Breacher: you go
+              in with a rifle, cut the seals, and carry out what you can.
+            </p>
+            <p>It doesn't shoot trespassers. It invoices them. And when the invoice is big enough, it sends something to collect.</p>
+          </div>
+          <figure class="exhibit ex-a" data-reveal>
+            <img
+              src="/src/site/art/bailiff.webp"
+              alt="The Bailiff, a tall orange machine with hazard stripes, walking down a lane of containers toward the player"
+              width="1600"
+              height="900"
+              loading="lazy"
+            />
+            <figcaption><b>Exhibit A</b><span>The Bailiff. It walks, it can't be destroyed, and it doesn't stop.</span></figcaption>
+          </figure>
+          <figure class="exhibit ex-b" data-reveal>
+            <img src="/src/site/art/crate.webp" alt="A rifle crate on the tarmac at the drop point, lid open" width="1280" height="720" loading="lazy" />
+            <figcaption><b>Exhibit B</b><span>The issue rifle. Everyone gets one. Nobody wants it.</span></figcaption>
+          </figure>
+          <figure class="exhibit ex-c" data-reveal>
+            <img
+              src="/src/site/art/haul.webp"
+              alt="Inside a container: a crate with a broken customs seal, two boxes of electronics taken"
+              width="1280"
+              height="720"
+              loading="lazy"
+            />
+            <figcaption><b>Exhibit C</b><span>A broken customs seal. That's 60 on your account.</span></figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- The statement, then the invoice fills the screen line by line. -->
+      <section class="wipe" data-wipe data-section="port" aria-labelledby="statement-title">
+        <div class="wipe-stage">
+          <div class="statement">
+            <p class="sec">§ 02 <i>The invoice</i></p>
+            <h2 id="statement-title" class="statement-title">Everything you take goes on the invoice. Greed is the difficulty.</h2>
+          </div>
+          <ol class="lines" aria-hidden="true" data-lines></ol>
+          <p class="stamp" aria-hidden="true" data-stamp>Final demand</p>
+        </div>
+      </section>
+
+      <!-- The raid: the loop, on the amber band. -->
+      <section id="raid" class="band" data-section="raid" aria-labelledby="raid-title">
+        <div class="wrap">
+          <div class="split">
+            <div>
+              <p class="sec">§ 03 <i>The raid</i></p>
+              <h2 id="raid-title" class="h2" data-reveal>Five minutes in. One way out.</h2>
+            </div>
+            <p class="lede" data-reveal>
+              Cut the three uplinks, fill your hands, and reach the boat. Everything you do is added to a meter you can see the whole time. Leave before it
+              sends the Bailiff, or don't.
+            </p>
+          </div>
+          <ol class="loop">
+            <li data-reveal>
+              <b>Every 30 seconds</b>
+              <h3>A choice with a price</h3>
+              <p>Cut a seal, take a crate, shoot a drone. Each one adds to the invoice, and you watch it climb.</p>
+            </li>
+            <li data-reveal style="--d: 90ms">
+              <b>Every 5 minutes</b>
+              <h3>The boat, or the yard keeps it</h3>
+              <p>Reach the boat and it is all yours. Die and your gun and your haul stay behind for the next player to find.</p>
+            </li>
+            <li data-reveal style="--d: 180ms">
+              <b>Every session</b>
+              <h3>The dock</h3>
+              <p>Sell parts to Moss and Ines, build a gun and see what it rolls, trade on the market, and pay the Harbormaster. Or don't.</p>
+            </li>
+          </ol>
+          <div class="bill" data-reveal>
+            <table>
+              <caption>
+                What goes on the invoice
+              </caption>
+              <tbody data-bill></tbody>
+            </table>
+            <ol class="rungs" data-rungs></ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- The guns: dark. -->
+      <section id="guns" class="dark" data-section="guns" aria-labelledby="guns-title">
+        <div class="wrap">
+          <div class="split">
+            <div>
+              <p class="sec">§ 04 <i>The guns</i></p>
+              <h2 id="guns-title" class="h2" data-reveal>Every gun was built from parts somebody carried out. Every one that is lost is gone.</h2>
+            </div>
+            <p class="lede" data-reveal>
+              A gun is an NFT with a serial, a maker and a history. Its stats are rolled when it is built, and no two come out the same. You choose which one to
+              risk.
+            </p>
+          </div>
+          <div class="rack" data-rack tabindex="0" role="group" aria-label="The three frames and the issue rifle"></div>
+          <div class="fate" data-reveal>
+            <div>
+              <b>You reach the boat</b>
+              <p>You keep the gun, a little more worn, and everything you carried.</p>
+            </div>
+            <div>
+              <b>Machines kill you</b>
+              <p>It stays where you fell. Your wreck shows up in other players' raids, and the first to carry it out owns it.</p>
+            </div>
+            <div>
+              <b>The Bailiff takes you</b>
+              <p>Impounded. You have 48 hours to buy it back for 40% of its value. After that it is destroyed.</p>
+            </div>
+          </div>
+          <div class="onrack" data-reveal>
+            <p class="live-tag"><i></i>On Moss's rack right now</p>
+            <ul data-onrack>
+              <li class="unk">Asking the chain…</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- The town: paper. -->
+      <section id="town" class="paper" data-section="town" aria-labelledby="town-title">
+        <div class="form-head"><span>Port Authority</span><span>Form B4-22</span><span>Register of accounts</span></div>
+        <div class="wrap">
+          <div class="split">
+            <div>
+              <p class="sec">§ 05 <i>The town</i></p>
+              <h2 id="town-title" class="h2" data-reveal>Everyone here has a wallet. Including the villain.</h2>
+            </div>
+            <p class="lede" data-reveal>
+              Each of these is its own NEAR account, run by an agent that signs its own moves. Their prices follow their stock, and any of them can run out of
+              money. Nobody at the studio sets a price.
+            </p>
+          </div>
+          <div class="town" data-town>
+            <article class="who" data-who="moss" data-reveal>
+              <header>
+                <h3>Moss</h3>
+                <p>The armourer</p>
+              </header>
+              <p class="who-line">Buys parts. Builds guns from her own stock and sells them. Repairs yours.</p>
+              <dl data-live></dl>
+            </article>
+            <article class="who" data-who="ines" data-reveal style="--d: 80ms">
+              <header>
+                <h3>Ines</h3>
+                <p>The quartermaster</p>
+              </header>
+              <p class="who-line">Sells plates, charges and ammunition, made from what she buys. Her meds go to the clinic.</p>
+              <dl data-live></dl>
+            </article>
+            <article class="who" data-who="desk" data-reveal style="--d: 160ms">
+              <header>
+                <h3>The export desk</h3>
+                <p>The freighter's buyer</p>
+              </header>
+              <p class="who-line">The only place new scrip is made. The more of one thing it is sold, the less it pays.</p>
+              <dl data-live></dl>
+            </article>
+            <article class="who villain" data-who="harbormaster" data-reveal style="--d: 240ms">
+              <header>
+                <h3>The Harbormaster</h3>
+                <p>The port</p>
+              </header>
+              <p class="who-line">Paying your invoice goes into its wallet. Its wallet is how hard it hits everyone. It halves every 12 hours.</p>
+              <dl data-live></dl>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- The ledger: dark, live from the contract. -->
+      <section id="ledger" class="dark ledger" data-section="ledger" aria-labelledby="ledger-title">
+        <div class="wrap">
+          <div class="split">
+            <div>
+              <p class="sec">§ 06 <i>The ledger</i></p>
+              <h2 id="ledger-title" class="h2" data-reveal>The whole economy is public. These numbers are live.</h2>
+            </div>
+            <p class="lede" data-reveal>
+              Read from the contract a moment ago. Nobody can create scrip, parts or guns outside the rules in it: the owner's key can pause the game and
+              nothing else, and a test checks that.
+            </p>
+          </div>
+          <dl class="stats" data-stats data-reveal></dl>
+          <div class="wire" data-reveal>
+            <p class="live-tag"><i></i>Port wire</p>
+            <ul data-wire>
+              <li class="unk">Asking the chain…</li>
+            </ul>
+          </div>
+          <ul class="quiet" data-reveal>
+            <li><b>No wallet popup</b><span>Your dock pass is a NEAR account made for you in the browser.</span></li>
+            <li><b>No seed phrase</b><span>You pick a callsign. That's the sign-up.</span></li>
+            <li><b>No gas prompt</b><span>The dock office pays for your pass. You just play.</span></li>
+          </ul>
+          <p class="sources" data-sources></p>
+        </div>
+      </section>
+
+      <!-- The close. -->
+      <section class="close" data-section="ledger" aria-labelledby="close-title">
+        <img
+          src="/src/site/art/bailiff-close.webp"
+          alt="The Bailiff at arm's length, the word WRIT stencilled on its chest"
+          width="1600"
+          height="900"
+          loading="lazy"
+        />
+        <div class="close-shade"></div>
+        <div class="close-copy">
+          <p class="sec">Saltline Terminal</p>
+          <h2 id="close-title" class="close-title" data-reveal>Good luck.<br />Keep your receipts.</h2>
+          <p data-reveal>Plays in your browser, on a desktop or a phone. Best with sound on.</p>
+          <a class="btn play big" href="play/?game=v2" data-reveal>Go over the fence</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot-grid">
+        <div>
+          <p class="sec">Saltline</p>
+          <p class="foot-tag">Breach · Haul · Owe</p>
+        </div>
+        <nav aria-label="Discover">
+          <p class="sec">Discover</p>
+          <a href="#port">The port</a><a href="#raid">The raid</a><a href="#guns">The guns</a><a href="#town">The town</a><a href="#ledger">The ledger</a>
+        </nav>
+        <nav aria-label="Play">
+          <p class="sec">Play</p>
+          <a href="play/?game=v2">Go over the fence</a>
+          <a href="play/?game=v2&amp;mock=1&amp;stash=rich">Try it offline with a full locker</a>
+          <a href="#top">Back to the top</a>
+        </nav>
+        <nav aria-label="Read">
+          <p class="sec">Read</p>
+          <a href="https://github.com/Nuel-osas/saltline" rel="noopener">The code</a>
+          <a href="https://github.com/Nuel-osas/saltline/blob/main/docs/GAME.md" rel="noopener">The design</a>
+          <a data-contract-link rel="noopener">The contract</a>
+        </nav>
+      </div>
+      <p class="foot-mark" aria-hidden="true">Saltline</p>
+      <div class="wrap foot-base">
+        <span>Built at NEAR Hackathon · on NEAR testnet · Apache-2.0</span>
+        <span>Every surface, machine and sound in the game is generated in your browser.</span>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/site/landing.ts"></script>
   </body>
 </html>

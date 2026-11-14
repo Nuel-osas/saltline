@@ -52,7 +52,7 @@ async function open(query, setup = {}) {
     // A player past their first raid: no checklist, and the coach's once-ever lines already said.
     localStorage.setItem("saltline.coach.v1", JSON.stringify({ v: 1, done: true, taught: [], seen: ["bailiff", "wreck", "death", "debrief"] }));
   });
-  await page.goto(`${base}/?game=v2&mock=1&noaudio=1${query}`, { waitUntil: "load" });
+  await page.goto(`${base}/play/?game=v2&mock=1&noaudio=1${query}`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
   await page.waitForFunction(() => !!window.__G.raid && !!window.__G.bailiff && !!window.__G.v2 && !!window.__G.coach, null, { timeout: 15000 });
   await page.evaluate(async (setup) => {

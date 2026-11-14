@@ -34,7 +34,7 @@ try {
       localStorage.removeItem("saltline.wallet.v1"); // a brand-new player every run
     } catch {}
   });
-  await page.goto(`${base}/?game=v2&noaudio=1`, { waitUntil: "load" });
+  await page.goto(`${base}/play/?game=v2&noaudio=1`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
   await page.waitForFunction(() => !!window.__G.v2 && !!window.__G.raid, null, { timeout: 15000 });
   const net = await page.evaluate(() => [window.__G.v2.chain.network, window.__G.v2.chain.contractId]);

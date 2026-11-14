@@ -42,7 +42,7 @@ const stand = (x, z, tx, tz, pitch = -0.1) =>
 
 try {
   await page.addInitScript(() => localStorage.removeItem("saltline.wallet.v1")); // a brand-new player every run
-  await page.goto(`${base}/?noaudio=1`, { waitUntil: "load" });
+  await page.goto(`${base}/play/?noaudio=1`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
   await page.waitForFunction(() => !!window.__G.economy, null, { timeout: 10000 });
   const net = await page.evaluate(() => [window.__G.economy.chain.network, window.__G.economy.chain.contractId]);

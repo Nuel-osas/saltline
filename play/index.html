@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Saltline</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/src/fonts.css" />
+    <link rel="stylesheet" href="/src/ui.css" />
+  </head>
+  <body>
+    <div id="app">
+  <canvas id="view" tabindex="0"></canvas>
+  <div id="ui"></div>
+  <div id="boot">
+    <div class="boot-mark">SALTLINE</div>
+    <div class="boot-sub" id="boot-msg">Raising the terminal</div>
+    <div class="boot-bar"><i id="boot-fill"></i></div>
+  </div>
+</div>
+    <script type="module" src="/src/game.js"></script>
+    <script type="module" src="/src/economy/main.ts"></script>
+  </body>
+</html>

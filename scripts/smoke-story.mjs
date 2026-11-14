@@ -70,7 +70,7 @@ async function open(query, { memory = null } = {}) {
     window.__skew = 0;
     Date.now = () => real() + window.__skew;
   }, memory);
-  await page.goto(`${base}/?${query}`, { waitUntil: "load" });
+  await page.goto(`${base}/play/?${query}`, { waitUntil: "load" });
   await page.waitForFunction(() => window.__ready === true, null, { timeout: 90000 });
   await page.evaluate(() => {
     const G = window.__G;

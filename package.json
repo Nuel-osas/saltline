@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm run test && npm run build",
-    "format": "prettier --write \"src/**/*.{js,ts,css}\" index.html",
+    "format": "prettier --write \"src/**/*.{js,ts,css}\" index.html play/index.html",
     "verify:testnet": "node scripts/verify-testnet.mjs",
     "e2e:testnet": "node scripts/e2e-testnet.mjs",
     "e2e:v2": "node scripts/e2e-v2.mjs",
