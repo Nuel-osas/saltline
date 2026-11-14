@@ -308,7 +308,6 @@ export function startHome(G: Game, opts: HomeOptions): Home {
   const again = setInterval(() => !document.hidden && root.offsetParent !== null && void refresh(), 20_000);
   const onState = () => void refresh();
   G.events?.on?.("login:state", onState);
-  G.events?.on?.("v2:account", onState);
 
   const home: Home = {
     root,
@@ -319,7 +318,6 @@ export function startHome(G: Game, opts: HomeOptions): Home {
       clearInterval(mounting);
       clearInterval(again);
       G.events?.off?.("login:state", onState);
-      G.events?.off?.("v2:account", onState);
       app?.classList.remove("hm-on");
       root.remove();
     },
