@@ -1,4 +1,4 @@
-// sight/: the yard's machines read at a glance.
+// sight/: the yard's machines read at a glance, and a new player's first raid is fair.
 //
 // A first-time player could not see what was killing them: a hound is a metre-long walker whose only light is a 12 cm
 // lens slit, a gull a dark one-metre drone with a 4 cm lens under its belly, and at 25 m in a bright yard or a dark
@@ -8,17 +8,21 @@
 //   - a little more light on the machines' shared shell and on the gull's own searchlight beam, so the body is not a
 //     black cut-out in the shed or against a dark sky;
 //   - a red marker on every machine that has seen the player within 40 m, held at the screen's edge when it is out of
-//     view, with its distance.
+//     view, with its distance;
+//   - the fair first raid: machines' hits do nothing until the rifle is in hand and for 3 s after, and half on a
+//     player's first raid (rules.ts machineDamage). Only hits dealt inside the machines' own update are touched, so
+//     the Bailiff (its own loop), other players in Skirmish, falls and the player's own charge are left as they were.
 //
-// It wraps one of the bundle's functions at runtime (G.enemies.update, to draw right after the machines move) and
-// changes no tuning.
+// It wraps two of the bundle's functions at runtime (G.enemies.update and G.player.damage) and changes no tuning.
 // ?sight=0 leaves the game exactly as it was, for before/after comparisons. State is on G.sight.
 import "./sight.css";
-import { SIGHT, isThreat, lampSize, lampTone, placeMarker } from "./rules";
+import { SIGHT, hasExtracted, isThreat, lampSize, lampTone, machineDamage, placeMarker } from "./rules";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
 type Game = any;
 
+/** localStorage: set on this browser's first extraction, when the chain's profile cannot be read. */
+export const EXTRACTED_KEY = "saltline.sight.extracted";
 const MARK = "__sight";
 const MARKERS = 6;
 /** How far the glow is drawn toward the camera, so the machine's own body does not cover its lamp from behind. */
@@ -30,6 +34,12 @@ const BEAM_GAIN = 0.16;
 const TONE = { watch: [4.2, 1.5, 0.12], seen: [5, 0.3, 0.08] } as const;
 
 export interface SightState {
+  firstRaid: boolean;
+  /** Seconds of play since the player was last without the rifle this raid. */
+  sinceUnarmed: number;
+  /** Machine damage asked for and dealt this raid, so a run can be checked. */
+  asked: number;
+  dealt: number;
   lamps: number;
   threats: number;
   /** The lamps' and markers' CPU time per frame (ms, smoothed). */
@@ -52,16 +62,77 @@ interface Lamp {
   phase: number;
 }
 
+const storage = (): Storage | null => {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    return null;
+  }
+};
+
 export function startSight(G: Game): Sight | null {
   if (typeof location !== "undefined" && new URLSearchParams(location.search).get("sight") === "0") return null;
   const T = G?.THREE;
   if (!T || !G.scene || typeof document === "undefined") return null;
 
-  const state: SightState = { lamps: 0, threats: 0, costMs: 0 };
+  const state: SightState = { firstRaid: true, sinceUnarmed: Infinity, asked: 0, dealt: 0, lamps: 0, threats: 0, costMs: 0 };
   let visuals = true;
   let playT = 0;
+  let lastUnarmed = -Infinity;
+  let profileExtractions: number | null = null;
+  let inMachines = false;
   let disposed = false;
   let frame = 0;
+
+  // ---- the fair first raid ----------------------------------------------------------------------------------------
+  const localFlag = () => storage()?.getItem(EXTRACTED_KEY) === "1";
+  const refreshFirstRaid = () => void (state.firstRaid = !hasExtracted(profileExtractions, localFlag()));
+  const readProfile = () => {
+    const id = G.v2?.wallet?.accountId?.();
+    if (!id || !G.v2?.chain?.profile) return;
+    Promise.resolve()
+      .then(() => G.v2.chain.profile(id))
+      .then(
+        (p: any) => {
+          profileExtractions = p && Number.isFinite(p.extractions) ? p.extractions : null;
+          refreshFirstRaid();
+        },
+        () => void 0, // unreadable: the local note decides
+      );
+  };
+  const fair = (): { armed: boolean | undefined; sinceUnarmed: number; firstRaid: boolean } => ({
+    armed: G.coach?.state?.armed,
+    sinceUnarmed: playT - lastUnarmed,
+    firstRaid: state.firstRaid,
+  });
+
+  const offs: (() => void)[] = [];
+  const on = (name: string, fn: (e: any) => void) => {
+    const off = G.events?.on?.(name, (e: any) => {
+      try {
+        fn(e);
+      } catch (err) {
+        console.warn(`[sight] ${name}:`, err);
+      }
+    });
+    if (typeof off === "function") offs.push(off);
+  };
+  on("run:start", () => {
+    lastUnarmed = -Infinity;
+    state.asked = state.dealt = 0;
+    refreshFirstRaid();
+    readProfile();
+  });
+  on("extraction:reached", () => {
+    try {
+      storage()?.setItem(EXTRACTED_KEY, "1");
+    } catch {
+      /* private window: the profile still decides */
+    }
+    refreshFirstRaid();
+  });
+  refreshFirstRaid();
+  readProfile();
 
   // ---- lamps --------------------------------------------------------------------------------------------------------
   const group = new T.Group();
@@ -265,9 +336,13 @@ export function startSight(G: Game): Sight | null {
       const orig = en.update;
       const wrapped = function (this: unknown, dt: number) {
         if (dt > 0) playT += Math.min(dt, 0.05);
+        if (G.coach?.state?.armed === false) lastUnarmed = playT;
+        state.sinceUnarmed = playT - lastUnarmed;
+        inMachines = true;
         try {
           return orig.call(this ?? en, dt);
         } finally {
+          inMachines = false;
           try {
             const c0 = performance.now();
             afterMachines();
@@ -279,6 +354,19 @@ export function startSight(G: Game): Sight | null {
       };
       (wrapped as any)[MARK] = orig;
       en.update = wrapped;
+    }
+    const pl = G.player;
+    if (pl && typeof pl.damage === "function" && !pl.damage[MARK]) {
+      const orig = pl.damage;
+      const wrapped = function (this: unknown, amount: number, from?: unknown) {
+        if (!inMachines) return orig.call(this ?? pl, amount, from);
+        const n = machineDamage(amount, fair());
+        if (amount > 0) ((state.asked += amount), (state.dealt += n > 0 ? n : 0));
+        if (!(n > 0)) return; // absorbed: no hit flash, no shake, no "player:hit"
+        return orig.call(this ?? pl, n, from);
+      };
+      (wrapped as any)[MARK] = orig;
+      pl.damage = wrapped;
     }
     liftBodies();
   }
@@ -311,8 +399,11 @@ export function startSight(G: Game): Sight | null {
     dispose() {
       disposed = true;
       cancelAnimationFrame(raf);
-      const en = G.enemies;
+      for (const off of offs) off();
+      const en = G.enemies,
+        pl = G.player;
       if (en?.update?.[MARK]) en.update = en.update[MARK];
+      if (pl?.damage?.[MARK]) pl.damage = pl.damage[MARK];
       undoBodies?.();
       G.scene?.remove?.(group);
       for (const l of all) l.mat.dispose();

@@ -1,8 +1,12 @@
-// The pure half of sight/: how big a machine's signal lamp is on screen, which machines count as a threat, and where
-// a threat's marker sits (on the machine, or held at the screen's edge pointing at it). No three.js and no DOM here,
-// so the rules are tested on their own (test/v2-sight.test.ts).
+// The pure half of sight/: how much of a machine's hit reaches a new player, how big a machine's signal lamp is on
+// screen, which machines count as a threat, and where a threat's marker sits (on the machine, or held at the screen's
+// edge pointing at it). No three.js and no DOM here, so the rules are tested on their own (test/v2-sight.test.ts).
 
 export const SIGHT = {
+  /** Seconds after the rifle is taken before a machine's hit lands. */
+  graceSeconds: 3,
+  /** What a machine's hit is worth on a player's first raid (no extraction yet). */
+  firstRaidScale: 0.5,
   /** Metres within which an alerted machine gets a marker. */
   markerRange: 40,
   /** The lamp's glow is never smaller than this many pixels across, out to `lampFar` metres. */
@@ -16,6 +20,36 @@ export const SIGHT = {
   /** Pixels between a held marker and the screen's edge. */
   edgeInset: 44,
 } as const;
+
+/** What the damage rule needs to know about the player right now. */
+export interface FairContext {
+  /** G.coach.state.armed: false while the rifle is still in its crate; undefined when there is no coach. */
+  armed: boolean | undefined;
+  /** Seconds of play since the player was last seen without the rifle this raid (Infinity if never). */
+  sinceUnarmed: number;
+  /** No extraction on record yet. */
+  firstRaid: boolean;
+}
+
+/**
+ * What a machine's hit of `amount` does to the player: nothing before the rifle is taken and for `graceSeconds`
+ * after, half on a first raid, else all of it. Anything that is not a positive number passes through untouched (the
+ * game ignores it either way).
+ */
+export function machineDamage(amount: number, c: FairContext): number {
+  if (!(amount > 0)) return amount;
+  if (c.armed === false) return 0;
+  if (!(c.sinceUnarmed >= SIGHT.graceSeconds)) return 0;
+  return c.firstRaid ? amount * SIGHT.firstRaidScale : amount;
+}
+
+/**
+ * Whether the player has extracted before, from what can be read: the profile's count when the chain answered (null
+ * when it did not), and this browser's own note of an extraction. Either one is enough; neither means a first raid.
+ */
+export function hasExtracted(profileExtractions: number | null | undefined, localFlag: boolean): boolean {
+  return localFlag || (typeof profileExtractions === "number" && profileExtractions > 0);
+}
 
 export type LampTone = "watch" | "seen";
 

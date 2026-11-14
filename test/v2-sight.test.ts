@@ -1,6 +1,51 @@
-// sight/'s pure rules (src/economy/v2/sight/rules.ts): the signal lamp's on-screen size, which machines get a threat marker, and where that marker sits on or off screen.
+// sight/'s pure rules (src/economy/v2/sight/rules.ts): a machine's hit on a new player, the first-raid test, the
+// signal lamp's on-screen size, which machines get a threat marker, and where that marker sits on or off screen.
 import { describe, expect, it } from "vitest";
-import { SIGHT, isThreat, lampSize, lampTone, placeMarker } from "../src/economy/v2/sight/rules";
+import { SIGHT, hasExtracted, isThreat, lampSize, lampTone, machineDamage, placeMarker } from "../src/economy/v2/sight/rules";
+
+describe("machineDamage", () => {
+  const armed = { armed: true, sinceUnarmed: Infinity, firstRaid: false };
+
+  it("lands in full on an armed veteran", () => {
+    expect(machineDamage(12, armed)).toBe(12);
+    expect(machineDamage(12, { ...armed, armed: undefined })).toBe(12); // no coach in the build: nothing to wait for
+  });
+
+  it("does nothing while the rifle is still in its crate", () => {
+    expect(machineDamage(12, { ...armed, armed: false, sinceUnarmed: 0 })).toBe(0);
+    expect(machineDamage(12, { ...armed, armed: false, sinceUnarmed: 99 })).toBe(0);
+  });
+
+  it("does nothing for 3 s after the rifle is taken, then lands", () => {
+    expect(machineDamage(12, { ...armed, sinceUnarmed: 0 })).toBe(0);
+    expect(machineDamage(12, { ...armed, sinceUnarmed: 2.99 })).toBe(0);
+    expect(machineDamage(12, { ...armed, sinceUnarmed: SIGHT.graceSeconds })).toBe(12);
+    expect(machineDamage(12, { ...armed, sinceUnarmed: NaN })).toBe(0); // unknown is not "long ago"
+  });
+
+  it("halves a hit on a first raid", () => {
+    expect(machineDamage(12, { ...armed, firstRaid: true })).toBe(6);
+    expect(machineDamage(7, { ...armed, firstRaid: true })).toBe(3.5);
+    expect(machineDamage(12, { ...armed, firstRaid: true, sinceUnarmed: 1 })).toBe(0);
+  });
+
+  it("passes a non-hit through untouched", () => {
+    expect(machineDamage(0, armed)).toBe(0);
+    expect(machineDamage(-5, { ...armed, firstRaid: true })).toBe(-5);
+    expect(Number.isNaN(machineDamage(NaN, armed))).toBe(true);
+  });
+});
+
+describe("hasExtracted", () => {
+  it("is a first raid only when neither the profile nor this browser has an extraction", () => {
+    expect(hasExtracted(0, false)).toBe(false);
+    expect(hasExtracted(null, false)).toBe(false);
+    expect(hasExtracted(undefined, false)).toBe(false);
+    expect(hasExtracted(2, false)).toBe(true);
+    expect(hasExtracted(0, true)).toBe(true);
+    expect(hasExtracted(null, true)).toBe(true);
+  });
+});
 
 describe("lamp", () => {
   it("is amber until the machine has seen the player, then red", () => {
