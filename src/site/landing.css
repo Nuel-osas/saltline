@@ -54,7 +54,8 @@ a { color: inherit; }
 .meter-track u em { position: absolute; right: 16px; top: -5px; font: 600 9px/1 var(--f-label); font-style: normal; letter-spacing: .1em; text-transform: uppercase; color: var(--bone-dim); white-space: nowrap; }
 .meter-track u.hot em { color: var(--alarm); }
 .meter-track u[data-passed] em { color: var(--bone); }
-.notice { position: fixed; z-index: 45; left: var(--pad); bottom: 22px; max-width: min(430px, calc(100vw - var(--pad) * 2 - var(--meter))); background: #000; border: 1px solid var(--line); border-left: 3px solid var(--alarm); padding: 12px 16px 11px; font: 400 12.5px/1.5 var(--f-mono); color: var(--bone); opacity: 0; transform: translateY(8px); transition: opacity .3s ease, transform .3s ease; }
+/* The Harbormaster's notices sit by the invoice meter they come from, clear of the left-hand headlines. */
+.notice { position: fixed; z-index: 45; right: calc(var(--meter) + var(--pad) * .5); bottom: 22px; max-width: min(360px, calc(100vw - var(--pad) * 2 - var(--meter))); background: #000; border: 1px solid var(--line); border-left: 3px solid var(--alarm); padding: 12px 16px 11px; font: 400 12.5px/1.5 var(--f-mono); color: var(--bone); opacity: 0; transform: translateY(8px); transition: opacity .3s ease, transform .3s ease; }
 .notice[data-on] { opacity: 1; transform: none; }
 .notice b { display: block; font: 600 10.5px/1 var(--f-label); letter-spacing: .24em; text-transform: uppercase; color: var(--alarm); margin-bottom: 6px; }
 
@@ -80,7 +81,9 @@ a { color: inherit; }
 .eyebrow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font: 600 12px/1 var(--f-label); letter-spacing: .26em; text-transform: uppercase; color: var(--bone); }
 .eyebrow i { font-style: normal; color: var(--steel); }
 .hero-intro { max-width: 34ch; font: 500 clamp(17px, 1.5vw, 21px)/1.42 var(--f-label); color: var(--bone); text-shadow: 0 1px 12px rgba(0, 0, 0, .7); }
-.hero-title { align-self: end; font: 900 clamp(78px, 15.5vw, 236px)/.8 var(--f-display); letter-spacing: .03em; text-transform: uppercase; display: grid; }
+/* Three lines of title, sized by the shorter of width and height, so BREACH. HAUL. OWE. and the button below it fit
+   a 1280×720 screen as well as a tall one. */
+.hero-title { align-self: end; font: 900 clamp(64px, min(15.5vw, 20vh), 236px)/.8 var(--f-display); letter-spacing: .03em; text-transform: uppercase; display: grid; }
 .hero-title span { display: block; overflow: clip; padding-top: .05em; }
 .hero-title i { display: block; font-style: normal; }
 .hero-title .owe { color: var(--signal); }
@@ -253,7 +256,7 @@ a { color: inherit; }
   .meter-fill { inset: 0 auto 0 0; width: 100%; height: auto; transform-origin: left; transform: scaleX(var(--p, 0)); }
   .meter-track u { left: calc(var(--at, 0) * 100%); top: -4px; width: 2px; height: 11px; }
   .meter-track u em { display: none; }
-  .notice { bottom: 14px; max-width: calc(100vw - var(--pad) * 2); }
+  .notice { left: var(--pad); right: var(--pad); bottom: 14px; max-width: none; }
   .brand span { font-size: 23px; }
   .bar .btn.play { padding: 11px 13px 9px; font-size: 12.5px; letter-spacing: .2em; }
   .hero-copy { padding-top: calc(var(--bar) + 44px); }
