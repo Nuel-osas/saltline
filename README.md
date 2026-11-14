@@ -244,7 +244,9 @@ The ones that matter to a player; [`docs/LIMITS.md`](docs/LIMITS.md) has all of 
 - **Libraries:** three.js r180 (in the baseline), near-kit, @privy-io/js-sdk-core (loaded only when sign-in is on),
   trystero (other players), jose (checking sign-in tokens), near-sdk and near-workspaces (contracts), Vite, Vitest,
   happy-dom, playwright-core, TypeScript, Prettier.
-- **Other projects:** none entered.
+- **Other projects:** the same lead also entered [Waterline](https://github.com/Nuel-osas/waterline), an outside audit
+  of NEAR Intents' public books and a NEAR investment thesis. It is a separate project with its own repository and
+  shares no code with Saltline.
 
 ## License
 
