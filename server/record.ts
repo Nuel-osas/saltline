@@ -1,9 +1,10 @@
 // What the server writes down, where it happens: the dock office handed a sign-in its wallet (server/session.ts), and
 // the faucet issued a v2 dock pass (server/faucet.ts). These are the server's own facts; nothing here comes from what
-// a browser claims.
+// a browser claims. Each goes to the user's record (server/users.ts) and to the day's counts (server/counts.ts).
 //
 // The game never depends on it. Each call is given SIDE_JOB_MS and then left behind, whatever it throws is swallowed,
 // and with the store off it does nothing: the wallet and the pass go out exactly as they would with no database.
+import { countServer, countUser, metricsSalt } from "./counts.js";
 import { type Store, quietly, storeFor } from "./store.js";
 import { gavePass, sawUser } from "./users.js";
 
@@ -22,18 +23,20 @@ export async function sessionIssued(env: Env, s: { userId: string; accountId: st
   await quietly(async () => {
     const store = deps.store ?? storeFor(env);
     if (store.kind === "off") return;
-    await sawUser(store, { ...s, as: "session" });
+    // The record is the studio's own list and needs no salt. The day's set of sign-ins holds hashes, so it does.
+    const salt = metricsSalt(env);
+    await Promise.all([sawUser(store, { ...s, as: "session" }), countServer(store, { event: "session_issued", at: s.at }), salt ? countUser(store, salt, s) : null]);
   }, SIDE_JOB_MS);
 }
 
 /**
  * The faucet issued a v2 dock pass. `userId` is the sign-in it went to, or null for a guest pass (sign-in switched
- * off), which has no sign-in to keep a record under.
+ * off), which is counted but has no sign-in to keep a record under.
  */
 export async function passIssued(env: Env, p: { userId: string | null; accountId: string; callsign: string; at: number }, deps: RecordDeps = {}): Promise<void> {
   await quietly(async () => {
     const store = deps.store ?? storeFor(env);
     if (store.kind === "off") return;
-    if (p.userId) await gavePass(store, { userId: p.userId, accountId: p.accountId, callsign: p.callsign, at: p.at });
+    await Promise.all([p.userId ? gavePass(store, { userId: p.userId, accountId: p.accountId, callsign: p.callsign, at: p.at }) : null, countServer(store, { event: "pass_issued", at: p.at })]);
   }, SIDE_JOB_MS);
 }
