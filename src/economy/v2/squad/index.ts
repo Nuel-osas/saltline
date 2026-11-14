@@ -136,7 +136,9 @@ function figureBody(G: Game, seed: number): Body {
   let flinch = 0;
   let kick = 0;
   let falling = -1;
+  let foot = 0;
   const cam = new T.Vector3();
+  const near = () => (G.camera?.getWorldPosition ? G.camera.getWorldPosition(cam).distanceTo(fig.root.position) : Infinity);
   return {
     place(p, dt) {
       const r = fig.root;
@@ -167,6 +169,14 @@ function figureBody(G: Game, seed: number): Body {
         P.tilt = 0.12 * flinch;
         P.swing = 0;
         r.rotation.x = 0;
+        // A footstep each time a foot comes down (twice a stride), quieter with distance and when crouched. The
+        // game's step sound has no position, so distance is all it can tell.
+        const step = Math.floor(P.phase * 2);
+        if (step !== foot) {
+          foot = step;
+          const d = near();
+          if (P.walk > 0.25 && d < 18) G.audio?.play?.("step_concrete", { gain: 0.42 * (1 - d / 18) * (p.crouched ? 0.5 : 1), pitch: 0.92, jitter: 0.07 });
+        }
       }
       // The butt sits in the right shoulder; the rifle points where they look, and jumps when a round goes or one lands.
       const h = fig.at.hips;
@@ -177,7 +187,7 @@ function figureBody(G: Game, seed: number): Body {
       fig.update(dt);
       // The callsign fades with distance, and goes once they are down.
       if (tag) {
-        const d = G.camera?.getWorldPosition ? G.camera.getWorldPosition(cam).distanceTo(r.position) : 0;
+        const d = near();
         tag.material.opacity = falling >= 0 ? 0 : clamp(1 - (d - 28) / 22, 0, 1);
         tag.visible = tag.material.opacity > 0.02;
       }
