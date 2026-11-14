@@ -3,8 +3,8 @@
 > The port's machine kept the only ledger. Then it impounded the town. Go over the fence, take what you can carry,
 > and keep your receipts.
 
-**Play:** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich (Practice: no account, nothing to install, in
-the yard about five seconds after you press Deploy)
+**Play:** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich (Practice: sign in with Google, nothing to
+install, and you're in the yard about five seconds after you press Deploy; a local `npm run dev` needs no sign-in)
 
 | | |
 | --- | --- |
@@ -42,20 +42,20 @@ Design written before the code: [`docs/GAME.md`](docs/GAME.md)
 
 ## Try it: do X, see Y
 
-Steps 1 to 8 use Practice: the whole port runs in the browser, so nothing can fail on the network. Step 9 is the
-chain.
+Steps 1 to 8 use Practice: once you are signed in, the whole port runs in the browser, so nothing can fail on the
+network. Step 9 is the chain.
 
 | # | Do | See |
 | --- | --- | --- |
 | 1 | Open the Play link above | The lobby: your gun in the middle, the modes on the right, the dock's tabs along the foot and one big button. |
-| 2 | Press **Deploy** | About five seconds later you are in the yard. On a first raid you stand at a crate: "HOLD E — TAKE THE RIFLE". |
+| 2 | Press **Sign in**, continue with Google, then press **Deploy** | About five seconds later you are in the yard. On a first raid you stand at a crate: "HOLD E — TAKE THE RIFLE". |
 | 3 | Hold **E** at the crate, then walk to a marked container and hold **E** | The seal is cut and the cargo is added (`CARGO 2/6`). At the top right the invoice rises toward `BAILIFF AT 1,200`. |
 | 4 | Cut the three uplinks (hold **E** at each), then reach the boat | The debrief leads with what you carried out and what it is worth today ("MEDS ×2 · Worth about 123 scrip at Ines's today"), then the port's bill. **Sell haul** opens the dock. |
 | 5 | At the dock, open **Vendors**, press **Sell everything to the best buyer** | Each lot goes to whichever vendor pays most, with that vendor's reason ("Moss holds 3 of the 20 she wants, so she pays over the book."), then what you earned and what it buys next. Sell a unit and the next one pays less. |
 | 6 | Open **Armoury**, pick a frame, press **Build** | The parts and fee are taken, the gun's stats roll one by one, and its grade is stamped. No two come out the same. |
 | 7 | Open **Loadout** | Each gun shows its level ("Lv 4"), earned by the raids it came home from, so it can't be bought. |
 | 8 | Open **Ledger**, press **Fast-forward a week** | 168 hours in about a minute: two charts of what the vendors pay and what Moss, Ines and the Harbormaster hold. |
-| 9 | Open https://saltline-lac.vercel.app/play/?game=v2, press **Deploy**, type a callsign | A dock pass: a NEAR testnet account made for you with no popup. The raid, the haul, every sale and every gun after that are transactions on `v2.saltline.testnet`. |
+| 9 | Open https://saltline-lac.vercel.app/play/?game=v2, sign in with Google, press **Deploy**, type a callsign | A dock pass: a NEAR testnet account made from your sign-in, so it follows you to any device, with no popup or seed phrase. The raid, the haul, every sale and every gun after that are transactions on `v2.saltline.testnet`. |
 
 Controls: WASD and the mouse (click to capture it), left mouse to fire, right mouse to aim, R to reload, E to use,
 G for a breaker charge, F for the rifle butt, Shift to sprint, C to crouch, Esc to pause. Touch screens get
@@ -76,7 +76,7 @@ From the track's starter file,
 | A fast-forward: a week of trading in a minute | Practice → Ledger → **Fast-forward a week** ([`dock/week.ts`](src/economy/v2/dock/week.ts)). |
 | Flood the market and the price falls | A vendor's bid falls unit by unit as its stock rises; the export desk pays less for each unit sold that day. |
 | A merchant that goes broke stops buying | A vendor that can't cover a purchase buys nothing until it sells something. |
-| No seed phrase, wallet popup or gas prompt | A dock pass is an account made in the browser and funded by the dock office. Google sign-in through Privy is built ([`server/auth.ts`](server/auth.ts)) and off on the live site, so nobody has to sign in to try it. |
+| Social login; no seed phrase, wallet popup or gas prompt | Sign in with Google (through Privy). The server checks the sign-in and derives the player's NEAR account from it ([`server/auth.ts`](server/auth.ts)), and the dock office pays for the account's gas. |
 | An economy that moves without a patch | Prices follow stock; the Harbormaster's strength follows what players pay it and halves every 12 hours; no account, the owner's included, can create scrip, parts or guns outside the contract's rules (a contract test checks every public method). |
 
 ## NFTs That Do Something: the guns
@@ -200,7 +200,9 @@ The ones that matter to a player; [`docs/LIMITS.md`](docs/LIMITS.md) has all of 
   during the hackathon). Inside the contract the owner can only pause it. Before mainnet that key goes.
 - **Players fight each other only in Skirmish,** where nothing is at stake: a hit is one browser's word against
   another's.
-- **The guest wallet's key lives in the browser's storage;** clearing it loses the account.
+- **With sign-in, the studio holds the keys** (testnet only): each player's NEAR key is derived on the server from
+  their Google sign-in and one server secret, which is how the same sign-in opens the same account on any device.
+  Whoever holds that secret could sign as any player; a launch would move keys to the login provider's custody.
 - **Not tested** on Safari, Firefox or a real phone.
 
 ## Hackathon disclosure
