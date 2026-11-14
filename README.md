@@ -160,8 +160,20 @@ deploying the contract, and `agents/README.md` covers running the brokers.
 - **Run results come from the client.** The contract enforces the manifest, the carry limit, minimum run times
   (45 s + 8 s a box) and one run at a time, but it can't see the fight. A launch would need a server that checks runs.
 - **The guest wallet's key lives in this browser's storage.** Clearing it loses the account. This is testnet only.
+- **With sign-in on (v2), the studio holds the keys.** A player signs in with Google (through Privy). Their
+  NEAR key is derived on the server from that sign-in and one server secret, which is what lets the same sign-in open
+  the same account on any device, and lets the faucet give one dock pass per sign-in. It also means whoever holds
+  that secret could sign as any player. That is acceptable on testnet only; a launch would move the key to the login
+  provider's own custody. Sign-in is off unless the deployment sets `VITE_PRIVY_APP_ID`, `PRIVY_APP_ID` and
+  `WALLET_SECRET` (see `.env.example`). Where it is on, everyone signs in before they play, the offline Practice game
+  included; a local run without those settings stays open, which is how the smoke and end-to-end scripts run.
 - **The faucet's per-IP limits are kept in memory** on each serverless instance. The lasting guards are one
   registration per account and never funding an account that already exists.
+- **The studio keeps a small database of who signed in and how many came (v2), when one is configured.** One record
+  per sign-in (Privy id, NEAR account, callsign, first and last seen) and daily counts of visits, sign-ins, passes
+  and raids. No email, IP address or key is stored, devices and sign-ins enter the counts only as salted hashes, and
+  the counts a browser reports can be inflated by anyone who posts them. The game never depends on it; it is off
+  until the deployment has a database. [`docs/DATA.md`](docs/DATA.md) lists every key.
 - **Not tested:** Safari, Firefox, touch devices, gamepads, and more than a handful of players at once (the contract
   caps profiles at 500).
 - **Vercel's checkpoint:** a burst of scripted requests can make Vercel show its security checkpoint (HTTP 403) for a

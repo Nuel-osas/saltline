@@ -9,7 +9,12 @@ import { createTestnetChain2 } from "./chain";
 import { startCoach } from "./coach";
 import { resolveV2Config } from "./config";
 import { mountDock } from "./dock";
+import type { Dock } from "./dock/dock";
+import { startHome } from "./home";
 import { startIntro } from "./intro";
+import { type Login, startLogin } from "./login";
+import { sessionUrlFor, withToken } from "./login/session";
+import { metricsUrlFor, startMetrics } from "./metrics";
 import { MOCK2_WARMUP_SECONDS, type MockChain2, createMockChain2, createMockWallet2 } from "./mock";
 import { startRaid } from "./raid";
 import { startTicksV2 } from "./tick";
@@ -31,22 +36,29 @@ const guard = (what: string, fn: () => unknown) => {
   }
 };
 
-/** The chain and wallet for this config: the offline mock, or testnet with the guest wallet. */
-export function buildV2(cfg: EconomyConfig): { v2: V2; mock: MockChain2 | null } {
+/**
+ * The chain and wallet for this config: the offline mock, or testnet with the guest wallet. `token` is the sign-in
+ * token to send with a dock-pass request (login/): absent, or answering null, the request goes without one.
+ */
+export function buildV2(cfg: EconomyConfig, token?: () => Promise<string | null>): { v2: V2; mock: MockChain2 | null; guest: GuestWallet2 | null } {
   const loadout = { weapon: null, plates: 0, charges: 0, mags: 0 };
   if (cfg.mode === "mock") {
     const mock = createMockChain2(cfg.mockSeed, { warmupSeconds: MOCK2_WARMUP_SECONDS });
-    return { v2: { chain: mock, wallet: createMockWallet2(mock), loadout, raid: null }, mock };
+    return { v2: { chain: mock, wallet: createMockWallet2(mock), loadout, raid: null }, mock, guest: null };
   }
   let wallet: GuestWallet2 | null = null;
   const chain = createTestnetChain2({ config: cfg, keys: () => wallet?.signingKey() ?? null });
-  wallet = createGuestWallet2({ faucetUrl: cfg.faucetUrl, lookup: chain });
-  return { v2: { chain, wallet, loadout, raid: null }, mock: null };
+  wallet = createGuestWallet2({ faucetUrl: cfg.faucetUrl, lookup: chain, ...(token ? { fetch: withToken(cfg.faucetUrl, token) } : {}) });
+  return { v2: { chain, wallet, loadout, raid: null }, mock: null, guest: wallet };
 }
 
 export function startV2(G: Game): void {
   const cfg = resolveV2Config(import.meta.env as Record<string, unknown>, typeof location === "undefined" ? "" : location.search);
-  const { v2, mock } = buildV2(cfg);
+  // Sign-in is on when the build names a Privy app (VITE_PRIVY_APP_ID). Everyone signs in before they play, Practice
+  // (the offline mock) included; there the sign-in only opens the door, because there is no wallet to fetch.
+  const privyAppId = typeof import.meta.env.VITE_PRIVY_APP_ID === "string" ? import.meta.env.VITE_PRIVY_APP_ID.trim() : "";
+  let login: Login | null = null;
+  const { v2, mock, guest } = buildV2(cfg, async () => login?.token() ?? null);
   G.v2 = v2;
   if (mock) {
     setInterval(() => {
@@ -57,14 +69,25 @@ export function startV2(G: Game): void {
   // On testnet, wake Moss, Ines and the Harbormaster when someone plays (server/tick.ts runs one round at most
   // every 10 minutes): the characters act because players are there, with no scheduler to keep alive.
   if (!mock) guard("ticks", () => startTicksV2(cfg.faucetUrl, G.events));
+  // The studio's numbers (docs/DATA.md): a beacon for a visit, a sign-in, the dock and a raid's start and end, sent
+  // only once a person is there. Started before the parts it listens to, so it hears their first events. It is
+  // silent, and nothing below waits on it or reads from it (G.metrics).
+  guard("metrics", () => startMetrics(G, { url: metricsUrlFor(cfg.faucetUrl), offline: !!mock, token: async () => login?.token() ?? null }));
 
   guard("arsenal", () => startArsenal(G)); // breaker charge, rifle butt, pickups (G.arsenal)
   guard("bailiff", () => startBailiff(G)); // the hunter (G.bailiff)
   guard("score", () => startScore(G)); // the music (G.score)
   guard("intro", () => startIntro(G)); // the opening film on the first DEPLOY, and the drop point it leaves (G.intro)
   guard("raid", () => startRaid(G)); // sign-on, the owned gun in the shooter, loot, the invoice and its thresholds (G.raid)
-  guard("dock", () => mountDock(G)); // the hub: loadout, armoury, market, vendors, the ledger
+  let dock: Dock | null = null;
+  guard("dock", () => Promise.resolve(mountDock(G)).then((d) => void (dock = d ?? null))); // the hub: loadout, armoury, market, vendors, the ledger
   guard("coach", () => startCoach(G)); // the rifle in its crate, the first raid's checklist, the once-ever moments (G.coach)
+
+  // Last, so its lock wraps the raid's own start: nobody deploys or opens the dock before signing on (G.login).
+  if (privyAppId) guard("login", () => void (login = startLogin(G, { appId: privyAppId, sheet: true, ...(guest ? { sessionUrl: sessionUrlFor(cfg.faucetUrl), wallet: guest } : {}) })));
+  // The start screen: a lobby over the title card (G.home). Its buttons press the title's own, so everything above
+  // starts as it did.
+  guard("home", () => startHome(G, { v2, offline: !!mock, login: () => login, dock: () => dock }));
 
   console.info(cfg.mode === "mock" ? "[v2] offline mock: not the chain" : `[v2] testnet, contract ${cfg.contractId}`);
   G.events?.emit("v2:ready", v2);

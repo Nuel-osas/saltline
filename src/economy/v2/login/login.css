@@ -1,0 +1,35 @@
+/* login.css: the sign-on panel on the title (v2's sign-in gate, login/index.ts). ui.css's language: square corners,
+   letter-spaced Barlow labels, Plex Mono for what the player types. Class prefix lg-. */
+
+/* Locked: nobody deploys or opens the dock before signing on. */
+#app.lg-locked .m-screen[data-s="title"] [data-act="deploy"],
+#app.lg-locked .m-screen[data-s="title"] .d2-entry,
+#app.lg-locked .m-screen[data-s="title"] .co-howto,
+#app.lg-locked .st-replay { display: none !important; }
+
+.lg { max-width: 540px; margin: 18px 0 14px; pointer-events: auto; }
+.lg[data-state="in"] { margin: 0 0 12px; }
+.lg p { margin: 0; }
+.lg-k { display: flex; align-items: center; gap: 10px; font: 600 12px/1 var(--f-label); letter-spacing: .26em; text-transform: uppercase; color: var(--signal); padding-bottom: 10px; }
+.lg-k::before { content: ""; width: 18px; height: 2px; background: var(--signal); }
+.lg-line { font: 500 17px/1.4 var(--f-label); color: var(--bone); padding-bottom: 12px; max-width: 46ch; text-shadow: var(--shadow); }
+.lg-line b { font: 500 14px/1 var(--f-mono); }
+.lg-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.lg .btn { min-height: 50px; }
+.lg-google { flex: 1 1 100%; justify-content: center; }
+.lg-note { font: 400 13px/1.45 var(--f-mono); color: var(--signal-hot); padding: 2px 0 10px; text-shadow: var(--shadow); }
+.lg-wait { font: 400 13px/1.45 var(--f-mono); color: var(--bone-dim); padding-bottom: 14px; }
+.lg-link { background: none; border: 0; padding: 0; font: 600 12px/1.4 var(--f-label); letter-spacing: .18em; text-transform: uppercase; color: var(--bone-dim); text-decoration: underline; text-underline-offset: 4px; cursor: pointer; }
+.lg-link:hover { color: var(--signal); }
+.lg-in { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 600 12px/1 var(--f-label); letter-spacing: .2em; text-transform: uppercase; color: var(--bone-dim); }
+.lg-in i { width: 7px; height: 7px; border-radius: 50%; background: var(--signal); }
+.lg-in b { color: var(--bone); font: 500 13px/1 var(--f-mono); letter-spacing: 0; text-transform: none; }
+.lg-in .lg-link { margin-left: 8px; }
+
+/* Sheet mode (the lobby): the same form in a dialog over the game. */
+.lg-sheet { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; padding: 20px; background: rgba(4, 5, 6, .72); pointer-events: auto; }
+.lg-sheet[hidden] { display: none; }
+.lg-box { position: relative; width: min(560px, 100%); background: linear-gradient(180deg, rgba(26, 30, 34, .98), rgba(13, 15, 17, .98) 72%); border: 1px solid var(--line); border-top: 3px solid var(--signal); padding: 26px 26px 22px; }
+.lg-box .lg { margin: 0; max-width: none; }
+.lg-shut { position: absolute; top: 8px; right: 10px; width: 40px; height: 40px; background: none; border: 0; color: var(--bone-dim); font: 400 26px/1 var(--f-label); cursor: pointer; }
+.lg-shut:hover { color: var(--signal); }

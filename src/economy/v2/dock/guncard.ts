@@ -4,7 +4,7 @@
 // contract says it is worth. Where it is (stash, market, wreck, impound) is stamped on it in plain words.
 import { h } from "../../dockside/dom";
 import { fmt } from "../../dockside/format";
-import { CONDITION, effective, FRAMES, ISSUE, LOWER_IS_BETTER, MODS, STAT_KEYS } from "../items";
+import { CONDITION, effective, FRAMES, gunLevel, ISSUE, LOWER_IS_BETTER, MODS, STAT_KEYS } from "../items";
 import type { FrameId, Grade, ModId, Stats, Weapon, WeaponState } from "../types";
 import { gunArt } from "./gunart";
 import { scripEl } from "./store";
@@ -92,6 +92,21 @@ export function conditionEl(condition: number): HTMLElement {
   );
 }
 
+/** The gun's level: what it is, how far to the next, and what it adds. Earned by raids brought home, kept on resale. */
+export function levelEl(extractions: number): HTMLElement {
+  const l = gunLevel(extractions);
+  const left = l.need - l.into;
+  return h(
+    "div",
+    { class: "d2-lv", "data-level": String(l.level), "data-max": l.max ? "1" : null },
+    h("span", { class: "d2-lv-k" }, "Level"),
+    h("b", { class: "d2-lv-n" }, String(l.level)),
+    h("span", { class: "d2-lv-bar", "aria-hidden": "true" }, h("i", { style: `width:${Math.round((l.into / l.need) * 100)}%` })),
+    h("em", null, l.max ? `${l.name} · top level` : `${l.name} · ${left} more ${left === 1 ? "raid" : "raids"} home to level ${l.level + 1}`),
+    h("span", { class: "d2-lv-b" }, l.bonusPct ? `+${l.bonusPct}% damage · −${l.bonusPct}% recoil and reload` : "It levels up as it comes home from raids"),
+  );
+}
+
 export function slotsEl(mods: readonly ModId[]): HTMLElement {
   return h(
     "div",
@@ -142,7 +157,7 @@ export function gunCard(w: Weapon, o: CardOpts = {}): HTMLElement {
     ),
     h("div", { class: "d2-gun-art" }, gunArt(w.frame, w.mods), h("span", { class: "d2-serial" }, w.serial), h("span", { class: "d2-state", "data-state": w.state }, o.tag ?? STATE_WORDS[w.state])),
     h("div", { class: "d2-stats" }, ...STAT_KEYS.map((k) => statRow(w.frame, k, w.stats[k], eff[k]))),
-    h("div", { class: "d2-gun-kit" }, conditionEl(w.condition), slotsEl(w.mods)),
+    h("div", { class: "d2-gun-kit" }, levelEl(w.extractions), conditionEl(w.condition), slotsEl(w.mods)),
     h("p", { class: "d2-history" }, historyLine(w, o.me)),
     o.sales !== undefined
       ? h(
@@ -209,7 +224,7 @@ export function gunTile(w: Weapon, o: TileOpts = {}): HTMLElement {
       onclick: o.onclick ?? null,
     },
     h("span", { class: "d2-tile-g", "data-grade": w.grade }, w.grade),
-    h("span", { class: "d2-tile-n" }, h("b", null, frameWord(w.frame)), h("i", null, o.sub ?? `${w.serial} · ${STATE_SHORT[w.state]}`)),
+    h("span", { class: "d2-tile-n" }, h("b", null, frameWord(w.frame)), h("i", null, o.sub ?? `Lv ${gunLevel(w.extractions).level} · ${w.serial} · ${STATE_SHORT[w.state]}`)),
     h("span", { class: "d2-tile-art" }, gunArt(w.frame, w.mods)),
     h("span", { class: "d2-tile-c", "data-state": w.condition <= 0 ? "dead" : w.condition < CONDITION.worn ? "worn" : "ok" }, h("i", { style: `width:${w.condition}%` })),
     h("span", { class: "d2-tile-v" }, o.figure ?? fmt(w.value)),

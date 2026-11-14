@@ -91,3 +91,10 @@
     display: none;
   }
 }
+
+/* The kit's two touch buttons (touch.ts), in the game's touch layer and its style (ui.css .t-btn). They sit in the
+   gaps of the right-hand cluster: the charge left of Aim on the bottom row, the rifle butt above Reload. */
+.t-charge { width: 56px; height: 56px; right: calc(194px + var(--sar)); bottom: calc(26px + var(--sab)); border-color: var(--signal); color: var(--signal); }
+.t-charge i { position: absolute; right: -4px; top: -4px; min-width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--signal); color: #0b0b0a; font: 700 11px/1 var(--f-mono); font-style: normal; pointer-events: none; }
+.t-charge.empty { opacity: .4; }
+.t-butt { width: 54px; height: 54px; right: calc(98px + var(--sar)); bottom: calc(194px + var(--sab)); }
