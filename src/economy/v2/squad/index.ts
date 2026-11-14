@@ -6,10 +6,12 @@
 // What this is not: a shared raid. Your machines, your containers and your invoice are still yours alone, and nothing
 // here touches the chain.
 //
-// Shooting each other is on in Practice and nowhere else (`pvp`). A hit is the shooter's browser telling the other
-// player's browser "I hit you", and the one who was hit decides whether to believe it (model.ts HitGate). That is one
-// browser's word against another's. In Practice nothing real is at stake, so a liar gains nothing. In a raid on the
-// chain a death costs a real gun, so there players can see each other and no more, until a hit can be trusted.
+// Shooting each other is on in Skirmish and nowhere else (`pvp`). Skirmish is the offline practice game in a yard of
+// its own, which the player picks in the lobby, so nobody learning in Practice is shot by a stranger. A hit is the
+// shooter's browser telling the other player's browser "I hit you", and the one who was hit decides whether to
+// believe it (model.ts HitGate). That is one browser's word against another's. In Skirmish nothing real is at stake,
+// so a liar gains nothing. In a raid on the chain a death costs a real gun, so there players can see each other and
+// no more, until a hit can be trusted.
 //
 // It is off for an automated browser (the smoke and end-to-end runs must not reach out to public relays) and with
 // `?squad=0`; `?squad=1` forces it on.
@@ -29,7 +31,7 @@ export interface SquadOptions {
   callsign: () => string;
   /** The frame of the gun in hand, or "issue". */
   frame: () => string;
-  /** Players can shoot each other. Only where nothing is at stake: Practice. */
+  /** Players can shoot each other. Only where the player chose it and nothing is at stake: Skirmish. */
   pvp?: boolean;
   connect?: Connect;
   /** Registers something this player's shots can hit (hooks.ts); tests give their own. */
@@ -170,7 +172,7 @@ export function startSquad(G: Game, opts: SquadOptions): Squad {
       onLeave(peerId) {
         drop(peerId);
       },
-      // Another player says their shot met this one. This browser decides (HitGate); only in Practice.
+      // Another player says their shot met this one. This browser decides (HitGate); only in Skirmish.
       onHit(peerId, raw) {
         const p = peers.get(peerId);
         const pl = G.player;
@@ -258,7 +260,12 @@ export function startSquad(G: Game, opts: SquadOptions): Squad {
     }
     const names = draw.map((p) => p.track.state!.c);
     if (!note.hidden && t > noteUntil) note.hidden = true;
-    const text = names.length ? `Live${pvp ? " · PvP" : ""} · ${names.length} ${names.length === 1 ? "breacher" : "breachers"} in your yard: ${names.slice(0, 4).join(", ")}${names.length > 4 ? "…" : ""}` : "";
+    // In Skirmish the line shows even when the yard is empty, so a player waiting for someone knows fighting is on.
+    const text = names.length
+      ? `Live${pvp ? " · PvP" : ""} · ${names.length} ${names.length === 1 ? "breacher" : "breachers"} in your yard: ${names.slice(0, 4).join(", ")}${names.length > 4 ? "…" : ""}`
+      : pvp && playing() && net
+        ? "Live · PvP · nobody else in the yard yet"
+        : "";
     if (text !== shown) ((shown = text), (chip.textContent = text), (chip.hidden = !text));
   }
 
