@@ -3,13 +3,19 @@
 //
 // What this is: you see each other. Each browser tells the others where its player is ten times a second, directly
 // (net.ts), and draws a figure for everyone it hears from (the opening film's figures, intro/figure.ts).
-// What this is not: a shared raid. Your machines, your containers and your invoice are still yours alone; another
-// breacher can't hit you, be hit, or take what you cut. Nothing here touches the chain.
+// What this is not: a shared raid. Your machines, your containers and your invoice are still yours alone, and nothing
+// here touches the chain.
+//
+// Shooting each other is on in Practice and nowhere else (`pvp`). A hit is the shooter's browser telling the other
+// player's browser "I hit you", and the one who was hit decides whether to believe it (model.ts HitGate). That is one
+// browser's word against another's. In Practice nothing real is at stake, so a liar gains nothing. In a raid on the
+// chain a death costs a real gun, so there players can see each other and no more, until a hit can be trusted.
 //
 // It is off for an automated browser (the smoke and end-to-end runs must not reach out to public relays) and with
 // `?squad=0`; `?squad=1` forces it on.
 import { createFigure, type Figure } from "../intro/figure";
-import { LIMITS, Track, encode, nearest, sanitize } from "./model";
+import { hooks } from "../../hooks";
+import { HitGate, LIMITS, PVP, Track, encode, nearest, rayHitsFigure, sanitize } from "./model";
 import { type Connect, type Net, connect as realConnect } from "./net";
 import "./squad.css";
 
@@ -23,7 +29,11 @@ export interface SquadOptions {
   callsign: () => string;
   /** The frame of the gun in hand, or "issue". */
   frame: () => string;
+  /** Players can shoot each other. Only where nothing is at stake: Practice. */
+  pvp?: boolean;
   connect?: Connect;
+  /** Registers something this player's shots can hit (hooks.ts); tests give their own. */
+  addShotTarget?: (fn: (origin: any, dir: any, max: number) => { dist: number } | null) => () => void;
   /** Builds a peer's figure; tests give a stand-in with no 3D. */
   body?: (G: Game, seed: number) => Body;
   now?: () => number;
@@ -122,6 +132,21 @@ export function startSquad(G: Game, opts: SquadOptions): Squad {
   let sendIn = 0;
   let last = { x: 0, z: 0 };
   let shown = "";
+  const pvp = !!opts.pvp;
+  const gate = new HitGate();
+  /** When this player last told each breacher they were hit, and who is down (and until when nothing from them is drawn). */
+  const lastHitOn = new Map<string, number>();
+  const downUntil = new Map<string, number>();
+  const note = document.createElement("div");
+  note.className = "sq-note";
+  note.hidden = true;
+  document.getElementById("ui")?.append(note);
+  let noteUntil = 0;
+  const say = (text: string) => {
+    note.textContent = text;
+    note.hidden = false;
+    noteUntil = now() + 2600;
+  };
 
   const playing = () => G.game?.state === "playing";
 
@@ -132,6 +157,8 @@ export function startSquad(G: Game, opts: SquadOptions): Squad {
       onState(peerId, raw) {
         const s = sanitize(raw);
         if (!s || typeof peerId !== "string" || peerId.length > 80) return;
+        if ((downUntil.get(peerId) ?? 0) > now()) return; // just dropped: they are drawn again when they are back in a raid
+        downUntil.delete(peerId);
         let p = peers.get(peerId);
         if (!p) {
           if (peers.size >= LIMITS.peers * 4) return; // a room far past what is drawn: stop taking new names
@@ -143,17 +170,60 @@ export function startSquad(G: Game, opts: SquadOptions): Squad {
       onLeave(peerId) {
         drop(peerId);
       },
+      // Another player says their shot met this one. This browser decides (HitGate); only in Practice.
+      onHit(peerId, raw) {
+        const p = peers.get(peerId);
+        const pl = G.player;
+        if (!pvp || !playing() || !p || !pl?.pos || p.track.stale(now())) return;
+        const from = p.track.state!;
+        const damage = gate.accept(peerId, raw, now(), Math.hypot(from.x - pl.pos.x, from.z - pl.pos.z));
+        if (!damage) return;
+        const src = G.THREE?.Vector3 ? new G.THREE.Vector3(from.x, from.y + 1.4, from.z) : { x: from.x, y: from.y + 1.4, z: from.z };
+        pl.damage?.(damage, src);
+        say(`Hit by ${from.c}`);
+        if (Number(pl.health) <= 0) (net?.ko(peerId), say(`Dropped by ${from.c}`));
+      },
+      // A breacher says this player's hit dropped them. Believed only from someone this player has just hit: the
+      // figure goes, so a player who could say it freely could make themselves impossible to see or shoot.
+      onKo(peerId) {
+        const p = peers.get(peerId);
+        const hitAt = lastHitOn.get(peerId);
+        if (!pvp || !p?.track.state || hitAt === undefined || now() - hitAt > PVP.koWithinMs) return;
+        say(`You dropped ${p.track.state.c}`);
+        lastHitOn.delete(peerId);
+        downUntil.set(peerId, now() + PVP.downMs);
+        drop(peerId);
+      },
     })
       .then((n) => (stopped ? n.leave() : (net = n)))
       .catch((e) => console.info("[squad] couldn't reach the other breachers:", (e as Error)?.message ?? e))
       .finally(() => (joining = false));
   }
 
+  // This player's shots: the nearest drawn breacher the ray meets is told, with what the gun in hand does.
+  const removeTarget = pvp
+    ? (opts.addShotTarget ?? ((fn) => hooks(G).addShotTarget(fn)))((origin, dir, max) => {
+        if (!playing() || !net) return null;
+        let best: { dist: number; head: boolean; id: string; name: string } | null = null;
+        for (const p of peers.values()) {
+          const at = p.body ? p.track.at(now()) : null;
+          const h: { dist: number; head: boolean } | null = at ? rayHitsFigure(origin, dir, best ? best.dist : max, at) : null;
+          if (h) best = { ...h, id: p.id, name: p.track.state!.c };
+        }
+        if (!best) return null;
+        net.hit(best.id, Math.min(PVP.maxDamage, Math.round((Number(G.weapon?.damage) || 20) * (best.head ? PVP.headMult : 1))));
+        lastHitOn.set(best.id, now());
+        say(best.head ? `Headshot · ${best.name}` : `Hit · ${best.name}`);
+        return { dist: best.dist };
+      })
+    : null;
+
   function drop(id: string) {
     const p = peers.get(id);
     if (!p) return;
     p.body?.dispose();
     peers.delete(id);
+    lastHitOn.delete(id);
   }
 
   function update(dt: number) {
@@ -187,7 +257,8 @@ export function startSquad(G: Game, opts: SquadOptions): Squad {
       p.body.place(at, dt);
     }
     const names = draw.map((p) => p.track.state!.c);
-    const text = names.length ? `Live · ${names.length} ${names.length === 1 ? "breacher" : "breachers"} in your yard: ${names.slice(0, 4).join(", ")}${names.length > 4 ? "…" : ""}` : "";
+    if (!note.hidden && t > noteUntil) note.hidden = true;
+    const text = names.length ? `Live${pvp ? " · PvP" : ""} · ${names.length} ${names.length === 1 ? "breacher" : "breachers"} in your yard: ${names.slice(0, 4).join(", ")}${names.length > 4 ? "…" : ""}` : "";
     if (text !== shown) ((shown = text), (chip.textContent = text), (chip.hidden = !text));
   }
 
@@ -212,9 +283,11 @@ export function startSquad(G: Game, opts: SquadOptions): Squad {
       stopped = true;
       cancelAnimationFrame(frame);
       for (const id of [...peers.keys()]) drop(id);
+      removeTarget?.();
       net?.leave();
       net = null;
       chip.remove();
+      note.remove();
     },
   };
   G.squad = squad;

@@ -121,3 +121,73 @@ export function nearest<T extends { track: Track }>(peers: readonly T[], me: { x
     .slice(0, LIMITS.peers)
     .map((e) => e.p);
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Shooting each other (Practice only: squad/index.ts says why).
+
+interface P3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** A figure as three spheres, feet at `at`: legs, chest and head. Sizes in metres. */
+const BODY: readonly { y: number; r: number; head: boolean }[] = [
+  { y: 0.45, r: 0.34, head: false },
+  { y: 1.08, r: 0.42, head: false },
+  { y: 1.63, r: 0.21, head: true },
+];
+
+/** Where a shot from `origin` along `dir` (a unit vector) first meets a figure standing at `at`, within `max`. */
+export function rayHitsFigure(origin: P3, dir: P3, max: number, at: P3): { dist: number; head: boolean } | null {
+  let best: { dist: number; head: boolean } | null = null;
+  for (const s of BODY) {
+    const ox = origin.x - at.x;
+    const oy = origin.y - (at.y + s.y);
+    const oz = origin.z - at.z;
+    const b = ox * dir.x + oy * dir.y + oz * dir.z;
+    const disc = b * b - (ox * ox + oy * oy + oz * oz - s.r * s.r);
+    if (disc < 0) continue;
+    const t = -b - Math.sqrt(disc);
+    if (t < 0 || t > max || (best && t >= best.dist)) continue;
+    best = { dist: t, head: s.head };
+  }
+  return best;
+}
+
+export const PVP = {
+  /** A hit to the head does this much more. */
+  headMult: 1.6,
+  /** The most one hit is believed to do, whatever the message says. */
+  maxDamage: 95,
+  /** The most hits a second believed from one player: no gun in the game fires faster than 17 a second. */
+  maxHitsPerSecond: 18,
+  /** A hit claimed from further off than any gun reaches is not believed. */
+  maxRange: 480,
+  /** "Your hit dropped me" is believed only this soon after this player's last hit on them (ms). */
+  koWithinMs: 2000,
+  /** A dropped breacher isn't drawn again for this long, so their last updates in flight don't stand them back up (ms). */
+  downMs: 1500,
+} as const;
+
+/**
+ * Which claimed hits a player's own browser believes. The one being shot decides: a hit must come from a breacher
+ * who is being heard from and is within any gun's reach, do no more than a gun can, and arrive no faster than a
+ * gun fires. It is still that browser's word against another's, which is why this runs only where nothing is at
+ * stake.
+ */
+export class HitGate {
+  private recent = new Map<string, number[]>();
+
+  /** The damage to apply, or 0 to ignore the claim. */
+  accept(peerId: string, raw: unknown, now: number, distance: number | null): number {
+    const d = raw && typeof raw === "object" ? (raw as { d?: unknown }).d : null;
+    if (typeof d !== "number" || !Number.isFinite(d) || d < 1) return 0;
+    if (distance === null || !(distance <= PVP.maxRange)) return 0;
+    const times = (this.recent.get(peerId) ?? []).filter((t) => now - t < 1000);
+    if (times.length >= PVP.maxHitsPerSecond) return (this.recent.set(peerId, times), 0);
+    times.push(now);
+    this.recent.set(peerId, times);
+    return Math.min(PVP.maxDamage, Math.round(d));
+  }
+}

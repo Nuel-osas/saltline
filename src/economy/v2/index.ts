@@ -106,6 +106,7 @@ export function startV2(G: Game): void {
     guard("squad", () =>
       startSquad(G, {
         room: mock ? "yard-practice-v1" : `yard-${cfg.contractId}`,
+        pvp: !!mock, // shooting each other only where nothing is at stake (squad/index.ts says why)
         callsign: () => callsign,
         frame: () => (G.v2?.raid?.weapon ? String((G.v2.raid.weapon as { frame?: string }).frame ?? "issue") : "issue"),
       }),
