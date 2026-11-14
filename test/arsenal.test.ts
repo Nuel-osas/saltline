@@ -324,8 +324,8 @@ describe("the rifle butt", () => {
 describe("pickups", () => {
   const full = { health: 100, maxHealth: 100, reserve: TUNE.pickup.reserveCap, charges: 3 };
 
-  it("gives 30 rounds, 35 health or one charge, and refuses what can't be carried", () => {
-    expect(pickupAmount("ammo", { ...full, reserve: 150 })).toBe(30);
+  it("gives 45 rounds, 35 health or one charge, and refuses what can't be carried", () => {
+    expect(pickupAmount("ammo", { ...full, reserve: 150 })).toBe(45);
     expect(pickupAmount("ammo", { ...full, reserve: 225 })).toBe(15);
     expect(pickupAmount("ammo", full)).toBe(0);
     expect(pickupAmount("med", { ...full, health: 40 })).toBe(35);
@@ -352,7 +352,7 @@ describe("pickups", () => {
     expect(a.pickups).toHaveLength(3);
     G.player.pos.x = 3.9;
     a.update(0.016);
-    expect(G.weapon.reserve).toBe(180);
+    expect(G.weapon.reserve).toBe(195);
     G.player.pos.x = 10;
     a.update(0.016);
     expect(G.player.health).toBe(85);
@@ -361,11 +361,11 @@ describe("pickups", () => {
     expect(a.charges()).toBe(2);
     expect(a.pickups).toHaveLength(0);
     expect(named(sent, "pickup:taken")).toEqual([
-      { kind: "ammo", amount: 30 },
+      { kind: "ammo", amount: 45 },
       { kind: "med", amount: 35 },
       { kind: "charge", amount: 1 },
     ]);
-    expect(feed).toEqual(["<b>+30</b> ROUNDS", "<b>+35</b> HEALTH", "<b>+1</b> BREAKER CHARGE"]);
+    expect(feed).toEqual(["<b>+45</b> ROUNDS", "<b>+35</b> HEALTH", "<b>+1</b> BREAKER CHARGE"]);
   });
 
   it("stay on the ground at full health, a full reserve and three charges, until there's room", () => {
@@ -391,12 +391,14 @@ describe("pickups", () => {
 
   it("drop from dead machines at the spec's odds", () => {
     expect(dropFor("hound", 0)).toBe("ammo");
-    expect(dropFor("hound", 0.349)).toBe("ammo");
-    expect(dropFor("hound", 0.35)).toBeNull();
-    expect(dropFor("gull", 0.119)).toBe("ammo");
-    expect(dropFor("gull", 0.12)).toBe("med");
-    expect(dropFor("gull", 0.199)).toBe("med");
-    expect(dropFor("gull", 0.2)).toBeNull();
+    expect(dropFor("hound", 0.549)).toBe("ammo");
+    expect(dropFor("hound", 0.55)).toBe("med");
+    expect(dropFor("hound", 0.649)).toBe("med");
+    expect(dropFor("hound", 0.65)).toBeNull();
+    expect(dropFor("gull", 0.219)).toBe("ammo");
+    expect(dropFor("gull", 0.22)).toBe("med");
+    expect(dropFor("gull", 0.359)).toBe("med");
+    expect(dropFor("gull", 0.36)).toBeNull();
     expect(dropFor("assessor", 0)).toBeNull();
     const rnd = seeded(20261113);
     const n = 20000;
@@ -406,19 +408,19 @@ describe("pickups", () => {
         const d = dropFor(type, rnd());
         if (d === "ammo" || d === "med") got[type][d]++;
       }
-    expect(got.hound.ammo / n).toBeCloseTo(0.35, 1);
-    expect(got.hound.med).toBe(0);
-    expect(got.gull.ammo / n).toBeCloseTo(0.12, 1);
-    expect(got.gull.med / n).toBeCloseTo(0.08, 1);
+    expect(got.hound.ammo / n).toBeCloseTo(0.55, 1);
+    expect(got.hound.med / n).toBeCloseTo(0.1, 1);
+    expect(got.gull.ammo / n).toBeCloseTo(0.22, 1);
+    expect(got.gull.med / n).toBeCloseTo(0.14, 1);
   });
 
   it("land under a dead machine, from the module's seeded rolls", () => {
-    const rolls = [0.1, 0.5, 0.9, 0.15, 0.5, 0.99];
+    const rolls = [0.1, 0.5, 0.9, 0.3, 0.5, 0.99];
     const { G, emit } = fakeGame();
     const a = make(G, { rng: () => rolls.shift() ?? 0.99 });
     emit("enemy:killed", { type: "gull", pos: { x: 4, y: 6, z: 2 } }); // 0.10: ammo
     emit("enemy:killed", { type: "hound", pos: { x: 8, y: 0, z: 2 } }); // 0.90: nothing (0.5 was the gull's bearing)
-    emit("enemy:killed", { type: "gull", pos: { x: 12, y: 5, z: 2 } }); // 0.15: med
+    emit("enemy:killed", { type: "gull", pos: { x: 12, y: 5, z: 2 } }); // 0.30: med
     emit("enemy:killed", { type: "gull", pos: { x: 16, y: 5, z: 2 } }); // 0.99: nothing
     expect(a.pickups.map((p) => p.kind)).toEqual(["ammo", "med"]);
     expect(a.pickups[0]).toMatchObject({ x: 4, y: 6, z: 2, locker: null });
@@ -478,7 +480,7 @@ describe("supply lockers", () => {
     G.player.pos.x = l.x + Math.sin(l.yaw) * 0.7;
     G.player.pos.z = l.z + Math.cos(l.yaw) * 0.7;
     a.update(0.016);
-    expect(G.weapon.reserve).toBe(180);
+    expect(G.weapon.reserve).toBe(195);
     expect(a.lockers.find((x) => x.id === l.id)!.taken).toBe(true);
     expect(a.pickups).toHaveLength(3);
   });
