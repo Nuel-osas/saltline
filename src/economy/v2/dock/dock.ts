@@ -18,6 +18,7 @@ import { createMarket } from "./market";
 import { createPass } from "./pass";
 import { emptyReads, MAY_SETTLE, okv, READ_KEYS, type ActSpec, type Ctx, type NoteState, type ReadKey } from "./store";
 import { createVendors } from "./vendors";
+import { haulOf } from "./haul";
 
 export interface GameLike {
   events?: { on(name: string, fn: (e: never) => void): unknown; emit(name: string, e?: unknown): void };
@@ -47,7 +48,8 @@ const NEEDS: Record<Tab, ReadKey[]> = {
   loadout: ["weapons"],
   armoury: ["weapons"],
   market: ["listings", "weapons", "economy"],
-  vendors: ["vendors", "exportPrices"],
+  // The listings and guns name the next step after a sale (a gun that can now be bought).
+  vendors: ["vendors", "exportPrices", "listings"],
   ledger: ["impound", "economy"],
 };
 const ALWAYS: ReadKey[] = ["profile", "balances", "harbormaster", "recent"];
@@ -67,7 +69,8 @@ export interface Dock {
   readonly tab: Tab;
   readonly ctx: Ctx;
   readonly deployGate: DeployGate;
-  open(from?: Origin): Promise<void>;
+  /** Opens from a card, on `tab` when given (the debrief's SELL HAUL opens on the vendors). */
+  open(from?: Origin, tab?: Tab): Promise<void>;
   close(): void;
   deploy(): void;
   setTab(t: Tab): void;
@@ -201,6 +204,7 @@ export function createDock(G: GameLike, v2: V2, opts: DockOptions = {}): Dock {
     act,
     note,
     render: () => paint(),
+    go: (t) => setTab(t),
     emit,
     revealMs: opts.revealMs ?? (reducedMotion() ? 0 : 420),
   };
@@ -284,10 +288,38 @@ export function createDock(G: GameLike, v2: V2, opts: DockOptions = {}): Dock {
     flag.hidden = !imp?.length;
     if (imp?.length) text(flag, String(imp.length));
     for (const [o, b] of entryButtons) {
+      const sell = o === "complete" && registered === true && haulOf(okv(reads.balances)).length > 0;
+      if (o === "complete") sellMode(b, sell);
       const n = b.querySelector(".d2-entry-n");
       // The title's row is tight, so its button is the one word; the cards have room for what's in the purse.
-      if (n) text(n, o !== "title" && registered && scrip != null ? `${fmt(scrip)} scrip` : "");
+      if (n) text(n, !sell && o !== "title" && registered && scrip != null ? `${fmt(scrip)} scrip` : "");
     }
+  }
+  /**
+   * The debrief's way in. With cargo in the stash it is SELL HAUL, the card's one primary button, first, and it opens
+   * on the vendors; REDEPLOY steps back to secondary. With nothing to sell it is the plain DOCK button under REDEPLOY.
+   */
+  function sellMode(b: HTMLButtonElement, on: boolean) {
+    if ((b.dataset.sell === "1") === on) return;
+    b.dataset.sell = on ? "1" : "";
+    b.classList.toggle("primary", on);
+    b.classList.toggle("d2-sell", on);
+    text(b.querySelector("span")!, on ? "Sell haul" : "Dock");
+    const red = b.parentElement?.querySelector<HTMLButtonElement>('[data-act="redeploy"]');
+    if (!red) return;
+    // The coach's pointer line sits just above this button: it moves with it.
+    const prev = b.previousElementSibling;
+    const moving = [prev?.classList.contains("co-dock") ? prev : null, b].filter(Boolean) as Element[];
+    if (on) red.before(...moving);
+    else red.after(...moving);
+    red.classList.toggle("primary", !on);
+    red.classList.toggle("d2-second", on);
+    if (on && document.activeElement === red)
+      try {
+        b.focus({ preventScroll: true });
+      } catch {
+        /* best effort */
+      }
   }
   function paint() {
     paintMe();
@@ -433,11 +465,13 @@ export function createDock(G: GameLike, v2: V2, opts: DockOptions = {}): Dock {
   let poll: ReturnType<typeof setInterval> | null = null;
   const playable = () => !G.game?.state || ORIGINS.includes(G.game.state as Origin);
 
-  async function open(from?: Origin) {
+  async function open(from?: Origin, on?: Tab) {
     if (isOpen) return;
     const state = G.game?.state ?? "title";
     const o = from ?? (ORIGINS.includes(state as Origin) ? (state as Origin) : null);
     if (!o || !playable()) return; // never mid-raid
+    if (on) setTab(on);
+    screens.vendors.fresh();
     show(o);
     await checkGate();
   }
@@ -567,7 +601,7 @@ export function createDock(G: GameLike, v2: V2, opts: DockOptions = {}): Dock {
       if (entryButtons.get(o)?.isConnected) continue;
       const host = menus.querySelector<HTMLElement>(`[data-s="${o}"] .m-actions`);
       if (!host) continue;
-      const b = h("button", { class: "btn d2-entry", type: "button", "data-d2": o, onclick: () => void open(o) }, h("span", null, "Dock"), h("b", { class: "d2-entry-n" }));
+      const b: HTMLButtonElement = h("button", { class: "btn d2-entry", type: "button", "data-d2": o, onclick: () => void open(o, b.dataset.sell === "1" ? "vendors" : undefined) }, h("span", null, "Dock"), h("b", { class: "d2-entry-n" }));
       // On the title it sits right after DEPLOY; on the cards it goes under their own button.
       const deployB = o === "title" ? host.querySelector('[data-act="deploy"]') : null;
       if (deployB) deployB.after(b);
@@ -597,6 +631,8 @@ export function createDock(G: GameLike, v2: V2, opts: DockOptions = {}): Dock {
     if (registered) await load("balances");
     paintMe();
   }
+  // The raid's haul landing changes what the debrief's button offers: read the stash again then.
+  const offStash = G.events?.on("stash:changed", (() => void quiet()) as never);
   void quiet();
   const quietTimer = setInterval(() => void quiet(), 30000);
 
@@ -624,6 +660,7 @@ export function createDock(G: GameLike, v2: V2, opts: DockOptions = {}): Dock {
       if (noteTimer) clearTimeout(noteTimer);
       deployGate.dispose();
       if (typeof offState === "function") (offState as () => void)();
+      if (typeof offStash === "function") (offStash as () => void)();
       for (const b of entryButtons.values()) b.remove();
       root.remove();
     },

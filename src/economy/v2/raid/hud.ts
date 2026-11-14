@@ -43,6 +43,24 @@ export interface Row {
   href?: string | null;
 }
 
+/** What a card leads with, above the game's own figures: what was carried out (or lost), large, and one line under it. */
+export interface Lead {
+  /** "You carried out", "Lost". */
+  k: string;
+  /** "SERVO ×2". */
+  v: string;
+  /** "Worth about 186 scrip at Moss's today.", or what to do next. */
+  sub?: string | null;
+  state?: RowState;
+}
+
+/** A card's raid block: the lead, the rows, and a plain note under them. */
+export interface CardView {
+  lead?: Lead | null;
+  rows: Row[];
+  note?: string | null;
+}
+
 export interface RaidHud {
   setInvoice(v: InvoiceView): void;
   /** One addition, listed under the meter for a few seconds: `+80 CUSTOMS SEAL`. */
@@ -59,8 +77,10 @@ export interface RaidHud {
   readonly signUp: boolean;
   /** The card that opens a raid (the game's location card). */
   raidCard(kicker: string, line: string, place: string): void;
-  setDebrief(rows: Row[] | null): void;
-  setDead(rows: Row[] | null): void;
+  /** The debrief's raid block: rows alone, or a lead (the haul and its worth) above the game's figures, rows and a note. */
+  setDebrief(v: Row[] | CardView | null): void;
+  /** The dead card's raid block, the same way: the lead says what was lost and what to do next. */
+  setDead(v: Row[] | CardView | null): void;
   dispose(): void;
 }
 
@@ -191,15 +211,39 @@ export function createRaidHud(G: any): RaidHud {
   let cardOriginal: string | null = null;
 
   const stats = (s: string) => document.querySelector(`.menu [data-s="${s}"] .m-stats`);
-  let debrief: HTMLElement | null = null;
-  let dead: HTMLElement | null = null;
-  function section(title: string, rows: Row[]) {
+  /** Each card's added parts: the lead goes above the game's figures, the section below them. */
+  const added: Record<"complete" | "dead", HTMLElement[]> = { complete: [], dead: [] };
+  function section(title: string, rows: Row[], note?: string | null) {
     const sec = el("div", "sv-sec rd-sec");
     sec.append(el("div", "m-k", title));
     const list = el("dl", "m-stats");
     for (const r of rows) list.append(rowEl(r));
     sec.append(list);
+    if (note) sec.append(el("p", "rd-note", note));
     return sec;
+  }
+  function leadEl(l: Lead, kind: "win" | "lost") {
+    const d = el("div", `rd-lead rd-${kind}` + (l.state ? " sv-" + l.state : ""));
+    d.append(el("div", "m-k", l.k), el("p", "rd-lead-v", l.v));
+    if (l.sub) d.append(el("p", "rd-lead-s", l.sub));
+    return d;
+  }
+  function card(s: "complete" | "dead", title: string, v: Row[] | CardView | null) {
+    for (const e of added[s]) e.remove();
+    added[s] = [];
+    const dl = stats(s);
+    if (!v || !dl) return;
+    const view: CardView = Array.isArray(v) ? { rows: v } : v;
+    if (view.lead) {
+      const lead = leadEl(view.lead, s === "complete" ? "win" : "lost");
+      dl.before(lead);
+      added[s].push(lead);
+    }
+    if (view.rows.length || view.note) {
+      const sec = section(title, view.rows, view.note);
+      dl.after(sec);
+      added[s].push(sec);
+    }
   }
 
   return {
@@ -286,28 +330,17 @@ export function createRaidHud(G: any): RaidHud {
       card.replaceChildren(el("i"), el("b", "", kicker), l, el("span", "", place));
       card.classList.add("st-chapter", "rd-card");
     },
-    setDebrief(rows) {
-      debrief?.remove();
-      debrief = null;
-      const dl = stats("complete");
-      if (!rows || !dl) return;
-      debrief = section("The raid", rows);
-      dl.after(debrief);
+    setDebrief(v) {
+      card("complete", "The raid", v);
     },
-    setDead(rows) {
-      dead?.remove();
-      dead = null;
-      const dl = stats("dead");
-      if (!rows || !dl) return;
-      dead = section("The ledger", rows);
-      dl.after(dead);
+    setDead(v) {
+      card("dead", "The ledger", v);
     },
     dispose() {
       inv.remove();
       box.remove();
       sign.remove();
-      debrief?.remove();
-      dead?.remove();
+      for (const e of [...added.complete, ...added.dead]) e.remove();
       window.removeEventListener("keydown", onKey, true);
       const card = document.querySelector<HTMLElement>(".loc-card");
       if (card && cardOriginal !== null) ((card.innerHTML = cardOriginal), card.classList.remove("st-chapter", "rd-card"));

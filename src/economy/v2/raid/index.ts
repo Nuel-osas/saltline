@@ -58,6 +58,8 @@ import {
 } from "./rules";
 import { signOn, type SignOn } from "./signon";
 import { createRaidWorld, type RaidWorld } from "./world";
+import { haulOf, planSale, worthLine, type HaulItem } from "../dock/haul";
+import type { CardView, Lead } from "./hud";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
 type Game = any;
@@ -799,20 +801,57 @@ export function createRaid(G: Game): RaidApi {
     const ledger = r.ledger!;
     const raid = r.raid!;
     const report = ledger.report(seconds, used(r));
-    const haul = toItems(ledger.carried).map((it) => `${SHORT[it.tokenId as keyof typeof SHORT]} ×${it.amount}`);
+    const label = (items: HaulItem[]) => items.map((it) => `${SHORT[it.tokenId]} ×${it.amount}`);
+    let carried = haulOf(ledger.carried);
+    const haul = label(carried);
     const gunRow = (w: Weapon | null, pendingText: string): Row =>
       r.weapon ? { k: "Your gun", v: w ? `${gunTag(w)} · ${w.grade} · condition ${w.condition}` : pendingText } : { k: "Your gun", v: "Issue rifle. Nothing to wear." };
-    const rows = (o: { haul: string[]; gun: Row; guns: string[]; invoice: string; arrears: string; ledger: Row; state?: Row["state"] }): Row[] => [
-      { k: "Haul", v: o.haul.length ? o.haul : ["Nothing taken"], state: o.state },
-      o.gun,
-      { k: "Guns recovered", v: o.guns.length ? o.guns : ["None"], state: o.state },
-      { k: "Invoice", v: o.invoice, state: o.state },
-      { k: "Arrears now", v: o.arrears, state: o.state },
-      o.ledger,
-    ];
+    // The debrief leads with the win: what was carried out and what the counters pay for it today. The bill follows,
+    // as what it is: the next raid's difficulty, not a price, and it can be paid down. Practice has no ledger to link.
+    const practice = v2.chain.network === "mock";
+    let worth: string | null = null;
+    let asked = 0;
+    let shown: (() => void) | null = null;
+    const appraise = (items: HaulItem[]) => {
+      const at = ++asked;
+      worth = null;
+      if (!items.length) return;
+      Promise.all([settle(() => v2.chain.vendors()), settle(() => v2.chain.exportPrices())])
+        .then(
+          ([vs, eq]) => worthLine(planSale(items, vs, eq)),
+          () => worthLine(null),
+        )
+        .then((w) => {
+          if (at !== asked || live?.token !== r.token) return;
+          worth = w;
+          shown?.();
+        });
+    };
+    const show = (o: { haul: string[]; gun: Row; guns: string[]; invoice: string; arrears: string; ledger: Row; state?: Row["state"]; lead?: Partial<Lead> }) => {
+      const draw = () =>
+        hud.setDebrief({
+          lead: {
+            k: "You carried out",
+            v: o.haul.length ? o.haul.join(" · ") : "Nothing this time",
+            sub: o.haul.length ? (worth ?? "Worth: asking the counters…") : "Nothing to sell. The boat waits for the next one.",
+            ...o.lead,
+          },
+          rows: [
+            ...(r.weapon ? [o.gun] : []),
+            ...(o.guns.length ? [{ k: "Guns recovered", v: o.guns, state: o.state }] : []),
+            { k: "Invoice", v: o.invoice, state: o.state },
+            { k: "Arrears now", v: o.arrears, state: o.state },
+            ...(practice && o.ledger.state === "ok" ? [] : [o.ledger]),
+          ],
+          note: "The bill is not a price. Unpaid, it makes the next raid start harder. It can be paid down at the dock.",
+        });
+      shown = draw;
+      draw();
+    };
     const recovered = ledger.guns.map((g) => `${gunTag(g)} · ${g.grade}`);
     const wearing = r.weapon ? `${gunTag(r.weapon)} · wear −${CONDITION.perRaid}, settling…` : "";
-    hud.setDebrief(rows({ haul, gun: gunRow(null, wearing), guns: recovered, invoice: `${money(total)} · settling…`, arrears: "settling…", ledger: { k: "Ledger", v: "settling…", state: "pending" }, state: "pending" }));
+    appraise(carried);
+    show({ haul, gun: gunRow(null, wearing), guns: recovered, invoice: `${money(total)} · settling…`, arrears: "settling…", ledger: { k: "Ledger", v: "settling…", state: "pending" }, state: "pending" });
     pacer.add(LINES.boat(total), { seconds: 5, ttl: WAIT.boat });
     // The contract won't take an extraction younger than 45 s plus 8 s a container: wait it out (and two seconds
     // for its clock), never send early.
@@ -827,16 +866,19 @@ export function createRaid(G: Game): RaidApi {
           emit("raid:extracted", { ok: true, invoice: res.invoice ?? null, arrears: res.arrears ?? null });
           emit("stash:changed", {});
           if (live?.token !== r.token) return;
-          hud.setDebrief(
-            rows({
-              haul: res.minted ? minted : haul,
-              gun: gunRow(res.weapon ?? null, r.weapon ? `${gunTag(r.weapon)} · returned` : ""),
-              guns: res.recovered ? res.recovered.map((g) => `${gunTag(g)} · ${g.grade} · condition ${g.condition}`) : recovered,
-              invoice: res.invoice == null ? "unknown" : `${money(res.invoice)} scrip`,
-              arrears: res.arrears == null ? "unknown" : `${money(res.arrears)} scrip`,
-              ledger: txRow(v2, res.txHash),
-            }),
-          );
+          // What minted is the haul: value that, if it isn't what was carried.
+          if (res.minted) {
+            const got = haulOf(res.minted);
+            if (label(got).join() !== label(carried).join()) appraise((carried = got));
+          }
+          show({
+            haul: res.minted ? minted : haul,
+            gun: gunRow(res.weapon ?? null, r.weapon ? `${gunTag(r.weapon)} · returned` : ""),
+            guns: res.recovered ? res.recovered.map((g) => `${gunTag(g)} · ${g.grade} · condition ${g.condition}`) : recovered,
+            invoice: res.invoice == null ? "unknown" : `${money(res.invoice)} scrip`,
+            arrears: res.arrears == null ? "unknown" : `${money(res.arrears)} scrip`,
+            ledger: txRow(v2, res.txHash),
+          });
           return;
         }
         // Sent but not confirmed is pending, never failed: the haul may have minted.
@@ -847,15 +889,18 @@ export function createRaid(G: Game): RaidApi {
         if (!res.pending && res.code === "E_RAID_CLOSED") {
           // The raid ran past the contract's limit: it closed itself, returned the gun and kept nothing else.
           const gun: Row = r.weapon ? { k: "Your gun", v: `${gunTag(r.weapon)} · ${LAPSED.gun}` } : { k: "Your gun", v: "Issue rifle. Nothing lost." };
-          hud.setDebrief(rows({ haul: [LAPSED.haul], gun, guns: recovered.length ? [LAPSED.haul] : [], invoice: "unknown", arrears: "unknown", ledger: { k: "Ledger", v: LAPSED.ledger(RAID_MINUTES), state: "refused" }, state: "refused" }));
+          show({ haul, gun, guns: recovered.length ? [LAPSED.haul] : [], invoice: "unknown", arrears: "unknown", ledger: { k: "Ledger", v: LAPSED.ledger(RAID_MINUTES), state: "refused" }, state: "refused", lead: { k: "Carried out", sub: LAPSED.haul, state: "refused" } });
           return;
         }
-        hud.setDebrief(rows({ haul, gun: gunRow(null, res.pending ? "unconfirmed" : "held by the contract"), guns: recovered, invoice: "unknown", arrears: "unknown", ledger: { k: "Ledger", v: res.pending ? "Unconfirmed. Check the dock." : `Refused: ${res.error || "no reason given"}`, state }, state }));
+        const lead: Partial<Lead> = res.pending
+          ? { sub: "Not confirmed yet. Check your stash at the dock before you sell.", state: "pending" }
+          : { k: "Carried out", sub: `Not kept: ${res.error || "the contract refused it"}.`.replace(/\.\.$/, "."), state: "refused" };
+        show({ haul, gun: gunRow(null, res.pending ? "unconfirmed" : "held by the contract"), guns: recovered, invoice: "unknown", arrears: "unknown", ledger: { k: "Ledger", v: res.pending ? "Unconfirmed. Check the dock." : `Refused: ${res.error || "no reason given"}`, state }, state, lead });
       },
       () => {
         emit("raid:extracted", { ok: false, invoice: null, arrears: null });
         if (live?.token !== r.token) return;
-        hud.setDebrief(rows({ haul, gun: gunRow(null, "unconfirmed"), guns: recovered, invoice: "unknown", arrears: "unknown", ledger: { k: "Ledger", v: "Unconfirmed. Check the dock.", state: "pending" }, state: "pending" }));
+        show({ haul, gun: gunRow(null, "unconfirmed"), guns: recovered, invoice: "unknown", arrears: "unknown", ledger: { k: "Ledger", v: "Unconfirmed. Check the dock.", state: "pending" }, state: "pending", lead: { sub: "Not confirmed yet. Check your stash at the dock before you sell.", state: "pending" } });
       },
     );
   }
@@ -870,7 +915,7 @@ export function createRaid(G: Game): RaidApi {
     const report = signed ? r.ledger!.report(seconds, used(r)) : null;
     close(r, "dead");
     if (!signed || !report) {
-      hud.setDead([{ k: "Your gun", v: "Issue rifle. Off the books. Nothing lost." }]);
+      hud.setDead({ lead: { k: "Lost", v: "Nothing", sub: "Off the books: the issue rifle, and nothing on the ledger. Retry." }, rows: [] });
       return;
     }
     // The clamp's damage, the death and the Bailiff's own event land in one call: read the grabs after it unwinds.
@@ -879,15 +924,20 @@ export function createRaid(G: Game): RaidApi {
         const v2 = G.v2 as V2;
         const by: DeathBy = deathBy(diedAt, r.grabs);
         const spot = nearestSpot(pos.x, pos.z);
-        const carried = r.ledger!.weight() > 0;
-        const fate = !r.weapon
-          ? carried
-            ? "Nothing lost but the cargo"
-            : "Nothing lost"
+        // The card leads with one line on what was lost and what to do next; the bill and the ledger follow.
+        const practice = v2.chain.network === "mock";
+        const cargo = haulOf(r.ledger!.carried).map((it) => `${SHORT[it.tokenId]} ×${it.amount}`);
+        const lost: Lead = !r.weapon
+          ? cargo.length
+            ? { k: "Lost", v: cargo.join(" · "), sub: by === "bailiff" ? "The Bailiff kept the cargo. The issue rifle is never lost: retry." : `The cargo is in a wreck ${zoneOf(spot)} for someone else to find. The issue rifle is never lost: retry.` }
+            : { k: "Lost", v: "Nothing", sub: "The issue rifle is never lost. Retry." }
           : by === "bailiff"
-            ? `IMPOUNDED · ${gunTag(r.weapon)} · buy it back at the dock within ${RAID.impoundHours} hours`
-            : `LEFT IN A WRECK ${zoneOf(spot)} · someone may carry it out`;
-        const rows = (state: Row["state"], invoice: string, arrears: string, ledger: Row, gun: Row = { k: "Your gun", v: fate, state: state === "refused" ? "refused" : undefined }): Row[] => [gun, { k: "Invoice", v: invoice, state }, { k: "Arrears now", v: arrears, state }, ledger];
+            ? { k: "Lost", v: [`${gunTag(r.weapon)} (impounded)`, ...cargo].join(" · "), sub: `Buy the gun back at the dock within ${RAID.impoundHours} hours, or retry with the issue rifle.` }
+            : { k: "Lost", v: [gunTag(r.weapon), ...cargo].join(" · "), sub: `It's in a wreck ${zoneOf(spot)} for someone else to carry out. Build or buy another at the dock.` };
+        const rows = (state: Row["state"], invoice: string, arrears: string, ledger: Row, gun?: Row): CardView => ({
+          lead: gun ? null : { ...lost, state: state === "refused" ? "refused" : undefined },
+          rows: [...(gun ? [gun] : []), { k: "Invoice", v: invoice, state }, { k: "Arrears now", v: arrears, state }, ...(practice && ledger.state === "ok" ? [] : [ledger])],
+        });
         // The contract won't log a death younger than 8 s a container opened: it is queued until then, never sent
         // early, and the card says it is settling.
         const wait = dieWait(report.opened.length, seconds - 2) * 1000;
