@@ -5,6 +5,7 @@
 // Two `// ext:` hooks in src/game.js let it work: the `charge` action on KeyG in the keymap, and weapon.kick(), a
 // shove on the view model's recoil springs. Everything else goes through what the game already exposes. Anything
 // here that throws is caught: the shooter never depends on the kit.
+import { addTouchButtons } from "./touch";
 import type { ArsenalApi, PickupKind, V2, V3 } from "../campaign/types";
 import { createArsenalHud, type ArsenalHud } from "./hud";
 import { FEED, TUNE, burstEffect, centreOf, clampCharges, cooldown, dist3, dropFor, inSwing, pickupAmount, planLockers, stepCharge, throwVelocity } from "./rules";
@@ -543,6 +544,7 @@ export function startArsenal(G: Game): Arsenal | null {
   try {
     const a = createArsenal(G);
     G.arsenal = a;
+    addTouchButtons(a, document, G.input); // a phone's way to throw a charge, swing the rifle and hold USE (touch.ts)
     let last = performance.now();
     const loop = (now: number) => {
       const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
