@@ -59,7 +59,7 @@ import {
 import { signOn, type SignOn } from "./signon";
 import { createRaidWorld, type RaidWorld } from "./world";
 import { haulOf, planSale, worthLine, type HaulItem } from "../dock/haul";
-import type { Lead } from "./hud";
+import type { CardView, Lead } from "./hud";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
 type Game = any;
@@ -907,7 +907,7 @@ export function createRaid(G: Game): RaidApi {
     const report = signed ? r.ledger!.report(seconds, used(r)) : null;
     close(r, "dead");
     if (!signed || !report) {
-      hud.setDead([{ k: "Your gun", v: "Issue rifle. Off the books. Nothing lost." }]);
+      hud.setDead({ lead: { k: "Lost", v: "Nothing", sub: "Off the books: the issue rifle, and nothing on the ledger. Retry." }, rows: [] });
       return;
     }
     // The clamp's damage, the death and the Bailiff's own event land in one call: read the grabs after it unwinds.
@@ -916,15 +916,20 @@ export function createRaid(G: Game): RaidApi {
         const v2 = G.v2 as V2;
         const by: DeathBy = deathBy(diedAt, r.grabs);
         const spot = nearestSpot(pos.x, pos.z);
-        const carried = r.ledger!.weight() > 0;
-        const fate = !r.weapon
-          ? carried
-            ? "Nothing lost but the cargo"
-            : "Nothing lost"
+        // The card leads with one line on what was lost and what to do next; the bill and the ledger follow.
+        const practice = v2.chain.network === "mock";
+        const cargo = haulOf(r.ledger!.carried).map((it) => `${SHORT[it.tokenId]} ×${it.amount}`);
+        const lost: Lead = !r.weapon
+          ? cargo.length
+            ? { k: "Lost", v: cargo.join(" · "), sub: by === "bailiff" ? "The Bailiff kept the cargo. The issue rifle is never lost: retry." : `The cargo is in a wreck ${zoneOf(spot)} for someone else to find. The issue rifle is never lost: retry.` }
+            : { k: "Lost", v: "Nothing", sub: "The issue rifle is never lost. Retry." }
           : by === "bailiff"
-            ? `IMPOUNDED · ${gunTag(r.weapon)} · buy it back at the dock within ${RAID.impoundHours} hours`
-            : `LEFT IN A WRECK ${zoneOf(spot)} · someone may carry it out`;
-        const rows = (state: Row["state"], invoice: string, arrears: string, ledger: Row, gun: Row = { k: "Your gun", v: fate, state: state === "refused" ? "refused" : undefined }): Row[] => [gun, { k: "Invoice", v: invoice, state }, { k: "Arrears now", v: arrears, state }, ledger];
+            ? { k: "Lost", v: [`${gunTag(r.weapon)} (impounded)`, ...cargo].join(" · "), sub: `Buy the gun back at the dock within ${RAID.impoundHours} hours, or retry with the issue rifle.` }
+            : { k: "Lost", v: [gunTag(r.weapon), ...cargo].join(" · "), sub: `It's in a wreck ${zoneOf(spot)} for someone else to carry out. Build or buy another at the dock.` };
+        const rows = (state: Row["state"], invoice: string, arrears: string, ledger: Row, gun?: Row): CardView => ({
+          lead: gun ? null : { ...lost, state: state === "refused" ? "refused" : undefined },
+          rows: [...(gun ? [gun] : []), { k: "Invoice", v: invoice, state }, { k: "Arrears now", v: arrears, state }, ...(practice && ledger.state === "ok" ? [] : [ledger])],
+        });
         // The contract won't log a death younger than 8 s a container opened: it is queued until then, never sent
         // early, and the card says it is settling.
         const wait = dieWait(report.opened.length, seconds - 2) * 1000;

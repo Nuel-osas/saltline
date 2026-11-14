@@ -277,6 +277,10 @@
 .rd-lost .rd-lead-s {
   color: var(--bone);
 }
+/* A first death has the coach's own line on what to do next: one such line on the card, not two. */
+.m-dead:has(.co-card) .rd-lost .rd-lead-s {
+  display: none;
+}
 .rd-lead.sv-pending .rd-lead-s {
   color: var(--bone-dim);
 }
