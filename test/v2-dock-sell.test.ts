@@ -152,3 +152,31 @@ describe("SELL EVERYTHING", () => {
     expect(s.root.querySelector(".d2-sellall")).toBeNull();
   });
 });
+
+describe("the debrief's SELL HAUL", () => {
+  it("is the card's one primary button when there is cargo to sell, first, and opens the dock on the vendors", async () => {
+    const s = setup();
+    const sell = q<HTMLButtonElement>(s.menus, '[data-d2="complete"]');
+    await vi.waitFor(() => expect(sell.textContent).toBe("Sell haul"));
+    const redeploy = q(s.menus, '[data-act="redeploy"]');
+    expect(sell.classList.contains("primary")).toBe(true);
+    expect(redeploy.classList.contains("primary")).toBe(false); // REDEPLOY steps back
+    expect(s.menus.querySelectorAll('[data-s="complete"] .btn.primary').length).toBe(1);
+    expect(sell.nextElementSibling).toBe(redeploy);
+    sell.click();
+    await vi.waitFor(() => expect(s.dock.gate).toBe("in"));
+    expect(s.dock.tab).toBe("vendors");
+    await vi.waitFor(() => expect(s.root.querySelector(".d2-sellall")).toBeTruthy());
+  });
+
+  it("stays the plain DOCK button under REDEPLOY when there is nothing to sell", async () => {
+    const s = setup((v2) => {
+      for (const k of Object.keys(v2.fake.balances)) if (k !== "scrip") delete (v2.fake.balances as Record<string, number>)[k];
+    });
+    await vi.waitFor(() => expect(q(s.menus, '[data-d2="complete"] .d2-entry-n').textContent).toContain("scrip"));
+    const dock = q(s.menus, '[data-d2="complete"]');
+    expect(dock.textContent).toContain("Dock");
+    expect(dock.classList.contains("primary")).toBe(false);
+    expect(q(s.menus, '[data-act="redeploy"]').classList.contains("primary")).toBe(true);
+  });
+});

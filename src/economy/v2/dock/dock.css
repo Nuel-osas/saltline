@@ -9,6 +9,7 @@
 .d2-entry { display: inline-flex; align-items: center; justify-content: center; gap: 12px; }
 .d2-entry-n { font: 400 11px/1 var(--f-mono); letter-spacing: .02em; text-transform: none; color: var(--steel); }
 .d2-entry-n:empty { display: none; }
+.d2-entry.d2-sell { justify-content: flex-start; }
 .d2 { --d2-gold: #f2c14e; --d2-cold: #9cc4d8; --d2-warn: #ffc977; --d2-pad: max(var(--gl), 2.2vw); --d2-padr: max(var(--gr), 2.2vw);
   --d2-card: linear-gradient(180deg, rgba(26, 30, 34, .97), rgba(13, 15, 17, .97) 72%);
   position: absolute; inset: 0; z-index: 20; pointer-events: auto; overflow: clip; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); color: var(--bone); font-family: var(--f-label);
