@@ -518,13 +518,14 @@ export function createRaid(G: Game): RaidApi {
   }
 
   let warnAt = 0;
-  /** Thresholds the invoice was already past at the fence (a debtor's raid): they apply, but nothing is announced. */
+  /** Thresholds the invoice was already past at the fence (a debtor's raid). */
   let atFence = new Set<string>();
   function fire(r: Live, t: Threshold) {
     emit("invoice:threshold", { at: t.at, what: t.id });
-    // A notice the player walked in with is the meter's label and a line in the feed, not a banner across the middle
-    // of the screen in their first second: they have not done anything yet to be warned about.
-    const quiet = atFence.delete(t.id);
+    // A second notice the player walked in with is the meter's label and a line in the feed, not a banner across the
+    // middle of the screen in their first second: it only adds patrols. Anything past it at the fence sends a Bailiff
+    // or worse, and that is still announced: the player is about to be hunted.
+    const quiet = atFence.delete(t.id) && t.id === "second_notice";
     // Announcements a few seconds apart, so two reached at once are both read.
     const wait = quiet ? 0 : Math.max(0, warnAt - now());
     if (!quiet) warnAt = now() + wait + 3600;
