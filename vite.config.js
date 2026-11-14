@@ -36,6 +36,25 @@ function faucetDev() {
           res.end("{}");
         }
       });
+      // POST /api/session hands a signed-in player their wallet (server/session.ts), as api/session.ts does on Vercel.
+      // Without PRIVY_APP_ID and WALLET_SECRET in .env it answers 404: sign-in is off, and local play is as before.
+      server.middlewares.use("/api/session", async (req, res) => {
+        try {
+          const headers = new Headers();
+          for (const [k, val] of Object.entries(req.headers)) if (typeof val === "string") headers.set(k, val);
+          headers.delete("x-real-ip");
+          headers.set("x-forwarded-for", req.socket.remoteAddress || "unknown");
+          const { handleSession } = await server.ssrLoadModule("/server/session.ts");
+          const response = await handleSession(new Request("http://localhost/api/session", { method: req.method, headers }), env);
+          res.statusCode = response.status;
+          response.headers.forEach((value, key) => res.setHeader(key, value));
+          res.end(Buffer.from(await response.arrayBuffer()));
+        } catch {
+          res.statusCode = 500;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ ok: false, error: "The dock office hit a snag. Try again." }));
+        }
+      });
       server.middlewares.use("/api/faucet", async (req, res) => {
         try {
           const chunks = [];
