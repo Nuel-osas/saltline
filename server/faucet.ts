@@ -16,8 +16,13 @@
 // - The key is read only from server-side env (FAUCET_PRIVATE_KEY, no VITE_ prefix). It is never logged or
 //   returned: every log line and response body passes through redact().
 //
+// A v2 pass that was issued is written down for the studio (server/record.ts), after the chain has confirmed it.
+// The answer waits at most a second for that and never depends on it.
+//
 // Relative imports carry .js so the compiled function also resolves them under Node's ES module rules on Vercel.
 import { type AuthConfig, authConfig, bearer, deriveWallet, verifyToken } from "./auth.js";
+import { passIssued } from "./record.js";
+import type { Store } from "./store.js";
 import { isPrivateKey, isValidAccountId } from "near-kit";
 import { type Executed, decodeProfile, executeTx, isTransient, nearKitPort } from "../src/economy/chain.js";
 import { TESTNET_RPC_URLS } from "../src/economy/config.js";
@@ -98,6 +103,8 @@ export interface FaucetDeps {
   now?: () => number;
   log?: (line: string) => void;
   clientIp?: (request: Request) => string;
+  /** The database, for tests; the default is the deployment's own (server/store.ts). */
+  store?: Store;
 }
 
 // One set per server instance, shared by every request it serves.
@@ -248,6 +255,7 @@ export async function handleFaucet(request: Request, env: FaucetEnv, deps: Fauce
     // v2 with sign-in switched on: a dock pass goes to the signed-in player's own account and to no other, so one
     // sign-in gets one pass. The account is derived from the sign-in (server/auth.ts), which makes this check
     // stateless. A half-set sign-in config closes the office rather than handing out passes unsigned.
+    let signedInAs: string | null = null;
     if (cfg.game === "v2") {
       const auth = authConfig(env);
       if (auth.state === "broken") {
@@ -265,6 +273,7 @@ export async function handleFaucet(request: Request, env: FaucetEnv, deps: Fauce
           return reply(401, { ok: false, error: "Your sign-in has expired. Sign in again." });
         }
         if (deriveWallet(auth.cfg, userId).accountId !== accountId) return reply(403, { ok: false, error: "That isn't this sign-in's account." });
+        signedInAs = userId;
       }
     }
     if (!limits.account.take(accountId, t)) {
@@ -317,6 +326,7 @@ export async function handleFaucet(request: Request, env: FaucetEnv, deps: Fauce
     }
 
     log("claimed", { accountId, callsign: cs, txHashes, ...tag });
+    if (cfg.game === "v2") await passIssued(env, { userId: signedInAs, accountId, callsign: cs, at: now() }, { store: deps.store });
     return reply(200, { ok: true, accountId, callsign: cs, txHashes });
   } catch (e) {
     log("error", { error: (e as Error)?.message ?? String(e) });
