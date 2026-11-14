@@ -2,13 +2,14 @@
 // time. The boat runs in, the dock workers stage the drop, Moss kicks open the crate with the issue rifle in it,
 // the camera comes down from the crane over the three uplinks to what waits in the shed, and the title lands.
 //
-// It plays on a player's first DEPLOY in v2 in place of the text briefing (raid/index.ts asks G.intro.film before the
-// sign-on), and again from INTRO on the title. Nothing of its set stays in the level: the rifle crate Moss kicks open
+// It is the lobby's "The opening" and the title's INTRO: a player chooses to watch it. It no longer plays by itself
+// on a first DEPLOY, because a first-time player waited 50 seconds for a gun (raid/index.ts still asks G.intro.film
+// before the sign-on, for ?intro=1). Nothing of its set stays in the level: the rifle crate Moss kicks open
 // is the coach's own (../coach/crate.ts), built by the film while it plays and by the coach when the raid starts, at
 // the same spot, so the cut from the film to play lands on the same crate.
 //
-// URL: ?intro=0 never plays it on DEPLOY (scripts that drive the title), ?intro=1 plays it on every first DEPLOY of
-// a page load, seen or not.
+// URL: ?intro=1 plays it on the first DEPLOY of a page load, as it used to; without it DEPLOY goes straight to the
+// raid. ?intro=0 is accepted and changes nothing.
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
 import { type Film, createFilm } from "./film";
 import "./intro.css";
@@ -33,22 +34,16 @@ interface Store {
   setItem(k: string, v: string): void;
 }
 
-/** Whether the film has been seen, kept in `store`. `force` is the URL's ?intro= (0 never, 1 once more). */
+/**
+ * Whether DEPLOY passes the film by: always, unless the URL asks for it (`force` is ?intro=; "1" plays it once on
+ * DEPLOY). A full viewing is still remembered in `store`, for anything that wants to know it was seen.
+ */
 export function createSeen(store: Store | null, force: string | null = null) {
-  let seen = force === "0";
-  let forced = force === "1";
-  if (!seen && !forced) {
-    try {
-      seen = store?.getItem(INTRO_KEY) === "1";
-    } catch {
-      seen = false; // storage is off: it plays once a page load
-    }
-  }
+  let seen = force !== "1";
   return {
     seen: () => seen,
     markSeen() {
       seen = true;
-      forced = false;
       try {
         store?.setItem(INTRO_KEY, "1");
       } catch {
