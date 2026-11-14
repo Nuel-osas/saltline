@@ -286,8 +286,10 @@ export function startHome(G: Game, opts: HomeOptions): Home {
     const step = read(START_DONE_KEY) === "done" ? null : startStep(f);
     start.hidden = !step;
     if (step) {
-      const doIt = h("button", { class: "hm-start-b", type: "button" }, step.button);
-      doIt.onclick = () => act(step.do);
+      // When the step is what the big button already does, it points at that button instead of being a second one.
+      const same = step.do === a.do;
+      const doIt = same ? h("p", { class: "hm-start-h" }, `Press ${a.label.toUpperCase()} to go`) : h("button", { class: "hm-start-b", type: "button" }, step.button);
+      if (!same) doIt.onclick = () => act(step.do);
       const x = h("button", { class: "hm-start-x", type: "button", "aria-label": "Hide this guide" }, "×");
       x.onclick = () => {
         try {

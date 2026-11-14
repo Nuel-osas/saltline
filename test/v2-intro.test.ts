@@ -348,24 +348,18 @@ describe("the film on the first DEPLOY", () => {
 });
 
 describe("remembering the film", () => {
-  it("is seen once marked, across page loads, and ?intro= overrides it", () => {
+  it("never holds up DEPLOY unless ?intro=1 asks for it; a viewing is remembered", () => {
     localStorage.clear();
-    const first = createSeen(localStorage);
-    expect(first.seen()).toBe(false);
-    first.markSeen();
-    expect(first.seen()).toBe(true);
-    expect(localStorage.getItem(INTRO_KEY)).toBe("1");
-    expect(createSeen(localStorage).seen()).toBe(true);
-    // ?intro=1 plays it once more; ?intro=0 never plays it on DEPLOY.
-    const again = createSeen(localStorage, "1");
-    expect(again.seen()).toBe(false);
-    again.markSeen();
-    expect(again.seen()).toBe(true);
-    localStorage.clear();
+    expect(createSeen(localStorage).seen()).toBe(true); // a first-time player goes straight to the raid
     expect(createSeen(localStorage, "0").seen()).toBe(true);
+    const asked = createSeen(localStorage, "1");
+    expect(asked.seen()).toBe(false); // ?intro=1: once, on the first DEPLOY
+    asked.markSeen();
+    expect(asked.seen()).toBe(true);
+    expect(localStorage.getItem(INTRO_KEY)).toBe("1");
   });
 
-  it("plays once a page load when storage is off", () => {
+  it("with storage off, ?intro=1 still plays it once a page load", () => {
     const broken = {
       getItem(): string | null {
         throw new Error("blocked");
@@ -374,10 +368,10 @@ describe("remembering the film", () => {
         throw new Error("full");
       },
     };
-    const m = createSeen(broken);
+    const m = createSeen(broken, "1");
     expect(m.seen()).toBe(false);
     expect(() => m.markSeen()).not.toThrow();
     expect(m.seen()).toBe(true);
-    expect(createSeen(null).seen()).toBe(false);
+    expect(createSeen(null).seen()).toBe(true);
   });
 });

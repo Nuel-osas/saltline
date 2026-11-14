@@ -2,8 +2,9 @@
 
 The design the owner asked for on 13 Nov 2026: break the first design and rebuild it as an extraction shooter
 where weapons are NFTs that players buy, risk, lose and resell, and where greed summons the machine that hunts you.
-**Nothing here is built until the owner approves this plan.** Once approved, this file replaces `docs/ECONOMY.md`
-and `docs/CAMPAIGN.md` as the source of truth; `docs/STORY.md` stays as the world and the voice.
+The owner approved it the same day and v2 was built from it. It replaced `docs/ECONOMY.md` and `docs/CAMPAIGN.md`
+(the first game's, kept for the record: [`docs/V1.md`](V1.md)) as the source of truth; `docs/STORY.md` stays as the
+world and the voice.
 
 ## The game in one paragraph
 
@@ -272,8 +273,7 @@ and auctions; more frames with their own models; live squads; witnessed raid res
 
 **If phase 1 isn't verified by the cutoff,** the working build tagged `stable-13nov` is submitted instead.
 
-## Needed from the owner
+## What the owner gave
 
-1. **Yes or changes** to this plan.
-2. **About 8 testnet NEAR** moved from `saltline.testnet` to a new contract account for v2.
-3. **Ears on the new score.** The game already had a quiet music bed; the score built today replaces it.
+The plan was approved on 13 Nov 2026, and testnet NEAR was moved from `saltline.testnet` to the new contract
+account `v2.saltline.testnet`.

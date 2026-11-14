@@ -1875,7 +1875,11 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
     },
   };
 
-  /** `?stash=rich`: registered, in funds, armed three ways, one gun in the impound and a bill outstanding. */
+  /**
+   * `?stash=rich`: registered, in funds, armed three ways, one gun in the impound and a bill outstanding. The bill is
+   * small enough that the invoice at the fence stays under the second notice (150 + half of 400 = 350): this is the
+   * Practice a first-time player and a judge open, and it should not start them in trouble.
+   */
   function fillLocker() {
     const at = tick();
     if (!S.accounts[S.me]) {
@@ -1888,7 +1892,7 @@ export function createMockChain2(seed = 1, opts: MockOptions2 = {}): MockChain2 
     debug.giveGun("stevedore", { grade: "C", condition: 24, extractions: 2 });
     debug.giveGun("pilot", { grade: "B", condition: 78, extractions: 16 });
     debug.giveGun("longshore", { grade: "D", condition: 88, impound: true });
-    debug.setArrears(1150);
+    debug.setArrears(400);
     debug.addWreck({ frame: "stevedore", grade: "B", items: { copper: 2, ammo: 2 } });
   }
 

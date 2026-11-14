@@ -438,3 +438,11 @@ describe("signing on", () => {
     expect(b).toMatchObject({ kind: "signed", weapon: null, fellBack: true });
   });
 });
+
+describe("the Harbormaster's greeting at the fence", () => {
+  it("names the player, but never says Breacher twice", async () => {
+    const { LINES } = await import("../src/economy/v2/raid/copy");
+    expect(LINES.fence("K. OSEI", 350)).toBe("Good morning, Breacher K. OSEI. Your visit is not authorised. A trespass surcharge of 350 scrip has been added to your account.");
+    for (const placeholder of ["BREACHER", "breacher", "BREACHER-42", null]) expect(LINES.fence(placeholder, 350)).toMatch(/^Good morning, Breacher\. Your visit/);
+  });
+});

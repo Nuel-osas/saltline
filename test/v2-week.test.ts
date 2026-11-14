@@ -6,6 +6,9 @@ import { type WeekSample, PRICED, canFastForward, runWeek, sampleNow, weekPanel,
 import { MOCK2_WARMUP_SECONDS, createMockChain2 } from "../src/economy/v2/mock";
 import type { Chain2 } from "../src/economy/v2/types";
 
+/** A test that plays a simulated week: about 5 s on an idle laptop, so the 5 s default fails it on a busy or slower one. */
+const LONG = 30_000;
+
 const T0 = 1_800_000_000_000;
 const port = (seed = 7) => createMockChain2(seed, { storage: null, now: () => T0, warmupSeconds: MOCK2_WARMUP_SECONDS });
 const noSleep = async () => {};
@@ -21,7 +24,7 @@ describe("runWeek", () => {
     expect(samples.every((s) => s !== null)).toBe(true);
     expect(samples.map((s) => s!.hour)).toEqual(seen);
     expect(chain.now() - before).toBe(48 * 3_600_000);
-  });
+  }, LONG); // 48 simulated hours
 
   it("the economy moves on its own: prices, wallets or guns change across a week", async () => {
     const chain = port(11);
@@ -39,7 +42,7 @@ describe("runWeek", () => {
     expect(sum.hours).toBe(168);
     expect(sum.gunsBuilt).toBeGreaterThanOrEqual(0);
     expect(sum.shutHours).toBeGreaterThanOrEqual(0);
-  });
+  }, LONG); // 168 simulated hours
 
   it("stops when asked", async () => {
     const chain = port();
