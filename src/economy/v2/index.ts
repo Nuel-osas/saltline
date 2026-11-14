@@ -17,6 +17,7 @@ import { sessionUrlFor, withToken } from "./login/session";
 import { metricsUrlFor, startMetrics } from "./metrics";
 import { MOCK2_WARMUP_SECONDS, type MockChain2, createMockChain2, createMockWallet2 } from "./mock";
 import { startRaid } from "./raid";
+import { squadOn, startSquad } from "./squad";
 import { startTicksV2 } from "./tick";
 import type { V2 } from "./types";
 import { type GuestWallet2, createGuestWallet2 } from "./wallet";
@@ -88,6 +89,29 @@ export function startV2(G: Game): void {
   // The start screen: a lobby over the title card (G.home). Its buttons press the title's own, so everything above
   // starts as it did.
   guard("home", () => startHome(G, { v2, offline: !!mock, login: () => login, dock: () => dock }));
+
+  // Live presence: other breachers in a raid right now appear in your yard (G.squad). Off for automated browsers.
+  if (squadOn(typeof location === "undefined" ? "" : location.search, typeof navigator !== "undefined" && !!navigator.webdriver)) {
+    let callsign = "BREACHER";
+    const me = v2.wallet.accountId();
+    // The callsign is on the player's record, which a new player only has once they sign on: look until it is there.
+    let looks = 0;
+    const look = () => {
+      if (!me || ++looks > 24) return;
+      void Promise.resolve()
+        .then(() => v2.chain.profile(me))
+        .then((p) => (p ? void (callsign = p.callsign) : void setTimeout(look, 5000)), () => void setTimeout(look, 5000));
+    };
+    look();
+    guard("squad", () =>
+      startSquad(G, {
+        room: mock ? "yard-practice-v1" : `yard-${cfg.contractId}`,
+        pvp: !!mock, // shooting each other only where nothing is at stake (squad/index.ts says why)
+        callsign: () => callsign,
+        frame: () => (G.v2?.raid?.weapon ? String((G.v2.raid.weapon as { frame?: string }).frame ?? "issue") : "issue"),
+      }),
+    );
+  }
 
   console.info(cfg.mode === "mock" ? "[v2] offline mock: not the chain" : `[v2] testnet, contract ${cfg.contractId}`);
   G.events?.emit("v2:ready", v2);

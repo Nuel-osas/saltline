@@ -151,6 +151,7 @@ src/economy/v2/        the game around it, TypeScript, attached to the shooter's
   dock/                loadout, armoury, market, vendors, the ledger and the fast-forward
   home/, login/        the lobby, and sign-in with Google
   intro/, coach/       the opening film, and the first raid's crate and checklist
+  squad/               live presence: other breachers in a raid right now, drawn in your yard
   metrics/             what the browser reports to the studio's counts (docs/DATA.md)
 src/economy/           shared pieces and the first game: the chain executor, the wallet, the Bailiff, the arsenal, the score
 contract2/             Rust (near-sdk 5.29.1): mt.rs, nft.rs, items.rs, weapons.rs, raids.rs, vendors.rs, export.rs, market.rs, harbormaster.rs
@@ -206,6 +207,18 @@ and `agents/README.md` covers running the characters.
   provider's own custody. Sign-in is off unless the deployment sets `VITE_PRIVY_APP_ID`, `PRIVY_APP_ID` and
   `WALLET_SECRET` (see `.env.example`). Where it is on, everyone signs in before they play, the offline Practice game
   included; a local run without those settings stays open, which is how the smoke and end-to-end scripts run.
+- **Seeing other players is presence, not a shared raid.** Breachers who are in a raid at the same moment appear in
+  each other's yard as figures with their callsign, moving as they move ([`src/economy/v2/squad/`](src/economy/v2/squad)).
+  Each player's machines, containers and invoice are still their own. The browsers talk to each other directly
+  (WebRTC), having met through public Nostr relays this project doesn't run, so players in the same yard can see
+  each other's network address, as in any peer-to-peer game. What arrives from another browser is checked field by
+  field. `?squad=0` switches it off.
+- **Players can shoot each other in Practice only.** A hit is the shooter's browser telling the other player's
+  browser "I hit you"; the one who was hit decides whether to believe it (in reach, no more than a gun does, no
+  faster than a gun fires). That is one browser's word against another's, and a changed client could ignore every
+  hit. In Practice nothing is at stake, so it is on there. In a raid on the chain a death costs a real gun, so
+  there players see each other and cannot hit or be hit, until a hit can be checked by something neither player
+  controls.
 - **The faucet's per-IP limits are kept in memory** on each serverless instance. The lasting guards are one
   registration per account and never funding an account that already exists.
 - **The studio keeps a small database of who signed in and how many came (v2), when one is configured.** One record
@@ -237,7 +250,7 @@ and `agents/README.md` covers running the characters.
 - **A reference.** The order of sections on the front page and the arrangement of the lobby follow another
   browser game's that the owner asked to match. No code, wording or art was taken from it.
 - **Libraries:**
-  - the game: three.js r180 (bundled in the baseline), near-kit, @privy-io/js-sdk-core (sign-in, loaded only when it is on)
+  - the game: three.js r180 (bundled in the baseline), near-kit, @privy-io/js-sdk-core (sign-in, loaded only when it is on), trystero (live presence, loaded when a raid starts)
   - the server: jose (checking sign-in tokens)
   - the contracts: near-sdk, with near-workspaces for sandbox tests
   - build and tests: Vite, Vitest, happy-dom, playwright-core, TypeScript, Prettier
