@@ -34,6 +34,9 @@ import {
 } from "../src/economy/v2/mock";
 import type { Amounts, ConsumableId, MaterialId, ModId, Raid, RaidReport, Weapon } from "../src/economy/v2/types";
 
+/** A test that plays a simulated week: about 5 s on an idle laptop, so the 5 s default fails it on a busy or slower one. */
+const LONG = 30_000;
+
 // items.ts types `stock` as the literal 5 (its default comes from an `as const` table); see the note in mock.ts.
 const goodsPrice = itemsGoodsPrice as (id: ModId | ConsumableId, stock?: number) => number;
 
@@ -1225,7 +1228,7 @@ describe("v2 mock: determinism, ambient play and persistence", () => {
     expect(s.wrecks.length).toBeLessThanOrEqual(40);
     expect(s.listings.length).toBeLessThanOrEqual(200);
     expect(Object.keys(s.raids).length).toBeLessThanOrEqual(80);
-  });
+  }, LONG); // a week of ambient play
 
   function memory(): Storage & { data: Map<string, string> } {
     const data = new Map<string, string>();
