@@ -14,6 +14,7 @@ import { startHome } from "./home";
 import { startIntro } from "./intro";
 import { type Login, startLogin } from "./login";
 import { sessionUrlFor, withToken } from "./login/session";
+import { metricsUrlFor, startMetrics } from "./metrics";
 import { MOCK2_WARMUP_SECONDS, type MockChain2, createMockChain2, createMockWallet2 } from "./mock";
 import { startRaid } from "./raid";
 import { startTicksV2 } from "./tick";
@@ -68,6 +69,10 @@ export function startV2(G: Game): void {
   // On testnet, wake Moss, Ines and the Harbormaster when someone plays (server/tick.ts runs one round at most
   // every 10 minutes): the characters act because players are there, with no scheduler to keep alive.
   if (!mock) guard("ticks", () => startTicksV2(cfg.faucetUrl, G.events));
+  // The studio's numbers (docs/DATA.md): a beacon for a visit, a sign-in, the dock and a raid's start and end, sent
+  // only once a person is there. Started before the parts it listens to, so it hears their first events. It is
+  // silent, and nothing below waits on it or reads from it (G.metrics).
+  guard("metrics", () => startMetrics(G, { url: metricsUrlFor(cfg.faucetUrl), offline: !!mock, token: async () => login?.token() ?? null }));
 
   guard("arsenal", () => startArsenal(G)); // breaker charge, rifle butt, pickups (G.arsenal)
   guard("bailiff", () => startBailiff(G)); // the hunter (G.bailiff)
