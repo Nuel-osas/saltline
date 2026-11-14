@@ -36,8 +36,8 @@ export const gunName = (w: Pick<Weapon, "frame" | "grade"> | null) => (w ? `${FR
 /** A gun in a sentence or on a board: `Longshore S-000041`. */
 export const gunTag = (w: Pick<Weapon, "frame" | "serial">) => `${FRAMES[w.frame].name.replace(/^PAC-\S+\s+/, "")} ${w.serial}`;
 
-/** The shooter's numbers for a gun (rolled stats, mods and wear) or, with none, the issue rifle. */
-export function shooterSpec(weapon: Pick<Weapon, "frame" | "grade" | "stats" | "mods" | "condition"> | null, mags: number): ShooterSpec {
+/** The shooter's numbers for a gun (rolled stats, mods, its level and wear) or, with none, the issue rifle. */
+export function shooterSpec(weapon: (Pick<Weapon, "frame" | "grade" | "stats" | "mods" | "condition"> & { extractions?: number }) | null, mags: number): ShooterSpec {
   const s = weapon ? effective(weapon) : ISSUE.stats;
   return {
     name: gunName(weapon),
