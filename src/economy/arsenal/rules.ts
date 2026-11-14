@@ -38,7 +38,8 @@ export const TUNE = {
     tall: 1.9,
   },
   pickup: {
-    ammo: 30,
+    /** Rounds in a dropped magazine or a locker's. Raised from 30: the yard is meant to keep a breacher shooting. */
+    ammo: 45,
     med: 35,
     charge: 1,
     /** Walking this close takes it, metres. */
@@ -47,8 +48,9 @@ export const TUNE = {
     reserveCap: 240,
   },
   drop: {
-    hound: { ammo: 0.35, med: 0 },
-    gull: { ammo: 0.12, med: 0.08 },
+    /** The odds a dead machine leaves something. Raised (hound 0.35 ammo, gull 0.12 ammo and 0.08 med before). */
+    hound: { ammo: 0.55, med: 0.1 },
+    gull: { ammo: 0.22, med: 0.14 },
   },
   /** Until the campaign runner sets a mission up: charges and lockers for a run. */
   defaults: { charges: 2, lockers: 6 },

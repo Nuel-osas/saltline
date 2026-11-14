@@ -67,10 +67,10 @@ const RANGE = 2.2;
 const FACING = 0.45;
 const NEAR_MARKERS = 2;
 /**
- * Supply lockers in a signed raid, placed from the raid's id. Half the arsenal's default of six: magazines are
- * something a player buys and brings in v2, and each locker is about thirty meshes to draw.
+ * Supply lockers in a signed raid, placed from the raid's id: the arsenal's full six (it was three). Magazines are
+ * still worth buying and bringing, but the yard no longer starves a breacher who didn't.
  */
-const LOCKERS = 3;
+const LOCKERS = 6;
 /** A part is taken by walking within this of it (m). */
 const PART_REACH = 1.35;
 /** The sign-on card stays up at least this long, so it reads as a step and not a flicker (ms). */
