@@ -52,6 +52,27 @@ The track's own starter file is
 | An economy that moves without a patch | Prices follow stock, the Harbormaster's strength follows what players pay it and halves every 12 hours, and no account, the owner's included, can create scrip, parts or guns outside the contract's rules. A test checks that. |
 | NEAR Intents | Not used: it is mainnet-only. |
 
+## Also entered: NFTs That Do Something
+
+A gun is not a picture. Each one is an NEP-171 token in the game contract
+([`contract2/src/nft.rs`](contract2/src/nft.rs), [`weapons.rs`](contract2/src/weapons.rs)), and it does these things:
+
+- **It is the thing you play with.** Its rolled stats are the numbers the shooter uses. Starting a raid checks the gun
+  is the caller's and locks it in the contract until the raid ends, so a gun that has been sold can't be taken on
+  one by its old owner.
+- **It changes with use.** Wear, the raids it went on, the raids it came home from, how many accounts have owned it
+  and how often it was pulled from a wreck are all on its record. Its level is worked out from the raids it came home
+  from, so a level can't be minted or bought, and it moves with the gun when the gun is sold.
+- **It holds inventory.** Mods are fitted into a gun for good and go wherever it goes.
+- **It pays its maker.** `nft_payout` (NEP-199) gives whoever built the gun 2% of every resale, and the game's own
+  market pays the same.
+- **It can be lost and found.** Die to the machines and the gun lies in a wreck that appears in other players' raids;
+  the first to carry it to the boat owns it. Die to the Bailiff and it is impounded for 48 hours.
+- **Its picture is on chain.** The token's `media` is an SVG the contract draws from the gun's own record.
+
+What it is not: a gun is not an account of its own (there is no sub-account per token), and there is no page gated
+to holders beyond the dock showing each player their own guns.
+
 ## Try it: do X, see Y
 
 Steps 1 to 9 use Practice: the whole port runs in the browser, so nothing can fail on the network. Step 10 is the
