@@ -1,6 +1,9 @@
-/* squad.css: the one line of HUD that live presence adds (squad/index.ts): who else is in your yard right now. */
+/* squad.css: what live presence adds to the HUD (squad/index.ts): who else is in your yard right now, and who dropped whom. */
 .sq-chip { position: absolute; left: 50%; top: calc(86px + var(--sat)); transform: translateX(-50%); max-width: min(92vw, 720px); padding: 6px 12px 5px; background: rgba(0, 0, 0, .72); border: 1px solid var(--line); border-left: 3px solid var(--signal); color: var(--bone); font: 600 12px/1.2 var(--f-label); letter-spacing: .18em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .sq-chip[hidden] { display: none; }
-/* Who hit whom (Practice, where players can shoot each other). */
-.sq-note { position: absolute; left: 50%; top: 56%; transform: translateX(-50%); padding: 7px 14px 6px; background: rgba(0, 0, 0, .78); border: 1px solid var(--alarm); color: var(--bone); font: 700 15px/1.2 var(--f-label); letter-spacing: .2em; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
-.sq-note[hidden] { display: none; }
+/* The kill feed (Skirmish): two or three lines at the top right, under the invoice, that fade. Above the menus, so a
+   player who was just dropped reads who did it over their own death screen. */
+.sq-feed { position: absolute; right: var(--gr, 16px); top: calc(104px + var(--sat, 0px)); z-index: 40; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; pointer-events: none; }
+.sq-fl { padding: 3px 9px 2px; background: rgba(0, 0, 0, .6); font: 500 13px/1.4 var(--f-label); letter-spacing: .16em; text-transform: uppercase; color: var(--bone-dim, #b9b2a0); white-space: nowrap; transition: opacity .5s; }
+.sq-fl b { font-weight: 700; color: var(--bone, #efe9da); }
+.sq-fl.out { opacity: 0; }
