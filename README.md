@@ -17,8 +17,9 @@ earn and never risk. Nothing you own can be lost, so nothing has value, and play
 - **Greed is the difficulty.** Everything you cut, carry or kill goes on the port's **invoice**, a meter on screen the
   whole time. At 1,200 the port sends the Bailiff, which walks, can't be destroyed and doesn't stop.
 - **The villain has a wallet, and its balance is how hard the game hits everyone.** Pay down your bill and the scrip
-  goes to the Harbormaster, whose wallet sets how many machines every player faces. Paying makes your next raid
-  easier and everyone's harder.
+  goes to the Harbormaster. Its strength is what it has been paid, halving every 12 hours, and every 25 points
+  (500 scrip) is one more machine on every player's raid (or, when it turns to pursuit, an earlier Bailiff). Paying
+  makes your next raid easier and everyone's harder.
 - **You never see the chain.** A dock pass is a NEAR testnet account made in your browser and paid for by the dock
   office: no wallet, popup, seed phrase or gas prompt.
 
@@ -44,8 +45,8 @@ chain.
 | 1 | Open the Play link above | The lobby: your gun in the middle, the modes on the right, the dock's tabs along the foot and one big button. |
 | 2 | Press **Deploy** | About five seconds later you are in the yard. On a first raid you stand at a crate: "HOLD E — TAKE THE RIFLE". |
 | 3 | Hold **E** at the crate, then walk to a marked container and hold **E** | The seal is cut and the cargo is added (`CARGO 2/6`). At the top right the invoice rises toward `BAILIFF AT 1,200`. |
-| 4 | Cut the three uplinks (hold **E** at each), then reach the boat | The debrief: what you carried, what the port billed you, and what you now owe. |
-| 5 | At the dock, open **Vendors** | Moss and Ines. Each price has the vendor's reason under it ("Short: 3 against a target of 16. Paying half again."). Sell a unit and the next one pays less. |
+| 4 | Cut the three uplinks (hold **E** at each), then reach the boat | The debrief leads with what you carried out and what it is worth today ("MEDS ×2 · Worth about 123 scrip at Ines's today"), then the port's bill. **Sell haul** opens the dock. |
+| 5 | At the dock, open **Vendors**, press **Sell everything to the best buyer** | Each lot goes to whichever vendor pays most, with that vendor's reason ("Moss holds 3 of the 20 she wants, so she pays over the book."), then what you earned and what it buys next. Sell a unit and the next one pays less. |
 | 6 | Open **Armoury**, pick a frame, press **Build** | The parts and fee are taken, the gun's stats roll one by one, and its grade is stamped. No two come out the same. |
 | 7 | Open **Loadout** | Each gun shows its level ("Lv 4"), earned by the raids it came home from, so it can't be bought. |
 | 8 | Open **Ledger**, press **Fast-forward a week** | 168 hours in about a minute: two charts of what the vendors pay and what Moss, Ines and the Harbormaster hold. |
@@ -53,7 +54,8 @@ chain.
 
 Controls: WASD and the mouse (click to capture it), left mouse to fire, right mouse to aim, R to reload, E to use,
 G for a breaker charge, F for the rifle butt, Shift to sprint, C to crouch, Esc to pause. Touch screens get
-on-screen buttons. **Skirmish** in the lobby is the practice yard with other players in it, who can shoot you.
+on-screen buttons. **Skirmish** in the lobby is the practice yard with other players in it: armed, firing, and able
+to drop you. Add `&room=yourname` to its address for a private yard with friends.
 
 ## What the games track asks for, and where it is
 
@@ -90,11 +92,42 @@ Each gun is an NEP-171 token in the game contract ([`nft.rs`](contract2/src/nft.
 
 A gun is not an account of its own (no sub-account per token).
 
+## Proof on chain: the whole loop, played on testnet
+
+On 14 Nov 2026 three fresh guest accounts, **the team's own test accounts** (callsigns `TEAM TEST A/B/C`), played
+the loop through the live site's own code: 44 transactions, every one a final success, each step confirmed by
+reading the contract's views afterwards. The raids were scripted (the player was made invulnerable and teleported),
+so this proves the contract and the game's chain client, not human play. Full table and the gun's history:
+[`docs/PROOF.md`](docs/PROOF.md).
+
+| Step | Transaction | What the contract then showed |
+| --- | --- | --- |
+| A builds a gun from parts carried out of two raids | [`build`](https://testnet.nearblocks.io/txns/9zkmR9VANRex6Xr2GfTxYrid2cab7nEkCo4enLGnAX3H) | `S-000005`, a C-grade Stevedore, maker and owner A |
+| A lists it; B buys it for 400 | [`buy_listing`](https://testnet.nearblocks.io/txns/D5dyzmYwGw4VM3hwhTyBhLU5UTuoUmr1gFd6mwtnAQPM) | owner A → B |
+| B relists; C buys it for 300 | [`buy_listing`](https://testnet.nearblocks.io/txns/2MUcGmRUXXwd4UTWWCMD8hhKtJRPYx1NnvnN6JwdLdtx) | owner B → C; **A, the maker, paid 6 (2%)** |
+| C raids with it and dies to the machines | [`die`](https://testnet.nearblocks.io/txns/Gk8LRWvyGwktty6EtWaeh8vmQNWRdi8ZCX6qcXLmMvuS) | a wreck holding `S-000005` in other players' raids |
+| A finds the wreck and carries it to the boat | [`extract`](https://testnet.nearblocks.io/txns/sfB3AZ6bYoMiMGpycnKmPU7dqFpp31tBcaZRpPs7X9U) | owner C → A, 4 owners, recovered once |
+| A pays 214 scrip, clearing 427 of arrears | [`settle`](https://testnet.nearblocks.io/txns/7n9Chn3Zeqcz3ZXxZc1hAgQ17oicuyamzmYTijdw5E15) | the Harbormaster's wallet 11 → 225 scrip, strength 0 → 11 |
+| The Bailiff takes A's gun; A buys it back | [`buy_back`](https://testnet.nearblocks.io/txns/wP29AzoQoXGKLXH5EADVm7xobfuanfRuuXyG4pEswMZ) | held again; the Harbormaster 462 scrip, strength 23 |
+
+What it also showed: 454 scrip paid still bought no extra machine (that needs strength 25), and a gun carried out
+of a wreck doesn't count an extraction on its record.
+
+## Where it goes from here
+
+- **Before real money: a second witness for raid results.** The contract enforces ownership, the manifest, carry
+  weight, timings and every price, but the client reports the fight. Mainnet needs a server that replays raids (or
+  attested compute) and signs the result. This is the main piece of work between testnet and mainnet.
+- **Then:** guns become standard NFTs priced in NEAR or USDC on the open market, with `nft_transfer_payout` so
+  outside marketplaces pay makers too; scrip stays a soft currency the studio never sells; the studio's revenue is
+  a share of the market fee (today that share is burned). The contract account's full-access key is removed.
+- **Squads:** players already see and fight each other peer to peer; shared raids need the same server as above.
+
 ## Check it without playing
 
 ```sh
 npm ci
-npm run check               # typecheck, 974 tests (Vitest), production build
+npm run check               # typecheck, 1,013 tests (Vitest), production build
 npm run verify:v2           # reads the live contract with no wallet and checks it against the game's numbers
 cd contract2 && cargo test  # 62 contract tests, including an access table over every public method and a no-mint test
 ```
@@ -131,12 +164,13 @@ src/economy/v2/        the game around it, TypeScript, attached to the shooter's
   dock/                loadout, armoury, market, vendors, the ledger and the fast-forward
   home/, login/        the lobby, and sign-in with Google
   intro/, coach/       the opening film, and the first raid's crate and checklist
-  squad/               other breachers in a raid right now, drawn in your yard; Skirmish
+  squad/               other breachers in a raid right now, armed, in your yard; Skirmish and private yards
+  sight/               the machines' signal lamps and threat markers, and a fair first raid
 src/economy/           shared pieces: the chain executor, the wallet, the Bailiff, the arsenal, the score
 contract2/             Rust (near-sdk 5.29.1): mt.rs, nft.rs, items.rs, weapons.rs, raids.rs, vendors.rs, export.rs, market.rs, harbormaster.rs
 agents/v2/             Moss, Ines and the Harbormaster: read the port, decide in character, sign their own moves
 server/, api/          the dock office: the faucet, sign-in and the studio's counts; each validates and fails closed
-docs/                  GAME.md (the design), CONTRACT_V2.md (the wire format), STORY.md, LIMITS.md, V1.md
+docs/                  GAME.md (the design), CONTRACT_V2.md (the wire format), PROOF.md, STORY.md, LIMITS.md, V1.md
 ```
 
 ## Run it locally
