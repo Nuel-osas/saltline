@@ -479,7 +479,7 @@ describe("the coach in a raid", () => {
     expect(w.build.mock.calls[1][1]).toEqual({ label: "PAC-9 ISSUE", finish: FINISH.issue, issue: true });
   });
 
-  it("on a retry after a death the rifle is taken at the press; after the boat it is held again", () => {
+  it("on a retry after a death the rifle is taken at the press; after the boat every raid starts with it in hand", () => {
     const g = game();
     const c = createCoach(g.G, { world: world(), store: memoryStore(), now });
     g.start();
@@ -493,8 +493,9 @@ describe("the coach in a raid", () => {
     c.take();
     g.end("complete");
     g.start();
-    expect(g.slot[0].seconds).toBe(TAKE_SECONDS);
-    expect(c.state.instant).toBe(false);
+    expect(g.slot).toHaveLength(0); // no crate to stop at: the rifle is already up
+    expect(c.state).toMatchObject({ instant: false, armed: true });
+    expect(g.G.ext.unarmed).toBe(false);
   });
 
   it("shows one line at a time, in the panel under the objective", () => {
@@ -598,9 +599,8 @@ describe("the coach in a raid", () => {
     expect(how.getAttribute("aria-pressed")).toBe("false");
     g.start();
     spin(c, 2);
-    expect(c.state).toMatchObject({ coached: false, armed: false, step: null }); // the crate is still how a raid starts
+    expect(c.state).toMatchObject({ coached: false, armed: true, step: null }); // reached the boat once: armed from the start
     expect(panel().classList.contains("on")).toBe(false);
-    c.take();
     g.end("complete");
     c.dispose();
 

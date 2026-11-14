@@ -426,6 +426,7 @@ export function createRaid(G: Game): RaidApi {
     world.build(raid, new Map(r.targets.filter((t) => t.kind === "wreck").map((t) => [t.wreckId, t.slot])));
     r.total = current(r);
     r.due = r.thresholds!.cross(r.total);
+    atFence = new Set(r.due.map((t) => t.id));
     showInvoice();
     refreshCargo();
     refreshMarkers(true);
@@ -517,16 +518,22 @@ export function createRaid(G: Game): RaidApi {
   }
 
   let warnAt = 0;
+  /** Thresholds the invoice was already past at the fence (a debtor's raid): they apply, but nothing is announced. */
+  let atFence = new Set<string>();
   function fire(r: Live, t: Threshold) {
     emit("invoice:threshold", { at: t.at, what: t.id });
+    // A notice the player walked in with is the meter's label and a line in the feed, not a banner across the middle
+    // of the screen in their first second: they have not done anything yet to be warned about.
+    const quiet = atFence.delete(t.id);
     // Announcements a few seconds apart, so two reached at once are both read.
-    const wait = Math.max(0, warnAt - now());
-    warnAt = now() + wait + 3600;
+    const wait = quiet ? 0 : Math.max(0, warnAt - now());
+    if (!quiet) warnAt = now() + wait + 3600;
     setTimeout(() => {
       if (!live || live.token !== r.token || live.ended) return;
       hud.flag(THRESHOLD_WARN[t.id]);
-      call(G.hud, "warn", THRESHOLD_WARN[t.id], 3.2);
       call(G.hud, "feed", `<b>${THRESHOLD_WARN[t.id]}</b> ${THRESHOLD_NOTE[t.id]}`); // the feed, clear of the radio's subtitles
+      if (quiet) return;
+      call(G.hud, "warn", THRESHOLD_WARN[t.id], 3.2);
       call(G.audio, "play", "alert", { pitch: 0.8, gain: 0.8 });
     }, wait);
     const p = G.player?.pos;
