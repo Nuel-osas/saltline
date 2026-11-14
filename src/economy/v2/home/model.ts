@@ -29,13 +29,15 @@ export function rankOf(extractions: number | null | undefined): Rank {
   return { level: i + 1, name: RANKS[i].name, into: n - RANKS[i].at, need: next.at - RANKS[i].at };
 }
 
-export type Mode = "raid" | "practice" | "film";
-export type Do = "signin" | "deploy" | "practice" | "online" | "film" | "vendors";
+export type Mode = "raid" | "practice" | "skirmish" | "film";
+export type Do = "signin" | "deploy" | "practice" | "skirmish" | "online" | "film" | "vendors";
 
 /** What the lobby knows. A null is "unknown" (a read that hasn't answered or failed), never "no". */
 export interface Facts {
   /** The offline game (?mock): nothing here is on the chain. */
   offline: boolean;
+  /** The offline game with fighting on (?mock&pvp): other players in the yard can shoot this one. */
+  skirmish: boolean;
   /** This build asks players to sign in. */
   loginOn: boolean;
   signedIn: boolean;
@@ -58,12 +60,19 @@ export interface Action {
  */
 export function actionFor(mode: Mode, f: Facts): Action {
   if (f.loginOn && !f.signedIn) {
-    const what = mode === "raid" ? "Raid" : mode === "practice" ? "Practice" : "The opening";
+    const what = mode === "raid" ? "Raid" : mode === "practice" ? "Practice" : mode === "skirmish" ? "Skirmish" : "The opening";
     return { label: "Sign in", caption: `${what} · sign in first`, do: "signin" };
   }
   if (mode === "film") return { label: "Watch", caption: "The opening · 48 seconds", do: "film" };
+  // Practice and Skirmish are the same offline game in two yards: alone, or with fighting on. Each is its own page
+  // load, so the button deploys when the player is already in that yard and goes there when they are not.
+  if (mode === "skirmish") {
+    return f.offline && f.skirmish
+      ? { label: "Deploy", caption: `Skirmish · with the ${f.gun}`, do: "deploy" }
+      : { label: "Play skirmish", caption: "Live · players can shoot you", do: "skirmish" };
+  }
   if (mode === "practice") {
-    return f.offline ? { label: "Deploy", caption: `Practice · with the ${f.gun}`, do: "deploy" } : { label: "Play practice", caption: "Offline · nothing at stake", do: "practice" };
+    return f.offline && !f.skirmish ? { label: "Deploy", caption: `Practice · with the ${f.gun}`, do: "deploy" } : { label: "Play practice", caption: "Offline · nothing at stake", do: "practice" };
   }
   if (f.offline) return { label: "Go on chain", caption: "Raid · leave practice", do: "online" };
   return { label: "Deploy", caption: `Raid · with the ${f.gun}`, do: "deploy" };
@@ -93,8 +102,8 @@ export function startStep(f: Facts): Step | null {
   return null;
 }
 
-/** Which mode the lobby opens on: Practice in the offline game, the raid otherwise. */
-export const defaultMode = (offline: boolean): Mode => (offline ? "practice" : "raid");
+/** Which mode the lobby opens on: the yard the player is in for the offline game, the raid otherwise. */
+export const defaultMode = (offline: boolean, skirmish = false): Mode => (offline ? (skirmish ? "skirmish" : "practice") : "raid");
 
 // ---------------------------------------------------------------------------------------------------------------
 // The port: the other players, read from the contract's own record.

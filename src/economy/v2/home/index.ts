@@ -27,6 +27,8 @@ export interface HomeOptions {
   v2: V2;
   /** True for the offline game (?mock). */
   offline: boolean;
+  /** True for the offline game with fighting on (?mock&pvp): the Skirmish yard. */
+  skirmish?: boolean;
   login: () => Login | null;
   dock: () => Dock | null;
   storage?: Pick<Storage, "getItem" | "setItem">;
@@ -66,12 +68,16 @@ const ICON: Record<string, string> = {
   full: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
   cog: '<svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm0-5l1.5 3 3.2-.9 1 3.1 3.1 1-1 3.2 2.2 2.4-2.6 2 .3 3.3-3.3.2-1.6 2.9L12 20.7 9.2 22.2l-1.6-2.9-3.3-.2.3-3.3-2.6-2 2.2-2.4-1-3.2 3.1-1 1-3.1 3.2.9L12 3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M6 3l15 9-15 9V3z" fill="currentColor"/></svg>',
+  // Two breachers facing each other across a sight.
+  skirmish:
+    '<svg viewBox="0 0 120 60"><g fill="none" stroke="currentColor" stroke-width="2"><circle cx="60" cy="30" r="13"/><path d="M60 11v10M60 39v10M41 30h10M69 30h10"/></g><g fill="currentColor"><circle cx="20" cy="17" r="5"/><path d="M11 50V33a9 9 0 0118 0v17z"/><circle cx="100" cy="17" r="5"/><path d="M91 50V33a9 9 0 0118 0v17z"/></g></svg>',
   film: '<svg viewBox="0 0 120 60"><rect x="8" y="10" width="104" height="40" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 20h104M8 40h104M22 10v10M38 10v10M54 10v10M70 10v10M86 10v10M102 10v10M22 40v10M38 40v10M54 40v10M70 40v10M86 40v10M102 40v10" stroke="currentColor" stroke-width="2"/><path d="M53 24l16 6-16 6z" fill="currentColor"/></svg>',
 };
 
 const MODES: { id: Mode; label: string; line: string; tag?: string }[] = [
   { id: "raid", label: "Raid", line: "Over the fence with your own gun. What you carry out is yours, on the chain.", tag: "On chain" },
   { id: "practice", label: "Practice", line: "The whole port in memory, with a full locker. Nothing is at stake." },
+  { id: "skirmish", label: "Skirmish", line: "The practice yard with other players in it. They can shoot you, and you them.", tag: "Live PvP" },
   { id: "film", label: "The opening", line: "Why you were sent, the crate, and the rifle. 48 seconds.", tag: "New" },
 ];
 
@@ -87,7 +93,8 @@ export function startHome(G: Game, opts: HomeOptions): Home {
       return null;
     }
   };
-  let mode: Mode = defaultMode(opts.offline);
+  const skirmish = opts.offline && !!opts.skirmish;
+  let mode: Mode = defaultMode(opts.offline, skirmish);
   let profile: Profile | null | undefined; // undefined: not read yet or the read failed; null: no dock pass
   let scrip: number | null = null;
   let guns: Weapon[] | null = null;
@@ -116,7 +123,7 @@ export function startHome(G: Game, opts: HomeOptions): Home {
       "aside",
       { class: "hm-modes" },
       h("p", { class: "hm-eye" }, "Select mode"),
-      h("p", { class: "hm-lede" }, opts.offline ? "You are in Practice: the port runs in this browser and nothing is kept. Go on chain to own what you carry out." : "Sign in once to play. Practice risks nothing. A raid is the real thing: your gun, your haul and your invoice are on NEAR."),
+      h("p", { class: "hm-lede" }, skirmish ? "You are in Skirmish: the practice yard, with other players in it who can shoot you. Nothing is kept." : opts.offline ? "You are in Practice: the port runs in this browser and nothing is kept. Go on chain to own what you carry out." : "Sign in once to play. Practice risks nothing. A raid is the real thing: your gun, your haul and your invoice are on NEAR."),
       tiles,
     ),
     start,
@@ -136,6 +143,7 @@ export function startHome(G: Game, opts: HomeOptions): Home {
   };
   const facts = (): Facts => ({
     offline: opts.offline,
+    skirmish,
     loginOn: !!login(),
     signedIn: signedIn(),
     extractions: profile === undefined ? null : (profile?.extractions ?? 0),
@@ -164,6 +172,7 @@ export function startHome(G: Game, opts: HomeOptions): Home {
       }
       return go(`${location.pathname}?game=v2&mock=1&stash=rich`);
     }
+    if (what === "skirmish") return go(`${location.pathname}?game=v2&mock=1&stash=rich&pvp=1`);
     if (what === "online") return go(`${location.pathname}?game=v2`);
   }
 
@@ -173,7 +182,7 @@ export function startHome(G: Game, opts: HomeOptions): Home {
     const l = login();
     const who = l?.who() ?? null;
     const rank = rankOf(profile?.extractions);
-    const name = profile?.callsign ?? (opts.offline ? "Practice" : f.signedIn ? "No dock pass yet" : "Guest");
+    const name = profile?.callsign ?? (opts.offline ? (skirmish ? "Skirmish" : "Practice") : f.signedIn ? "No dock pass yet" : "Guest");
     fill(
       card,
       h("span", { class: "hm-ava", "aria-hidden": "true" }, (profile?.callsign ?? "?").slice(0, 1).toUpperCase()),
@@ -226,9 +235,19 @@ export function startHome(G: Game, opts: HomeOptions): Home {
       tiles,
       ...MODES.map((m) => {
         const needsSignIn = f.loginOn && !f.signedIn;
-        const note = needsSignIn ? "Sign in" : m.id === "raid" ? (f.offline ? "Leave practice" : "") : m.id === "practice" ? (f.offline ? "You are here" : "No stake") : "48 s";
-        const tileArt = m.id === "film" ? svg(ICON.film, "hm-tile-art") : svg(gunSvg(m.id === "practice" ? "issue" : g.frame), "hm-tile-art d2-art");
-        if (m.id !== "film") tileArt.dataset.frame = m.id === "practice" ? "issue" : g.frame;
+        const here = f.offline && (m.id === "skirmish") === f.skirmish;
+        const note = needsSignIn
+          ? "Sign in"
+          : m.id === "raid"
+            ? f.offline ? "Leave practice" : ""
+            : m.id === "practice"
+              ? here ? "You are here" : "No stake"
+              : m.id === "skirmish"
+                ? here ? "You are here" : "No stake"
+                : "48 s";
+        const drawn = m.id === "film" || m.id === "skirmish";
+        const tileArt = drawn ? svg(ICON[m.id], "hm-tile-art") : svg(gunSvg(m.id === "practice" ? "issue" : g.frame), "hm-tile-art d2-art");
+        if (!drawn) tileArt.dataset.frame = m.id === "practice" ? "issue" : g.frame;
         const t = h(
           "button",
           { class: "hm-tile", type: "button", role: "radio", "aria-checked": String(mode === m.id), "data-mode": m.id },

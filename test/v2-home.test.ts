@@ -5,7 +5,7 @@ import { PRACTISED_KEY, START_DONE_KEY, startHome } from "../src/economy/v2/home
 import { type Facts, type PortEvent, RAID_LAPSE_MS, RANKS, actionFor, defaultMode, portRoster, rankOf, startStep } from "../src/economy/v2/home/model";
 import type { Login } from "../src/economy/v2/login";
 
-const facts = (over: Partial<Facts> = {}): Facts => ({ offline: false, loginOn: true, signedIn: false, extractions: null, practised: false, gun: "Issue rifle", ...over });
+const facts = (over: Partial<Facts> = {}): Facts => ({ offline: false, skirmish: false, loginOn: true, signedIn: false, extractions: null, practised: false, gun: "Issue rifle", ...over });
 
 describe("rank", () => {
   it("climbs with raids brought home and shows the way to the next rank", () => {
@@ -39,6 +39,18 @@ describe("the one big button", () => {
     expect(actionFor("film", facts(inn))).toMatchObject({ label: "Watch", do: "film" });
     expect(defaultMode(true)).toBe("practice");
     expect(defaultMode(false)).toBe("raid");
+  });
+
+  it("Skirmish is its own yard: the button goes there, deploys once there, and Practice leads back out", () => {
+    const inn = { signedIn: true };
+    expect(actionFor("skirmish", facts())).toEqual({ label: "Sign in", caption: "Skirmish · sign in first", do: "signin" });
+    expect(actionFor("skirmish", facts(inn))).toEqual({ label: "Play skirmish", caption: "Live · players can shoot you", do: "skirmish" });
+    expect(actionFor("skirmish", facts({ ...inn, offline: true }))).toMatchObject({ label: "Play skirmish", do: "skirmish" }); // in Practice: not this yard
+    expect(actionFor("skirmish", facts({ ...inn, offline: true, skirmish: true, gun: "Issue rifle" }))).toEqual({ label: "Deploy", caption: "Skirmish · with the Issue rifle", do: "deploy" });
+    expect(actionFor("practice", facts({ ...inn, offline: true, skirmish: true }))).toMatchObject({ label: "Play practice", do: "practice" });
+    expect(actionFor("raid", facts({ ...inn, offline: true, skirmish: true }))).toMatchObject({ do: "online" });
+    expect(defaultMode(true, true)).toBe("skirmish");
+    expect(defaultMode(false, true)).toBe("raid"); // on the chain there is no skirmish
   });
 });
 
@@ -91,7 +103,7 @@ describe("the port roster", () => {
 describe("the lobby", () => {
   afterEach(() => (document.body.innerHTML = ""));
 
-  function world(opts: { offline?: boolean; login?: Partial<Login> | null; profile?: unknown; fail?: boolean; wire?: PortEvent[] | "down" } = {}) {
+  function world(opts: { offline?: boolean; skirmish?: boolean; login?: Partial<Login> | null; profile?: unknown; fail?: boolean; wire?: PortEvent[] | "down" } = {}) {
     document.body.innerHTML = `<div id="app"><div class="menu open" data-screen="title"><section class="m-screen" data-s="title"><div class="m-title-main"><div class="m-actions"><button data-act="deploy">Deploy</button><button data-act="settings">Settings</button><button class="st-replay">Intro</button></div></div></section><div class="panel" hidden></div></div></div>`;
     const pressed: string[] = [];
     for (const b of document.querySelectorAll<HTMLElement>(".m-actions button")) b.addEventListener("click", () => pressed.push(b.dataset.act ?? b.className));
@@ -119,7 +131,7 @@ describe("the lobby", () => {
     const v2: any = { chain, wallet: { accountId: () => "ab".repeat(32) }, loadout: { weapon: "S-000026", plates: 0, charges: 0, mags: 0 }, raid: null };
     const handlers = new Map<string, () => void>();
     const G: any = { events: { on: (k: string, f: () => void) => handlers.set(k, f), off: () => {} } };
-    const home = startHome(G, { v2, offline: !!opts.offline, login: () => login, dock: () => dock as never, storage, go: (u) => void went.push(u) });
+    const home = startHome(G, { v2, offline: !!opts.offline, skirmish: !!opts.skirmish, login: () => login, dock: () => dock as never, storage, go: (u) => void went.push(u) });
     const text = (sel: string) => home.root.querySelector(sel)?.textContent ?? "";
     return { home, G, pressed, went, opened, docked, store, text, handlers };
   }
@@ -134,7 +146,7 @@ describe("the lobby", () => {
     expect(w.home.root.previousElementSibling?.getAttribute("data-s")).toBe("title");
     expect(w.home.root.nextElementSibling?.classList.contains("panel")).toBe(true);
     for (const part of [".hm-card", ".hm-word", ".hm-tools", ".hm-hero", ".hm-modes", ".hm-start", ".hm-tabs", ".hm-play"]) expect(w.home.root.querySelector(part)).not.toBeNull();
-    expect(w.home.root.querySelectorAll(".hm-tile")).toHaveLength(3);
+    expect(w.home.root.querySelectorAll(".hm-tile")).toHaveLength(4);
     expect(w.home.root.querySelectorAll(".hm-tab")).toHaveLength(4);
   });
 
@@ -183,6 +195,38 @@ describe("the lobby", () => {
     w.home.root.querySelector<HTMLElement>(".hm-play")!.click();
     expect(w.went).toEqual(["/?game=v2&mock=1&stash=rich"]);
     expect(w.store.get(PRACTISED_KEY)).toBe("1");
+  });
+
+  it("Skirmish is picked in the lobby: from the chain game or Practice it goes to its own yard, and deploys once there", async () => {
+    const w = world({ login: { state: () => "in" }, profile: { callsign: "ROOK", extractions: 0, arrears: 0 } });
+    await settle();
+    const tile = w.home.root.querySelector<HTMLElement>('.hm-tile[data-mode="skirmish"]')!;
+    expect(tile.textContent).toContain("Live PvP");
+    expect(tile.textContent).toContain("They can shoot you");
+    tile.click();
+    expect(w.text(".hm-play")).toContain("Play skirmish");
+    w.home.root.querySelector<HTMLElement>(".hm-play")!.click();
+    expect(w.went).toEqual(["/?game=v2&mock=1&stash=rich&pvp=1"]);
+    expect(w.pressed).toEqual([]);
+
+    const practice = world({ offline: true, login: null, profile: { callsign: "BREACHER", extractions: 0, arrears: 0 } });
+    await settle();
+    expect(practice.home.mode()).toBe("practice"); // Practice never opens on the fighting yard
+    expect(practice.text('.hm-tile[data-mode="practice"]')).toContain("You are here");
+    practice.home.root.querySelector<HTMLElement>('.hm-tile[data-mode="skirmish"]')!.click();
+    practice.home.root.querySelector<HTMLElement>(".hm-play")!.click();
+    expect(practice.went).toEqual(["/?game=v2&mock=1&stash=rich&pvp=1"]);
+
+    const yard = world({ offline: true, skirmish: true, login: null, profile: { callsign: "BREACHER", extractions: 0, arrears: 0 } });
+    await settle();
+    expect(yard.home.mode()).toBe("skirmish");
+    expect(yard.text('.hm-tile[data-mode="skirmish"]')).toContain("You are here");
+    expect(yard.text(".hm-play")).toContain("Deploy");
+    yard.home.root.querySelector<HTMLElement>(".hm-play")!.click();
+    expect(yard.pressed).toEqual(["deploy"]);
+    yard.home.root.querySelector<HTMLElement>('.hm-tile[data-mode="practice"]')!.click();
+    yard.home.root.querySelector<HTMLElement>(".hm-play")!.click();
+    expect(yard.went).toEqual(["/?game=v2&mock=1&stash=rich"]);
   });
 
   it("inside Practice, a signed-out player still has to sign in before the raid starts", async () => {
