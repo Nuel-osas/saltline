@@ -160,7 +160,7 @@ deploying the contract, and `agents/README.md` covers running the brokers.
 - **Run results come from the client.** The contract enforces the manifest, the carry limit, minimum run times
   (45 s + 8 s a box) and one run at a time, but it can't see the fight. A launch would need a server that checks runs.
 - **The guest wallet's key lives in this browser's storage.** Clearing it loses the account. This is testnet only.
-- **With sign-in on (v2), the studio holds the keys.** A player signs in with an email code or Google (Privy). Their
+- **With sign-in on (v2), the studio holds the keys.** A player signs in with Google (through Privy). Their
   NEAR key is derived on the server from that sign-in and one server secret, which is what lets the same sign-in open
   the same account on any device, and lets the faucet give one dock pass per sign-in. It also means whoever holds
   that secret could sign as any player. That is acceptable on testnet only; a launch would move the key to the login

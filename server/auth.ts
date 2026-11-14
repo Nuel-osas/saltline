@@ -1,6 +1,6 @@
 // Who is asking, and which account is theirs (v2's sign-in).
 //
-// A player signs in with Privy (email or Google) in the browser and sends Privy's access token here. This file checks
+// A player signs in with Google (through Privy) in the browser and sends Privy's access token here. This file checks
 // that token against Privy's public keys, and derives the player's NEAR key from their Privy user id and one server
 // secret. The same sign-in gets the same key on any device, and the faucet gives one dock pass per sign-in.
 //
