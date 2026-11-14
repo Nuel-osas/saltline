@@ -81,7 +81,7 @@ export interface Step {
  * 1 sign in · 2 a practice raid · 3 the first real raid · 4 the dock.
  */
 export function startStep(f: Facts): Step | null {
-  if (f.loginOn && !f.signedIn) return { n: 1, text: "Sign in to play. An email is enough.", button: "Sign in", do: "signin" };
+  if (f.loginOn && !f.signedIn) return { n: 1, text: "Sign in with Google to play.", button: "Sign in", do: "signin" };
   if (f.offline) {
     if ((f.extractions ?? 0) < 1) return { n: 2, text: "Take the rifle over the fence. Nothing here is at stake.", button: "Deploy", do: "deploy" };
     return { n: 3, text: "You got out. Now do it for real: go on chain.", button: "Go on chain", do: "online" };

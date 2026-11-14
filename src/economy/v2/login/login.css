@@ -15,10 +15,6 @@
 .lg-line { font: 500 17px/1.4 var(--f-label); color: var(--bone); padding-bottom: 12px; max-width: 46ch; text-shadow: var(--shadow); }
 .lg-line b { font: 500 14px/1 var(--f-mono); }
 .lg-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
-.lg-input { flex: 1 1 230px; min-width: 0; height: 50px; padding: 0 14px; background: rgba(8, 9, 10, .84); border: 1px solid var(--line); border-radius: 0; color: var(--bone); font: 500 16px/1 var(--f-mono); }
-.lg-input::placeholder { color: var(--bone-faint); }
-.lg-input:focus { outline: 2px solid var(--signal); outline-offset: 0; border-color: var(--signal); }
-.lg-code { flex: 0 1 190px; letter-spacing: .4em; font-size: 20px; text-align: center; }
 .lg .btn { min-height: 50px; }
 .lg-google { flex: 1 1 100%; justify-content: center; }
 .lg-note { font: 400 13px/1.45 var(--f-mono); color: var(--signal-hot); padding: 2px 0 10px; text-shadow: var(--shadow); }

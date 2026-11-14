@@ -6,14 +6,14 @@
 // The lock here is the title's: it hides Deploy and the dock and refuses a start. What actually enforces "one sign-in,
 // one dock pass" is the faucet (server/faucet.ts), which gives a pass only to the signed-in player's own account.
 import { WALLET_STORAGE_KEY } from "../../wallet";
-import { type Auth, type Who, createPrivyAuth, isEmail } from "./auth";
+import { type Auth, type Who, createPrivyAuth } from "./auth";
 import { fetchWallet } from "./session";
 import "./login.css";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
 type Game = any;
 
-export type LoginState = "checking" | "out" | "code" | "working" | "in" | "error";
+export type LoginState = "checking" | "out" | "working" | "in" | "error";
 
 export interface LoginWallet {
   accountId(): string | null;
@@ -72,7 +72,6 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
   let state: LoginState = "checking";
   let who: Who | null = null;
   let auth: Auth | null = opts.auth ?? null;
-  let email = "";
   let note = "";
   let stopped = false;
 
@@ -111,7 +110,7 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
     focusPanel();
   };
   document.addEventListener("click", refuse, true);
-  // Typing an email must not drive the game's menu.
+  // Keys pressed in the form must not drive the game's menu.
   for (const type of ["keydown", "keyup", "keypress"] as const) panel.addEventListener(type, (e) => e.stopPropagation());
 
   const focusPanel = open;
@@ -157,59 +156,16 @@ export function startLogin(G: Game, opts: LoginOptions): Login {
       out.onclick = () => void signOut();
       return panel.replaceChildren(h("p", { class: "lg-k" }, "Sign on"), h("p", { class: "lg-note", role: "alert" }, note || "Something went wrong."), h("div", { class: "lg-row" }, again, out));
     }
-    if (state === "code") {
-      const code = h("input", { class: "lg-input lg-code", type: "text", inputmode: "numeric", autocomplete: "one-time-code", maxlength: "6", placeholder: "000000", "aria-label": "The six-digit code" });
-      const go = h("button", { class: "btn primary", type: "submit" }, "Sign on");
-      const form = h("form", { class: "lg-row", novalidate: "" }, code, go);
-      form.onsubmit = (e) => (e.preventDefault(), void signIn(code.value));
-      const other = h("button", { class: "lg-link", type: "button" }, "Use another email");
-      other.onclick = () => set("out");
-      fill(panel, h("p", { class: "lg-k" }, "Sign on"), h("p", { class: "lg-line" }, "We sent a six-digit code to ", h("b", null, email), "."), form, noteEl(), other);
-      return code.focus();
-    }
-    // "out": the email form
-    const input = h("input", { class: "lg-input", type: "email", autocomplete: "email", placeholder: "you@example.com", "aria-label": "Your email", value: email });
-    const send = h("button", { class: "btn primary", type: "submit" }, "Send code");
-    const form = h("form", { class: "lg-row", novalidate: "" }, input, send);
-    form.onsubmit = (e) => (e.preventDefault(), void sendCode(input.value));
-    const google = h("button", { class: "btn lg-google", type: "button" }, "Continue with Google");
+    // "out": one way in
+    const google = h("button", { class: "btn primary lg-google", type: "button" }, "Continue with Google");
     google.onclick = () => void withGoogle();
-    fill(
-      panel,
-      h("p", { class: "lg-k" }, "Sign on"),
-      h("p", { class: "lg-line" }, "Sign in to play. One sign-in, one dock pass: no wallet to install, and it follows you to any device."),
-      form,
-      h("div", { class: "lg-row" }, google),
-      noteEl(),
-    );
+    fill(panel, h("p", { class: "lg-k" }, "Sign on"), h("p", { class: "lg-line" }, "Sign in to play. One sign-in, one dock pass: no wallet to install, and it follows you to any device."), h("div", { class: "lg-row" }, google), noteEl());
   }
 
   // ---- the steps ----
   async function ready(): Promise<Auth> {
     auth ??= await createPrivyAuth(opts.appId);
     return auth;
-  }
-
-  async function sendCode(raw: string) {
-    email = raw.trim();
-    if (!isEmail(email)) return set("out", "That doesn't look like an email address.");
-    set("working");
-    try {
-      await (await ready()).sendCode(email);
-      set("code");
-    } catch (e) {
-      set("out", (e as Error).message);
-    }
-  }
-
-  async function signIn(code: string) {
-    set("working");
-    try {
-      who = await (await ready()).signIn(email, code);
-    } catch (e) {
-      return set("code", (e as Error).message);
-    }
-    await enter();
   }
 
   async function withGoogle() {
