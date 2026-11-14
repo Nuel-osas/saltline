@@ -10,6 +10,7 @@ install.
 - **Front page:** https://saltline-lac.vercel.app (what the game is, and the live economy read from the contract)
 - **Play:** https://saltline-lac.vercel.app/play/?game=v2
 - **Practice (offline, full locker, nothing at stake):** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich
+- **Skirmish (the practice yard, live, players can shoot each other):** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich&pvp=1
 - **Built for:** NEAR HACKATHON, November 2026, track 09 Games With Real Economies
 - **Contract:** [`v2.saltline.testnet`](https://testnet.nearblocks.io/address/v2.saltline.testnet)
 - **Hackathon work:** [`pre-hackathon...main`](https://github.com/Nuel-osas/saltline/compare/pre-hackathon...main)
@@ -213,12 +214,13 @@ and `agents/README.md` covers running the characters.
   (WebRTC), having met through public Nostr relays this project doesn't run, so players in the same yard can see
   each other's network address, as in any peer-to-peer game. What arrives from another browser is checked field by
   field. `?squad=0` switches it off.
-- **Players can shoot each other in Practice only.** A hit is the shooter's browser telling the other player's
-  browser "I hit you"; the one who was hit decides whether to believe it (in reach, no more than a gun does, no
-  faster than a gun fires). That is one browser's word against another's, and a changed client could ignore every
-  hit. In Practice nothing is at stake, so it is on there. In a raid on the chain a death costs a real gun, so
-  there players see each other and cannot hit or be hit, until a hit can be checked by something neither player
-  controls.
+- **Players can shoot each other in Skirmish only.** Skirmish is a mode in the lobby: the offline practice game in
+  a yard of its own, so nobody learning in Practice is shot by a stranger. A hit is the shooter's browser telling
+  the other player's browser "I hit you"; the one who was hit decides whether to believe it (in reach, no more than
+  a gun does, no faster than a gun fires). That is one browser's word against another's, and a changed client could
+  ignore every hit. In Skirmish nothing is at stake, so it is on there. In Practice and in a raid on the chain
+  players see each other and cannot hit or be hit: a death on the chain costs a real gun, and a hit there would
+  need checking by something neither player controls.
 - **The faucet's per-IP limits are kept in memory** on each serverless instance. The lasting guards are one
   registration per account and never funding an account that already exists.
 - **The studio keeps a small database of who signed in and how many came (v2), when one is configured.** One record
