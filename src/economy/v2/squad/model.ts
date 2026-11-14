@@ -13,12 +13,16 @@ export interface Wire {
   z: number;
   /** Yaw, radians (the game's: 0 looks down −z). */
   w: number;
+  /** Pitch, radians: up is positive. Where the rifle points. */
+  p: number;
   /** Speed over the ground, m/s. */
   m: number;
   /** Crouched. */
   k: 0 | 1;
   /** The gun in hand: a frame id, or "issue". */
   f: string;
+  /** Rounds fired since the last update (0 to `LIMITS.shotsPerUpdate`): each is drawn as a shot. */
+  s: number;
 }
 
 export const LIMITS = {
@@ -32,7 +36,15 @@ export const LIMITS = {
   delayMs: 120,
   /** The yard, generously: a position outside this isn't one. */
   reach: 400,
+  /** Rounds one update can carry: no gun fires more than two in a tenth of a second. */
+  shotsPerUpdate: 4,
 } as const;
+
+/** `?room=` makes a private yard: friends who share the link meet only each other. Lowercase letters, digits, dashes. */
+export function privateRoom(base: string, search: string): string {
+  const r = new URLSearchParams(search).get("room");
+  return r && /^[a-z0-9-]{1,24}$/.test(r) ? `${base}-${r}` : base;
+}
 
 const FRAMES = new Set(["issue", "longshore", "stevedore", "pilot"]);
 const num = (v: unknown, lo: number, hi: number): number | null => (typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi ? v : null);
@@ -53,13 +65,27 @@ export function sanitize(raw: unknown): Wire | null {
   const w = num(r.w, -1000, 1000);
   if (x === null || y === null || z === null || w === null) return null;
   const f = typeof r.f === "string" && FRAMES.has(r.f) ? r.f : "issue";
-  return { c: cleanCallsign(r.c), x, y, z, w: Math.atan2(Math.sin(w), Math.cos(w)), m: num(r.m, 0, 14) ?? 0, k: r.k === 1 ? 1 : 0, f };
+  const shots = num(r.s, 0, LIMITS.shotsPerUpdate);
+  return {
+    c: cleanCallsign(r.c),
+    x,
+    y,
+    z,
+    w: Math.atan2(Math.sin(w), Math.cos(w)),
+    p: num(r.p, -1.56, 1.56) ?? 0,
+    m: num(r.m, 0, 14) ?? 0,
+    k: r.k === 1 ? 1 : 0,
+    f,
+    s: shots !== null && Number.isInteger(shots) ? shots : 0,
+  };
 }
 
 /** What this player sends: their own state, rounded, in the same shape that is checked on arrival. */
-export function encode(p: { callsign: string; x: number; y: number; z: number; yaw: number; speed: number; crouched: boolean; frame: string }): Wire {
+export function encode(p: { callsign: string; x: number; y: number; z: number; yaw: number; pitch?: number; speed: number; crouched: boolean; frame: string; shots?: number }): Wire {
   const r2 = (n: number) => Math.round(n * 100) / 100;
-  return { c: cleanCallsign(p.callsign), x: r2(p.x), y: r2(p.y), z: r2(p.z), w: r2(p.yaw), m: r2(Math.max(0, Math.min(14, p.speed))), k: p.crouched ? 1 : 0, f: FRAMES.has(p.frame) ? p.frame : "issue" };
+  const pitch = Number.isFinite(p.pitch) ? Math.max(-1.56, Math.min(1.56, p.pitch!)) : 0;
+  const shots = Number.isFinite(p.shots) ? Math.max(0, Math.min(LIMITS.shotsPerUpdate, Math.floor(p.shots!))) : 0;
+  return { c: cleanCallsign(p.callsign), x: r2(p.x), y: r2(p.y), z: r2(p.z), w: r2(p.yaw), p: r2(pitch), m: r2(Math.max(0, Math.min(14, p.speed))), k: p.crouched ? 1 : 0, f: FRAMES.has(p.frame) ? p.frame : "issue", s: shots };
 }
 
 export interface Placed {
@@ -67,6 +93,7 @@ export interface Placed {
   y: number;
   z: number;
   yaw: number;
+  pitch: number;
   speed: number;
   crouched: boolean;
 }
@@ -99,13 +126,14 @@ export class Track {
     const b = this.last;
     if (!b) return null;
     const a = this.prev;
-    if (!a || b.at <= a.at) return { x: b.s.x, y: b.s.y, z: b.s.z, yaw: b.s.w, speed: b.s.m, crouched: b.s.k === 1 };
+    if (!a || b.at <= a.at) return { x: b.s.x, y: b.s.y, z: b.s.z, yaw: b.s.w, pitch: b.s.p, speed: b.s.m, crouched: b.s.k === 1 };
     const t = Math.max(0, Math.min(1, (now - LIMITS.delayMs - a.at) / (b.at - a.at)));
     return {
       x: a.s.x + (b.s.x - a.s.x) * t,
       y: a.s.y + (b.s.y - a.s.y) * t,
       z: a.s.z + (b.s.z - a.s.z) * t,
       yaw: turn(a.s.w, b.s.w, t),
+      pitch: a.s.p + (b.s.p - a.s.p) * t,
       speed: a.s.m + (b.s.m - a.s.m) * t,
       crouched: b.s.k === 1,
     };
@@ -166,9 +194,38 @@ export const PVP = {
   maxRange: 480,
   /** "Your hit dropped me" is believed only this soon after this player's last hit on them (ms). */
   koWithinMs: 2000,
-  /** A dropped breacher isn't drawn again for this long, so their last updates in flight don't stand them back up (ms). */
+  /** A dropped breacher isn't stood back up for this long, so their last updates in flight are ignored (ms). */
   downMs: 1500,
+  /** How long a dropped breacher lies where they fell before they leave the yard (ms). */
+  lieMs: 4500,
+  /** The most rounds a second drawn from one player, whatever their updates say. */
+  maxShotsPerSecond: 18,
+  /** "I am down" is believed from one player at most this often (ms). */
+  downEveryMs: 3000,
 } as const;
+
+/** At most `max` events a second per player: what is past it is not believed. */
+export class Rate {
+  private recent = new Map<string, number[]>();
+  constructor(private readonly max: number) {}
+  /** Whether one more from `peerId` at `now` is within the rate (and counts it if so). */
+  take(peerId: string, now: number): boolean {
+    const times = (this.recent.get(peerId) ?? []).filter((t) => now - t < 1000);
+    const ok = times.length < this.max;
+    if (ok) times.push(now);
+    this.recent.set(peerId, times);
+    return ok;
+  }
+  forget(peerId: string): void {
+    this.recent.delete(peerId);
+  }
+}
+
+/** "I was dropped by …" from another browser: the peer id of the one who dropped them, or "" if it isn't one. */
+export function cleanDown(raw: unknown): string {
+  const b = raw && typeof raw === "object" ? (raw as { b?: unknown }).b : null;
+  return typeof b === "string" && b.length <= 80 && /^[A-Za-z0-9_-]+$/.test(b) ? b : "";
+}
 
 /**
  * Which claimed hits a player's own browser believes. The one being shot decides: a hit must come from a breacher

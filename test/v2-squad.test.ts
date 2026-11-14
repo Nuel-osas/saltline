@@ -3,14 +3,15 @@
 // module itself with a stand-in for the wire and for the 3D figures.
 import { afterEach, describe, expect, it } from "vitest";
 import { type Body, squadOn, startSquad } from "../src/economy/v2/squad";
-import { HitGate, LIMITS, PVP, Track, cleanCallsign, encode, nearest, rayHitsFigure, sanitize } from "../src/economy/v2/squad/model";
+import { HitGate, LIMITS, PVP, Rate, Track, cleanCallsign, cleanDown, encode, nearest, privateRoom, rayHitsFigure, sanitize } from "../src/economy/v2/squad/model";
 import type { Net, NetHandlers } from "../src/economy/v2/squad/net";
 
 const wire = (over: Record<string, unknown> = {}) => ({ c: "ROOK", x: 1, y: 0, z: 2, w: 0.5, m: 3, k: 0, f: "longshore", ...over });
 
 describe("what arrives from another browser", () => {
   it("is rebuilt field by field", () => {
-    expect(sanitize(wire())).toEqual({ c: "ROOK", x: 1, y: 0, z: 2, w: 0.5, m: 3, k: 0, f: "longshore" });
+    expect(sanitize(wire())).toEqual({ c: "ROOK", x: 1, y: 0, z: 2, w: 0.5, p: 0, m: 3, k: 0, f: "longshore", s: 0 });
+    expect(sanitize(wire({ p: -0.3, s: 2 }))).toMatchObject({ p: -0.3, s: 2 });
     expect(sanitize({ ...wire(), extra: "x", __proto__: { admin: true } })).toEqual(sanitize(wire()));
   });
   it("is dropped when a position or a turn isn't a number in range", () => {
@@ -20,13 +21,16 @@ describe("what arrives from another browser", () => {
   it("has its smaller faults put right, not believed", () => {
     expect(sanitize(wire({ c: "<img src=x>", f: "railgun", m: 900, k: "yes", w: 7 }))).toMatchObject({ c: "IMG SRCX", f: "issue", m: 0, k: 0 });
     expect(sanitize(wire({ w: 7 }))!.w).toBeCloseTo(7 - 2 * Math.PI, 6);
+    // A pitch past straight up or down, or rounds that aren't a small whole number, are not believed.
+    for (const p of [2, -9, "0.2", Number.NaN]) expect(sanitize(wire({ p }))!.p).toBe(0);
+    for (const s of [5, 99, -1, 1.5, "2", Number.POSITIVE_INFINITY]) expect(sanitize(wire({ s }))!.s).toBe(0);
     expect(cleanCallsign("")).toBe("BREACHER");
     expect(cleanCallsign(42)).toBe("BREACHER");
     expect(cleanCallsign("a very long callsign indeed")).toHaveLength(16);
   });
   it("what this player sends passes its own check", () => {
-    const sent = encode({ callsign: "marlo 21", x: 1.23456, y: 0, z: -8.5, yaw: 3.14159, speed: 99, crouched: true, frame: "pilot" });
-    expect(sent).toEqual({ c: "MARLO 21", x: 1.23, y: 0, z: -8.5, w: 3.14, m: 14, k: 1, f: "pilot" });
+    const sent = encode({ callsign: "marlo 21", x: 1.23456, y: 0, z: -8.5, yaw: 3.14159, pitch: -0.4321, speed: 99, crouched: true, frame: "pilot", shots: 9 });
+    expect(sent).toEqual({ c: "MARLO 21", x: 1.23, y: 0, z: -8.5, w: 3.14, p: -0.43, m: 14, k: 1, f: "pilot", s: LIMITS.shotsPerUpdate });
     expect(sanitize(sent)).toEqual(sent);
   });
 });
@@ -71,18 +75,21 @@ describe("a figure between two updates", () => {
 describe("the module", () => {
   afterEach(() => (document.body.innerHTML = ""));
 
-  function world(pvp = false) {
+  function world(pvp = false, room = "") {
     document.body.innerHTML = `<div id="ui"></div>`;
     let clock = 0;
+    let joined = "";
     const sent: unknown[] = [];
     const hits: [string, number][] = [];
     const kos: string[] = [];
+    const downs: string[] = [];
+    const listeners = new Map<string, (e: unknown) => void>();
     let handlers: NetHandlers | null = null;
     let left = 0;
-    const bodies: { seed: number; at: unknown; label: string; gone: boolean }[] = [];
+    const bodies: { seed: number; at: any; label: string; gone: boolean; fired: number; flinched: number; fell: boolean }[] = [];
     const hurt: number[] = [];
     let shotTarget: ((o: unknown, d: unknown, max: number) => { dist: number } | null) | null = null;
-    const G: any = { game: { state: "playing" }, weapon: { damage: 30 }, player: { pos: { x: 0, y: 0, z: 0 }, yaw: 0, health: 100, damage(n: number) { hurt.push(n); this.health -= n; } } };
+    const G: any = { events: { on: (n: string, f: (e: unknown) => void) => listeners.set(n, f), off: (n: string) => listeners.delete(n) }, game: { state: "playing" }, weapon: { damage: 30 }, player: { pos: { x: 0, y: 0, z: 0 }, yaw: 0, health: 100, damage(n: number) { hurt.push(n); this.health -= n; } } };
     const squad = startSquad(G, {
       room: "test",
       callsign: () => "ME",
@@ -90,11 +97,12 @@ describe("the module", () => {
       now: () => clock,
       pvp,
       addShotTarget: (fn) => ((shotTarget = fn), () => void (shotTarget = null)),
-      connect: async (_room, h) => ((handlers = h), { send: (s) => void sent.push(s), hit: (id, d) => void hits.push([id, d]), ko: (id) => void kos.push(id), leave: () => void left++ } satisfies Net),
+      search: room ? `?game=v2&room=${room}` : "",
+      connect: async (r, h) => ((handlers = h), (joined = r), { send: (s) => void sent.push(s), hit: (id, d) => void hits.push([id, d]), ko: (id) => void kos.push(id), down: (by) => void downs.push(by), leave: () => void left++ } satisfies Net),
       body: (_G, seed) => {
-        const b = { seed, at: null as unknown, label: "", gone: false };
+        const b = { seed, at: null as any, label: "", gone: false, fired: 0, flinched: 0, fell: false };
         bodies.push(b);
-        return { place: (p) => void (b.at = p), label: (t) => void (b.label = t), dispose: () => void (b.gone = true) } satisfies Body;
+        return { place: (p) => void (b.at = p), label: (t) => void (b.label = t), muzzle: () => (b.fired++, null), flinch: () => void b.flinched++, fall: () => void (b.fell = true), dispose: () => void (b.gone = true) } satisfies Body;
       },
     });
     const step = async (ms: number) => {
@@ -103,7 +111,7 @@ describe("the module", () => {
       await Promise.resolve();
       await Promise.resolve();
     };
-    return { squad, G, sent, hits, kos, hurt, shoot: (o: unknown, d: unknown, max = 500) => shotTarget?.(o, d, max) ?? null, armed: () => !!shotTarget, hitMe: (id: string, raw: unknown) => handlers!.onHit(id, raw), koMe: (id: string) => handlers!.onKo(id), note: () => document.querySelector<HTMLElement>(".sq-note")!, bodies, step, say: (id: string, raw: unknown) => handlers!.onState(id, raw), leave: (id: string) => handlers!.onLeave(id), left: () => left, chip: () => document.querySelector<HTMLElement>(".sq-chip")! };
+    return { squad, G, sent, hits, kos, downs, hurt, joined: () => joined, fire: () => listeners.get("weapon:fire")?.({}), shoot: (o: unknown, d: unknown, max = 500) => (shotTarget?.(o, d, max) ?? null) as any, armed: () => !!shotTarget, hitMe: (id: string, raw: unknown) => handlers!.onHit(id, raw), koMe: (id: string) => handlers!.onKo(id), downSays: (id: string, raw: unknown) => handlers!.onDown(id, raw), feed: () => [...document.querySelectorAll(".sq-fl")].map((e) => e.textContent), bodies, step, say: (id: string, raw: unknown) => handlers!.onState(id, raw), leave: (id: string) => handlers!.onLeave(id), left: () => left, chip: () => document.querySelector<HTMLElement>(".sq-chip")! };
   }
 
   it("joins when a raid is on, and sends this player's place ten times a second", async () => {
@@ -181,10 +189,16 @@ describe("the module", () => {
     w.say("peer-a", wire({ c: "ROOK", x: 0, z: -5 }));
     await w.step(16);
     const body = w.shoot({ x: 0, y: 1.1, z: 0 }, { x: 0, y: 0, z: -1 });
-    expect(body!.dist).toBeCloseTo(5 - 0.42, 2);
+    expect(body.dist).toBeCloseTo(5 - 0.42, 2);
+    expect(body).toMatchObject({ part: "body", point: { z: expect.closeTo(-4.58, 2) }, enemy: { type: "breacher", alive: true } });
+    expect(w.hits).toEqual([]); // told only when the game picks them as the nearest thing on the ray and applies it
+    expect(body.enemy.damage(30)).toBe(false);
     expect(w.hits).toEqual([["peer-a", 30]]);
-    expect(w.note().textContent).toBe("Hit · ROOK");
-    w.shoot({ x: 0, y: 1.63, z: 0 }, { x: 0, y: 0, z: -1 });
+    expect(w.bodies[0].flinched).toBe(1); // the struck figure flinches
+    expect(document.querySelector(".sq-note")).toBeNull(); // no text box in the middle of the screen
+    const head = w.shoot({ x: 0, y: 1.63, z: 0 }, { x: 0, y: 0, z: -1 });
+    expect(head.part).toBe("weak"); // the game's own headshot marker
+    head.enemy.damage(66);
     expect(w.hits[1]).toEqual(["peer-a", Math.round(30 * PVP.headMult)]);
     expect(w.shoot({ x: 0, y: 1.1, z: 0 }, { x: 1, y: 0, z: 0 })).toBeNull(); // aimed elsewhere
     expect(w.shoot({ x: 0, y: 1.1, z: 0 }, { x: 0, y: 0, z: -1 }, 3)).toBeNull(); // a wall is nearer
@@ -198,16 +212,19 @@ describe("the module", () => {
     await w.step(16);
     w.hitMe("peer-a", { d: 40 });
     expect(w.hurt).toEqual([40]);
-    expect(w.note().textContent).toBe("Hit by ROOK");
+    expect(w.feed()).toEqual([]);
     w.hitMe("peer-a", { d: 99999 }); // more than any gun does: cut to the most a hit can do
     expect(w.hurt[1]).toBe(PVP.maxDamage);
     expect(w.kos).toEqual(["peer-a"]); // 100 − 40 − 95: dropped
+    expect(w.downs).toEqual(["peer-a"]); // and everyone is told who did it
+    expect(w.feed()).toEqual(["ROOK dropped you"]);
     w.hitMe("nobody", { d: 40 }); // not someone this browser is hearing from
     w.hitMe("peer-a", { d: "lots" });
     w.hitMe("peer-a", null);
     expect(w.hurt).toHaveLength(2);
     w.koMe("peer-a"); // this player never hit them: not believed, and they stay in view
-    expect(w.note().textContent).not.toBe("You dropped ROOK");
+    expect(w.feed()).toEqual(["ROOK dropped you"]);
+    expect(w.bodies[0].fell).toBe(false);
     expect(w.squad.here()).toEqual(["ROOK"]);
   });
 
@@ -226,32 +243,116 @@ describe("the module", () => {
     expect(quiet.chip().hidden).toBe(true); // where players only see each other, an empty yard says nothing
   });
 
-  it("in Skirmish a breacher this player dropped leaves the yard until they are back in a raid", async () => {
+  it("in Skirmish a breacher this player dropped falls, lies there a few seconds and leaves, until they are back", async () => {
     const w = world(true);
     await w.step(16);
     w.say("peer-a", wire({ c: "ROOK", x: 0, z: -5 }));
     await w.step(16);
     const aim = [{ x: 0, y: 1.1, z: 0 }, { x: 0, y: 0, z: -1 }] as const;
-    expect(w.shoot(...aim)).not.toBeNull();
+    w.shoot(...aim).enemy.damage(30);
     w.koMe("peer-a");
-    expect(w.note().textContent).toBe("You dropped ROOK");
+    expect(w.feed()).toEqual(["You dropped ROOK"]);
     expect(w.squad.here()).toEqual([]);
-    expect(w.bodies[0].gone).toBe(true);
-    expect(w.shoot(...aim)).toBeNull(); // nobody stands there now
+    expect(w.bodies[0]).toMatchObject({ fell: true, gone: false }); // down where they stood, not gone
+    expect(w.shoot(...aim)).toBeNull(); // a body on the ground isn't a target
     w.say("peer-a", wire({ c: "ROOK", x: 0, z: -5 })); // an update that was already on its way
-    await w.step(16);
+    w.leave("peer-a"); // leaving the room doesn't whisk the body away either
+    await w.step(1000);
+    expect(w.bodies[0].gone).toBe(false);
     expect(w.squad.here()).toEqual([]);
-    await w.step(PVP.downMs);
+    await w.step(PVP.lieMs);
+    expect(w.bodies[0].gone).toBe(true); // and then they have left the yard
     w.say("peer-a", wire({ c: "ROOK", x: 9, z: 9 })); // back in a raid
     await w.step(16);
     expect(w.squad.here()).toEqual(["ROOK"]);
     // A drop claimed long after the last hit isn't believed.
-    expect(w.shoot({ x: 9, y: 1.1, z: 0 }, { x: 0, y: 0, z: 1 })).not.toBeNull();
+    w.shoot({ x: 9, y: 1.1, z: 0 }, { x: 0, y: 0, z: 1 }).enemy.damage(30);
     await w.step(PVP.koWithinMs + 1);
     w.say("peer-a", wire({ c: "ROOK", x: 9, z: 9 }));
     w.koMe("peer-a");
     await w.step(16);
     expect(w.squad.here()).toEqual(["ROOK"]);
+  });
+
+  it("sends the rounds this player fired with the next update, and the way they look", async () => {
+    const w = world(true);
+    await w.step(16);
+    w.G.player.pitch = -0.25;
+    w.fire();
+    w.fire();
+    await w.step(100);
+    expect(w.sent.at(-1)).toMatchObject({ s: 2, p: -0.25 });
+    for (let i = 0; i < 9; i++) w.fire(); // more than one update can carry
+    await w.step(100);
+    expect(w.sent.at(-1)).toMatchObject({ s: LIMITS.shotsPerUpdate });
+    await w.step(100);
+    expect(w.sent.at(-1)).toMatchObject({ s: 0 });
+    w.G.game.state = "title";
+    w.fire(); // not in a raid: not counted
+    w.G.game.state = "playing";
+    await w.step(100);
+    expect(w.sent.at(-1)).toMatchObject({ s: 0 });
+  });
+
+  it("draws the rounds a breacher fired, spread over the update, and no faster than a gun fires", async () => {
+    const w = world(true);
+    await w.step(16);
+    w.say("peer-a", wire({ c: "ROOK", x: 0, z: -5 }));
+    await w.step(16);
+    w.say("peer-a", wire({ c: "ROOK", x: 0, z: -5, s: 2 }));
+    expect(w.bodies[0].fired).toBe(0);
+    await w.step(30);
+    expect(w.bodies[0].fired).toBe(1);
+    await w.step(100);
+    expect(w.bodies[0].fired).toBe(2);
+    // A flood of updates each claiming the most rounds: only a second's worth of a fast gun is drawn.
+    for (let i = 0; i < 40; i++) w.say("peer-a", wire({ c: "ROOK", x: 0, z: -5, s: LIMITS.shotsPerUpdate }));
+    await w.step(400);
+    expect(w.bodies[0].fired).toBe(PVP.maxShotsPerSecond);
+  });
+
+  it("in Skirmish a breacher dropped by someone else falls and the feed says who; a false claim stands straight back up", async () => {
+    const w = world(true);
+    await w.step(16);
+    w.say("peer-a", wire({ c: "ROOK", x: 0, z: -5 }));
+    w.say("peer-b", wire({ c: "HALYARD", x: 4, z: -5 }));
+    await w.step(16);
+    w.downSays("peer-b", { b: "peer-a" });
+    expect(w.feed()).toEqual(["ROOK dropped HALYARD"]);
+    expect(w.bodies[1].fell).toBe(true);
+    expect(w.squad.here()).toEqual(["ROOK"]);
+    w.downSays("peer-b", { b: "peer-a" }); // said again: once is enough
+    expect(w.feed()).toHaveLength(1);
+    // Updates keep coming after the in-flight window: they weren't down after all.
+    await w.step(PVP.downMs + 10);
+    w.say("peer-b", wire({ c: "HALYARD", x: 4, z: -5 }));
+    await w.step(16);
+    expect(w.squad.here().sort()).toEqual(["HALYARD", "ROOK"]);
+    expect(w.bodies[1].gone).toBe(true);
+    expect(w.bodies[2]).toMatchObject({ label: "HALYARD", fell: false });
+    // Said too soon after the last time, or naming nobody this browser knows, or not in Skirmish.
+    w.downSays("peer-b", { b: "peer-a" });
+    expect(w.feed()).toHaveLength(1);
+    await w.step(PVP.downEveryMs);
+    w.say("peer-b", wire({ c: "HALYARD", x: 4, z: -5 }));
+    w.downSays("peer-b", { b: "<script>" });
+    expect(w.feed().at(-1)).toBe("HALYARD is down");
+    const quiet = world(false);
+    await quiet.step(16);
+    quiet.say("peer-b", wire({ c: "HALYARD" }));
+    await quiet.step(16);
+    quiet.downSays("peer-b", { b: "peer-a" });
+    expect(quiet.feed()).toEqual([]);
+    expect(quiet.bodies[0].fell).toBe(false);
+  });
+
+  it("joins a private yard with ?room=, and the public one without", async () => {
+    const w = world(false, "rook-and-co");
+    await w.step(16);
+    expect(w.joined()).toBe("test-rook-and-co");
+    const p = world(false);
+    await p.step(16);
+    expect(p.joined()).toBe("test");
   });
 
   it("is off for an automated browser and with ?squad=0, and ?squad=1 forces it on", () => {
@@ -276,6 +377,23 @@ describe("a shot and a figure", () => {
     expect(rayHitsFigure({ x: 0, y: 2.4, z: 0 }, { x: 0, y: 0, z: -1 }, 100, at)).toBeNull();
     expect(rayHitsFigure({ x: 0, y: 1.08, z: 0 }, { x: 0, y: 0, z: 1 }, 100, at)).toBeNull();
     expect(rayHitsFigure({ x: 0, y: 1.08, z: 0 }, { x: 0, y: 0, z: -1 }, 5, at)).toBeNull();
+  });
+});
+
+describe("the smaller things another browser says", () => {
+  it("a private yard's name is a short lowercase word, or there is none", () => {
+    expect(privateRoom("yard", "?room=crew-7")).toBe("yard-crew-7");
+    for (const bad of ["?room=", "?room=Crew", "?room=a b", "?room=" + "x".repeat(25), "?room=../x", "?room=%00", ""]) expect(privateRoom("yard", bad)).toBe("yard");
+  });
+  it("who dropped them is a peer id or nothing", () => {
+    expect(cleanDown({ b: "Abc_12-x" })).toBe("Abc_12-x");
+    for (const bad of [null, {}, { b: 3 }, { b: "<img>" }, { b: "x".repeat(81) }, "peer"]) expect(cleanDown(bad)).toBe("");
+  });
+  it("no more a second than the rate, per player", () => {
+    const r = new Rate(3);
+    expect([0, 10, 20, 30].map((t) => r.take("a", t))).toEqual([true, true, true, false]);
+    expect(r.take("b", 30)).toBe(true);
+    expect(r.take("a", 1015)).toBe(true);
   });
 });
 

@@ -5,6 +5,10 @@
 // Checked against the installed types, 14 Nov 2026: `joinRoom({ appId }, room)`; `room.makeAction<T>(name)` answers
 // `{ send, onMessage }`, and `send(data, { target: peerId })` goes to one peer; `room.onPeerLeave(({ peerId }) => …)`; `room.leave()`.
 //
+// Four messages: "st" (where a player is, ten a second, with the rounds they fired since the last), "hit" and "ko"
+// (to one player) and "dn" (to everyone: "I was dropped", naming who did it, so the others can lay the figure down
+// and say so in their feed).
+//
 // Two things a player should know (README → Limits): the other players' browsers connect to theirs directly, as in
 // any peer-to-peer game, so each can see the other's network address; and the meeting relays are public services
 // this project doesn't run.
@@ -17,6 +21,8 @@ export interface Net {
   hit(peerId: string, damage: number): void;
   /** Tells the player whose hit dropped this one. */
   ko(peerId: string): void;
+  /** Tells everyone this player was dropped, and by whom (a peer id). */
+  down(by: string): void;
   leave(): void;
 }
 
@@ -28,6 +34,8 @@ export interface NetHandlers {
   onHit(peerId: string, raw: unknown): void;
   /** A player this one hit says it dropped them. */
   onKo(peerId: string): void;
+  /** A player says they were dropped, and by whom. Their word only: check it (model.ts cleanDown). */
+  onDown(peerId: string, raw: unknown): void;
 }
 
 export type Connect = (room: string, handlers: NetHandlers) => Promise<Net>;
@@ -44,6 +52,8 @@ export const connect: Connect = async (roomName, handlers) => {
   hits.onMessage((data, ctx) => handlers.onHit(ctx.peerId, data));
   const kos = room.makeAction<{ k: 1 }>("ko");
   kos.onMessage((_data, ctx) => handlers.onKo(ctx.peerId));
+  const downs = room.makeAction<{ b: string }>("dn");
+  downs.onMessage((data, ctx) => handlers.onDown(ctx.peerId, data));
   return {
     send(state) {
       void states.send(state).catch(() => {});
@@ -53,6 +63,9 @@ export const connect: Connect = async (roomName, handlers) => {
     },
     ko(peerId) {
       void kos.send({ k: 1 }, { target: peerId }).catch(() => {});
+    },
+    down(by) {
+      void downs.send({ b: by }).catch(() => {});
     },
     leave() {
       void room.leave().catch(() => {});
