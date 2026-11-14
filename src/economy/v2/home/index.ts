@@ -17,7 +17,7 @@ import { gunSvg } from "../dock/gunart";
 import { FRAMES, ISSUE } from "../items";
 import type { Login } from "../login";
 import type { Profile, V2, Weapon } from "../types";
-import { type Do, type Facts, type Mode, actionFor, defaultMode, rankOf, startStep } from "./model";
+import { type Do, type Facts, type Mode, type PortEvent, actionFor, defaultMode, portRoster, rankOf, startStep } from "./model";
 import "./home.css";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
@@ -91,6 +91,9 @@ export function startHome(G: Game, opts: HomeOptions): Home {
   let profile: Profile | null | undefined; // undefined: not read yet or the read failed; null: no dock pass
   let scrip: number | null = null;
   let guns: Weapon[] | null = null;
+  // The other players: undefined until read, null when the read failed (shown as unknown, never as "nobody").
+  let wire: PortEvent[] | null | undefined;
+  let board: { callsign: string; value: number }[] | null | undefined;
   let stopped = false;
 
   // ---- the pieces ----
@@ -98,6 +101,7 @@ export function startHome(G: Game, opts: HomeOptions): Home {
   const tools = h("div", { class: "hm-tools" });
   const hero = h("button", { class: "hm-hero", type: "button", "aria-label": "Your gun. Open the loadout." });
   const tiles = h("div", { class: "hm-tiles", role: "radiogroup", "aria-label": "Select mode" });
+  const port = h("aside", { class: "hm-port", "aria-label": "At the port" });
   const start = h("aside", { class: "hm-start", "aria-label": "Start here" });
   const tabs = h("nav", { class: "hm-tabs", "aria-label": "The dock" });
   const play = h("button", { class: "hm-play", type: "button" });
@@ -106,6 +110,7 @@ export function startHome(G: Game, opts: HomeOptions): Home {
     { class: "hm", "aria-label": "Lobby" },
     h("div", { class: "hm-smoke", "aria-hidden": "true" }),
     h("header", { class: "hm-top" }, card, h("p", { class: "hm-word" }, h("b", null, "B4"), "Saltline"), tools),
+    port,
     hero,
     h(
       "aside",
@@ -239,6 +244,26 @@ export function startHome(G: Game, opts: HomeOptions): Home {
     fill(play, svg(ICON.play, "hm-play-i"), h("span", { class: "hm-play-t" }, h("b", null, a.label), h("i", null, a.caption)));
     play.onclick = () => act(a.do);
 
+    // The port: who else is here. Anyone can read it, signed in or not.
+    const ago = (m: number) => (m < 1 ? "now" : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h`);
+    const rows = (items: Child[], none: string) => (items.length ? h("ul", null, ...items) : h("p", { class: "hm-port-none" }, none));
+    if (wire === null) {
+      fill(port, h("p", { class: "hm-eye" }, "At the port"), h("p", { class: "hm-port-none", "data-unknown": "1" }, "The port's record didn't answer. Unknown, not empty."));
+    } else {
+      const r = portRoster(wire ?? [], Date.now(), v2.wallet.accountId());
+      fill(
+        port,
+        h("p", { class: "hm-eye" }, "At the port"),
+        opts.offline ? h("p", { class: "hm-port-none" }, "Practice: these breachers are simulated. Go on chain for the real ones.") : null,
+        h("p", { class: "hm-port-k" }, h("i", { class: r.inYard.length ? "on" : "" }), `In the yard now · ${wire === undefined ? "…" : r.inYard.length}`),
+        rows(r.inYard.slice(0, 4).map((p) => h("li", null, h("b", null, p.callsign), h("span", null, `${ago(p.minutes)} in`))), wire === undefined ? "Reading the port's record…" : "Nobody is over the fence right now."),
+        h("p", { class: "hm-port-k" }, "Just back"),
+        rows(r.back.map((p) => h("li", { class: "hm-port-back" }, h("b", null, p.callsign), h("span", null, ago(p.minutes)), h("em", null, p.text))), wire === undefined ? "…" : "Nobody has reached the boat lately."),
+        board && board.length ? h("p", { class: "hm-port-k" }, "Most raids home") : null,
+        board && board.length ? h("ol", null, ...board.slice(0, 3).map((p, i) => h("li", null, h("b", null, `${i + 1} · ${p.callsign}`), h("span", null, fmt(p.value))))) : null,
+      );
+    }
+
     const step = read(START_DONE_KEY) === "done" ? null : startStep(f);
     start.hidden = !step;
     if (step) {
@@ -269,8 +294,17 @@ export function startHome(G: Game, opts: HomeOptions): Home {
   card.onclick = () => openDock("ledger");
 
   /** Reads the player's record. A failed read leaves "unknown" on screen; it is never shown as zero. */
+  /** The other players, from the contract's record. Public: it is read whether or not anyone is signed in. */
+  async function readPort() {
+    const quiet = <T>(fn: () => Promise<T>): Promise<T | null> => Promise.resolve().then(fn).catch(() => null);
+    const [events, leaders] = await Promise.all([quiet(() => v2.chain.recent(40)), quiet(() => v2.chain.leaderboard())]);
+    wire = events;
+    board = leaders ? leaders.extractions.map((p) => ({ callsign: p.callsign, value: Number(p.value) })).filter((p) => p.value > 0) : null;
+  }
+
   async function refresh() {
     if (stopped) return;
+    await readPort();
     const me = v2.wallet.accountId();
     if (!me || !signedIn()) {
       profile = signedIn() ? undefined : null;

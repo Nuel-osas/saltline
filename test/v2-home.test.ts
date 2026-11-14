@@ -2,7 +2,7 @@
 // v2's start screen, the lobby: its rules (home/model.ts) and the screen itself (home/index.ts).
 import { afterEach, describe, expect, it } from "vitest";
 import { PRACTISED_KEY, START_DONE_KEY, startHome } from "../src/economy/v2/home";
-import { type Facts, RANKS, actionFor, defaultMode, rankOf, startStep } from "../src/economy/v2/home/model";
+import { type Facts, type PortEvent, RAID_LAPSE_MS, RANKS, actionFor, defaultMode, portRoster, rankOf, startStep } from "../src/economy/v2/home/model";
 import type { Login } from "../src/economy/v2/login";
 
 const facts = (over: Partial<Facts> = {}): Facts => ({ offline: false, loginOn: true, signedIn: false, extractions: null, practised: false, gun: "Issue rifle", ...over });
@@ -61,10 +61,37 @@ describe("start here", () => {
   });
 });
 
+describe("the port roster", () => {
+  const NOW = 1_800_000_000_000;
+  const ev = (kind: string, account: string, minsAgo: number, text = ""): PortEvent => ({ kind, at: NOW - minsAgo * 60_000, account, callsign: account.toUpperCase(), text });
+
+  it("someone is in the yard when the last word on their raid is that it started", () => {
+    const r = portRoster([ev("raid_start", "rook", 9), ev("raid_start", "cutwater", 3), ev("raid_start", "marlo", 20), ev("extract", "marlo", 12, "got out")], NOW);
+    expect(r.inYard).toEqual([
+      { callsign: "ROOK", minutes: 9 },
+      { callsign: "CUTWATER", minutes: 3 },
+    ]);
+  });
+  it("a raid that ended, lapsed, or is the reader's own isn't listed", () => {
+    const lapsed = RAID_LAPSE_MS / 60_000 + 1;
+    const r = portRoster([ev("raid_start", "dead", 8), ev("wreck", "dead", 5), ev("raid_start", "taken", 8), ev("impound", "taken", 2), ev("raid_start", "gone", lapsed), ev("raid_start", "me", 4)], NOW, "me");
+    expect(r.inYard).toEqual([]);
+  });
+  it("lists the last three to reach the boat, newest first, in the ledger's words", () => {
+    const r = portRoster([ev("extract", "a", 50, "A got out"), ev("extract", "b", 5, "B got out with 2 chips"), ev("extract", "c", 20, "C got out"), ev("extract", "d", 90, "D got out"), ev("sale", "e", 1, "sold")], NOW);
+    expect(r.back.map((b) => b.callsign)).toEqual(["B", "C", "A"]);
+    expect(r.back[0]).toEqual({ callsign: "B", text: "B got out with 2 chips", minutes: 5 });
+  });
+  it("an empty record is an empty port, and a missing callsign shows the account", () => {
+    expect(portRoster([], NOW)).toEqual({ inYard: [], back: [] });
+    expect(portRoster([{ kind: "raid_start", at: NOW - 60_000, account: "abcdef0123456789", text: "" }], NOW).inYard[0].callsign).toBe("abcdef…");
+  });
+});
+
 describe("the lobby", () => {
   afterEach(() => (document.body.innerHTML = ""));
 
-  function world(opts: { offline?: boolean; login?: Partial<Login> | null; profile?: unknown; fail?: boolean } = {}) {
+  function world(opts: { offline?: boolean; login?: Partial<Login> | null; profile?: unknown; fail?: boolean; wire?: PortEvent[] | "down" } = {}) {
     document.body.innerHTML = `<div id="app"><div class="menu open" data-screen="title"><section class="m-screen" data-s="title"><div class="m-title-main"><div class="m-actions"><button data-act="deploy">Deploy</button><button data-act="settings">Settings</button><button class="st-replay">Intro</button></div></div></section><div class="panel" hidden></div></div></div>`;
     const pressed: string[] = [];
     for (const b of document.querySelectorAll<HTMLElement>(".m-actions button")) b.addEventListener("click", () => pressed.push(b.dataset.act ?? b.className));
@@ -82,6 +109,11 @@ describe("the lobby", () => {
         return opts.profile === undefined ? null : opts.profile;
       },
       balances: async () => ({ scrip: 2550 }),
+      recent: async () => {
+        if (opts.wire === "down") throw new Error("rpc down");
+        return opts.wire ?? [];
+      },
+      leaderboard: async () => ({ netWorth: [], makers: [], extractions: [{ accountId: "rook.testnet", callsign: "ROOK", value: 12 }] }),
       weapons: async () => [{ serial: "S-000026", frame: "longshore", grade: "A", condition: 92 }],
     };
     const v2: any = { chain, wallet: { accountId: () => "ab".repeat(32) }, loadout: { weapon: "S-000026", plates: 0, charges: 0, mags: 0 }, raid: null };
@@ -189,6 +221,25 @@ describe("the lobby", () => {
     w.home.root.querySelector<HTMLElement>(".hm-start-x")!.click();
     expect(w.store.get(START_DONE_KEY)).toBe("done");
     expect(w.home.root.querySelector<HTMLElement>(".hm-start")!.hidden).toBe(true);
+  });
+
+  it("shows the other players: who is in the yard, who just got back, and the top of the board", async () => {
+    const now = Date.now();
+    const w = world({ wire: [{ kind: "raid_start", at: now - 4 * 60_000, account: "cut.testnet", callsign: "CUTWATER", text: "" }, { kind: "extract", at: now - 9 * 60_000, account: "rook.testnet", callsign: "ROOK", text: "Rook reached the boat with 2 relay cores." }] });
+    await settle();
+    const port = w.text(".hm-port");
+    expect(port).toContain("In the yard now · 1");
+    expect(port).toContain("CUTWATER");
+    expect(port).toContain("4 min in");
+    expect(port).toContain("Rook reached the boat with 2 relay cores.");
+    expect(port).toContain("1 · ROOK");
+  });
+
+  it("a port whose record can't be read says unknown, never that nobody is there", async () => {
+    const w = world({ wire: "down" });
+    await settle();
+    expect(w.text(".hm-port")).toContain("didn't answer");
+    expect(w.text(".hm-port")).not.toContain("Nobody is over the fence");
   });
 
   it("stop() takes the lobby away and gives the title back", async () => {
