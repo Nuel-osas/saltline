@@ -83,7 +83,7 @@ chain.
 | --- | --- | --- |
 | 1 | Open https://saltline-lac.vercel.app and scroll | The front page. Under "The ledger", four numbers and the port wire are read live from the contract. The invoice down the side climbs as you scroll. |
 | 2 | Open https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich | The lobby: your card at the top left, your gun in the middle, three modes on the right, "Start here" at the bottom left, the dock's tabs along the foot and one big button. |
-| 3 | Press the big **Deploy** button | The first time, a 48-second opening film (any key skips it). Then you stand unarmed at a crate: "HOLD E — TAKE THE RIFLE". |
+| 3 | Press the big **Deploy** button | About five seconds later you are in the yard. On a first raid you stand unarmed at a crate: "HOLD E — TAKE THE RIFLE". (The 48-second opening film is the lobby's **The opening** card.) |
 | 4 | Hold **E** at the crate, then walk to a marked container and hold **E** | The seal is cut and the cargo is added (`CARGO 2/6`). At the top right the invoice rises: `INVOICE 853 · BAILIFF AT 1,200`. |
 | 5 | Cut the three uplinks (hold **E** at each), then reach the boat | The debrief: what you carried, the invoice, and what was added to what you owe. |
 | 6 | Back at the lobby, press **Vendors** | Moss and Ines. Each price has the vendor's reason under it. Press **Sell** on something you hold and the next unit pays less. |
