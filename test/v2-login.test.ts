@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 // v2's sign-in in the browser: the gate on the title (login/index.ts), the wallet hand-over (login/session.ts) and the
 // labels shown for a signed-in player (login/auth.ts). Privy itself is stood in for; server/auth is in v2-auth.test.ts.
+// The way in is Google, and only Google: the player leaves for Google and comes back signed in.
 import { generateKey } from "near-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type Auth, type Who, isEmail, maskEmail, whoIs } from "../src/economy/v2/login/auth";
+import { type Auth, type Who, maskEmail, whoIs } from "../src/economy/v2/login/auth";
 import { LOGIN_STORAGE_KEY, type Login, startLogin } from "../src/economy/v2/login";
 import { fetchWallet, sessionUrlFor, withToken } from "../src/economy/v2/login/session";
 import { WALLET_STORAGE_KEY, implicitAccountId } from "../src/economy/wallet";
@@ -17,9 +18,10 @@ const settle = async (login: Login, want: string) => {
   for (let i = 0; i < 50 && login.state() !== want; i++) await tick();
   expect(login.state()).toBe(want);
 };
+const TITLE = `<div id="app"><section class="m-screen" data-s="title"><div class="m-actions"><button class="btn primary" data-act="deploy">Deploy</button><button class="btn d2-entry">Dock</button></div></section></div>`;
 
-function world(opts: { signedIn?: Who | null; account?: string; known?: unknown; session?: () => Response; auth?: Partial<Auth> } = {}) {
-  document.body.innerHTML = `<div id="app"><section class="m-screen" data-s="title"><div class="m-actions"><button class="btn primary" data-act="deploy">Deploy</button><button class="btn d2-entry">Dock</button></div></section></div>`;
+function world(opts: { signedIn?: Who | null; account?: string; known?: unknown; session?: () => Response; auth?: Partial<Auth>; practice?: boolean } = {}) {
+  document.body.innerHTML = TITLE;
   const store = new Map<string, string>();
   if (opts.known) store.set(LOGIN_STORAGE_KEY, JSON.stringify(opts.known));
   store.set(WALLET_STORAGE_KEY, "{guest}");
@@ -27,32 +29,27 @@ function world(opts: { signedIn?: Who | null; account?: string; known?: unknown;
   let account = opts.account ?? "ee".repeat(32);
   const imported: string[] = [];
   const wallet = { accountId: () => account, importKey: (k: string) => (imported.push(k), (account = implicitAccountId(k))) };
-  const sent: string[] = [];
   const asked: { url: string; auth: string | null }[] = [];
   let signedIn = opts.signedIn ?? null;
+  let left = 0;
   const auth: Auth = {
     start: async () => signedIn,
-    sendCode: async (email) => void sent.push(email),
-    signIn: async (_email, code) => {
-      if (code !== "123456") throw new Error("That code didn't work. Check it, or send a new one.");
-      return (signedIn = ALICE);
-    },
-    google: async () => {},
+    google: async () => void left++, // the real one leaves the page for Google
     token: async () => (signedIn ? "tok_" + "a".repeat(40) : null),
     signOut: async () => void (signedIn = null),
     ...opts.auth,
   };
-  const held: string[] = [];
-  const G: any = { ext: { beforeRun: (go: () => void) => (held.push("raid"), go(), false) }, events: { emit: () => {} } };
+  const G: any = { ext: { beforeRun: (go: () => void) => (go(), false) }, events: { emit: () => {} } };
   const reload = vi.fn();
   const doFetch = (async (url: string, init?: RequestInit) => {
     asked.push({ url, auth: new Headers(init?.headers).get("authorization") });
     return opts.session ? opts.session() : json(200, { ok: true, accountId: ACCOUNT, privateKey: KEY });
   }) as typeof fetch;
-  const login = startLogin(G, { appId: "cmtestappid0000000000000a", sessionUrl: "/api/session", wallet, auth, fetch: doFetch, storage, reload });
+  const login = startLogin(G, { appId: "cmtestappid0000000000000a", auth, fetch: doFetch, storage, reload, ...(opts.practice ? {} : { sessionUrl: "/api/session", wallet }) });
   const app = document.getElementById("app")!;
   const panel = () => document.querySelector<HTMLElement>(".lg")!;
-  return { login, G, app, panel, store, imported, sent, asked, held, reload };
+  const google = () => [...panel().querySelectorAll("button")].find((b) => b.textContent === "Continue with Google");
+  return { login, G, app, panel, google, store, imported, asked, reload, left: () => left };
 }
 
 afterEach(() => (document.body.innerHTML = ""));
@@ -63,12 +60,20 @@ describe("the sign-in gate", () => {
     await settle(w.login, "out");
     expect(w.app.classList.contains("lg-locked")).toBe(true);
     expect(w.panel().nextElementSibling?.classList.contains("m-actions")).toBe(true);
-    expect(w.panel().querySelector("input[type=email]")).not.toBeNull();
     let started = false;
     expect(w.G.ext.beforeRun(() => (started = true))).toBe(true); // held
     expect(started).toBe(false);
-    expect(w.held).toEqual([]);
     expect(await w.login.token()).toBeNull();
+  });
+
+  it("Google is the only way in: one button, no email field, and no link to play without signing in", async () => {
+    const w = world();
+    await settle(w.login, "out");
+    expect(w.google()).toBeDefined();
+    expect(w.panel().querySelectorAll("button")).toHaveLength(1);
+    expect(w.panel().querySelector("input")).toBeNull();
+    expect(w.panel().querySelector("a")).toBeNull();
+    expect(w.panel().textContent).toContain("Sign in to play");
   });
 
   it("a click on Deploy or the dock goes nowhere while locked", async () => {
@@ -83,15 +88,18 @@ describe("the sign-in gate", () => {
     expect(seen).toEqual([]);
   });
 
-  it("email, then the code, then the wallet from the dock office; the page reloads onto the new account", async () => {
+  it("Continue with Google leaves for Google, and nothing is fetched until the player is back", async () => {
     const w = world();
     await settle(w.login, "out");
-    w.panel().querySelector<HTMLInputElement>("input")!.value = "  marlowe@example.com ";
-    w.panel().querySelector<HTMLFormElement>("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
-    await settle(w.login, "code");
-    expect(w.sent).toEqual(["marlowe@example.com"]);
-    w.panel().querySelector<HTMLInputElement>("input")!.value = "123456";
-    w.panel().querySelector<HTMLFormElement>("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
+    w.google()!.click();
+    await settle(w.login, "working");
+    expect(w.left()).toBe(1);
+    expect(w.asked).toEqual([]);
+    expect(w.app.classList.contains("lg-locked")).toBe(true);
+  });
+
+  it("back from Google: the wallet comes from the dock office, and the page reloads onto the new account", async () => {
+    const w = world({ signedIn: ALICE });
     for (let i = 0; i < 50 && !w.reload.mock.calls.length; i++) await tick();
     expect(w.asked).toEqual([{ url: "/api/session", auth: "Bearer tok_" + "a".repeat(40) }]);
     expect(w.imported).toEqual([KEY]);
@@ -99,23 +107,20 @@ describe("the sign-in gate", () => {
     expect(w.reload).toHaveBeenCalledTimes(1);
   });
 
-  it("a wrong code, or a bad email, says so and sends nothing further", async () => {
-    const w = world();
+  it("says so and stays locked when Google sign-in isn't switched on", async () => {
+    const w = world({
+      auth: {
+        google: async () => {
+          throw new Error("Google sign-in isn't switched on for this game yet.");
+        },
+      },
+    });
     await settle(w.login, "out");
-    w.panel().querySelector<HTMLInputElement>("input")!.value = "not-an-email";
-    w.panel().querySelector<HTMLFormElement>("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
-    await tick();
+    w.google()!.click();
+    for (let i = 0; i < 50 && !/switched on/.test(w.panel().textContent ?? ""); i++) await tick();
     expect(w.login.state()).toBe("out");
-    expect(w.panel().textContent).toContain("doesn't look like an email");
-    expect(w.sent).toEqual([]);
-    w.panel().querySelector<HTMLInputElement>("input")!.value = "marlowe@example.com";
-    w.panel().querySelector<HTMLFormElement>("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
-    await settle(w.login, "code");
-    w.panel().querySelector<HTMLInputElement>("input")!.value = "000000";
-    w.panel().querySelector<HTMLFormElement>("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
-    await settle(w.login, "code");
-    expect(w.panel().textContent).toContain("didn't work");
-    expect(w.asked).toEqual([]);
+    expect(w.panel().textContent).toContain("isn't switched on");
+    expect(w.app.classList.contains("lg-locked")).toBe(true);
   });
 
   it("a returning player whose browser already holds their wallet goes straight in, without asking the dock office", async () => {
@@ -153,6 +158,21 @@ describe("the sign-in gate", () => {
     expect(w.store.has(WALLET_STORAGE_KEY)).toBe(false);
     expect(w.store.has(LOGIN_STORAGE_KEY)).toBe(false);
     expect(w.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("in Practice the lock is the same, and a sign-in opens the door with no wallet to fetch", async () => {
+    const out = world({ practice: true });
+    await settle(out.login, "out");
+    expect(out.G.ext.beforeRun(() => {})).toBe(true); // held
+    out.login.stop();
+
+    const w = world({ practice: true, signedIn: ALICE });
+    await settle(w.login, "in");
+    expect(w.asked).toEqual([]);
+    expect(w.reload).not.toHaveBeenCalled();
+    expect(w.G.ext.beforeRun(() => {})).toBe(false);
+    await w.login.signOut();
+    expect(w.store.has(WALLET_STORAGE_KEY)).toBe(true); // Practice's own save isn't the sign-in's to remove
   });
 
   it("stop() takes the lock and the panel away", async () => {
@@ -197,19 +217,13 @@ describe("the wallet hand-over", () => {
 });
 
 describe("who is signed in", () => {
-  it("shows a masked email, whichever way they signed in", () => {
+  it("shows the Google account's email, masked", () => {
     expect(maskEmail("marlowe@example.com")).toBe("m•••••e@example.com");
     expect(maskEmail("al@example.com")).toBe("a•l@example.com");
     expect(maskEmail("nope")).toBe("your account");
-    expect(whoIs({ id: "did:privy:x", linked_accounts: [{ type: "email", address: "marlowe@example.com" }] })).toEqual({ id: "did:privy:x", label: "m•••••e@example.com" });
-    expect(whoIs({ id: "did:privy:x", linked_accounts: [{ type: "google_oauth", email: "rook@gmail.com" }] })?.label).toBe("r••k@gmail.com");
+    expect(whoIs({ id: "did:privy:x", linked_accounts: [{ type: "google_oauth", email: "rook@gmail.com" }] })).toEqual({ id: "did:privy:x", label: "r••k@gmail.com" });
     expect(whoIs({ id: "did:privy:x", linked_accounts: [{ type: "wallet", address: "0xabc" }] })?.label).toBe("your account");
     expect(whoIs({ linked_accounts: [] })).toBeNull();
     expect(whoIs(null)).toBeNull();
-  });
-
-  it("knows an email address when it sees one", () => {
-    for (const good of ["a@b.co", " marlowe@example.com ", "first.last+tag@sub.example.org"]) expect(isEmail(good)).toBe(true);
-    for (const bad of ["", "not-an-email", "a@b", "a b@c.com", "@x.com"]) expect(isEmail(bad)).toBe(false);
   });
 });
