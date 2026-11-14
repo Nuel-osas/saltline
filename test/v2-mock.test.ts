@@ -34,6 +34,9 @@ import {
 } from "../src/economy/v2/mock";
 import type { Amounts, ConsumableId, MaterialId, ModId, Raid, RaidReport, Weapon } from "../src/economy/v2/types";
 
+/** A test that plays a simulated week: about 5 s on an idle laptop, so the 5 s default fails it on a busy or slower one. */
+const LONG = 30_000;
+
 // items.ts types `stock` as the literal 5 (its default comes from an `as const` table); see the note in mock.ts.
 const goodsPrice = itemsGoodsPrice as (id: ModId | ConsumableId, stock?: number) => number;
 
@@ -1225,7 +1228,7 @@ describe("v2 mock: determinism, ambient play and persistence", () => {
     expect(s.wrecks.length).toBeLessThanOrEqual(40);
     expect(s.listings.length).toBeLessThanOrEqual(200);
     expect(Object.keys(s.raids).length).toBeLessThanOrEqual(80);
-  });
+  }, LONG); // a week of ambient play
 
   function memory(): Storage & { data: Map<string, string> } {
     const data = new Map<string, string>();
@@ -1290,7 +1293,7 @@ describe("v2 mock: debug", () => {
     expect(mockStashParam("")).toBeNull();
   });
 
-  it("stash=rich starts the player registered, in funds, with three guns of different frames and grades, one worn and one modded, an impounded gun and arrears", async () => {
+  it("stash=rich starts the player registered, in funds, with three guns of different frames and grades, one worn and one modded, an impounded gun and a small bill", async () => {
     const storage = (() => {
       const data = new Map<string, string>();
       return { length: 0, clear: () => data.clear(), getItem: (k: string) => data.get(k) ?? null, key: () => null, removeItem: (k: string) => void data.delete(k), setItem: (k: string, v: string) => void data.set(k, v) } as Storage;
@@ -1299,7 +1302,7 @@ describe("v2 mock: debug", () => {
     const me = m.me();
     expect(await createMockWallet2(m).registered()).toBe(true);
     const profile = await m.profile(me);
-    expect(profile?.arrears).toBeGreaterThanOrEqual(INVOICE.bondedAt);
+    expect(profile?.arrears).toBeGreaterThan(0); // a bill to pay at the dock
     const bal = await m.balances(me);
     expect(bal.scrip).toBeGreaterThan(2000);
     for (const t of ["copper", "chips", "servo", "rotor", "core", "plate", "charge", "ammo"] as const) expect(bal[t]).toBeGreaterThan(0);
@@ -1314,10 +1317,11 @@ describe("v2 mock: debug", () => {
     const impound = await m.impound(me);
     expect(impound).toHaveLength(1);
     expect(impound[0].fee).toBe(Math.floor((impound[0].weapon.value * 40) / 100));
-    // Every screen has something on it at once: a wreck with a gun on offer, and bonded containers.
+    // A wreck with a gun on offer at once, and a raid that doesn't start in trouble: the bill is under the second
+    // notice at the fence (bonded containers are a debtor's, and this Practice is a first-timer's).
     const raid = (await m.startRaid({ weapon: held[0].serial, plates: 1, charges: 1, mags: 2 })).raid as Raid;
     expect(raid.wrecks.some((w) => w.weapon)).toBe(true);
-    expect(raid.containers.filter((c) => c.bonded)).toHaveLength(2);
+    expect(raid.invoiceStart).toBeLessThan(INVOICE.secondNotice);
     // A reload doesn't fill the locker twice.
     const again = createMockChain2(1, { storage, now: () => T0, stash: "rich" });
     expect((await again.balances(me)).scrip).toBe(bal.scrip);

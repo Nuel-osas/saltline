@@ -21,8 +21,12 @@ export const THRESHOLD_NOTE: Record<ThresholdId, string> = {
 };
 
 export const LINES = {
-  /** At the fence. `{fee}` is what is really on the invoice there. */
-  fence: (callsign: string | null, fee: number) => fill(HARBORMASTER.trespass, { callsign: callsign ?? "", fee }) ?? `Good morning, Breacher. Your visit is not authorised. A trespass surcharge of ${fee} scrip has been added to your account.`,
+  /**
+   * At the fence. `{fee}` is what is really on the invoice there. A player still on the placeholder callsign
+   * ("BREACHER", the offline game's) is greeted as plain "Breacher", not "Breacher BREACHER".
+   */
+  fence: (callsign: string | null, fee: number) =>
+    fill(HARBORMASTER.trespass, { callsign: callsign && !/^breacher(-\d+)?$/i.test(callsign.trim()) ? callsign : "", fee }) ?? `Good morning, Breacher. Your visit is not authorised. A trespass surcharge of ${fee} scrip has been added to your account.`,
   seal: HARBORMASTER.sealCut,
   uplink: HARBORMASTER.relayCut,
   evidence: (weight: number) => fill(HARBORMASTER.evidence, { weight }),
