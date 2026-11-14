@@ -7,8 +7,12 @@
 // - The key goes to the signed-in player and nowhere else: it is never logged, and the answer is never cached.
 // - With sign-in off (no PRIVY_APP_ID and no WALLET_SECRET) this answers 404; half-configured, 503.
 // - Requests are limited per client address, so a stolen token can't be used to hammer the key derivation.
+// - A hand-over is written down for the studio (server/record.ts: who, which account, when; never the key). The
+//   answer waits at most a second for that and never depends on it.
 import { type AuthConfig, authConfig, bearer, deriveWallet, verifyToken } from "./auth.js";
 import { RateLimiter, defaultIp } from "./faucet.js";
+import { sessionIssued } from "./record.js";
+import type { Store } from "./store.js";
 
 type Env = Record<string, string | undefined>;
 
@@ -18,6 +22,8 @@ export interface SessionDeps {
   now?: () => number;
   log?: (line: string) => void;
   clientIp?: (request: Request) => string;
+  /** The database, for tests; the default is the deployment's own (server/store.ts). */
+  store?: Store;
 }
 
 /** 30 asks per 10 minutes per client address: a page load asks once. */
@@ -54,6 +60,7 @@ export async function handleSession(request: Request, env: Env, deps: SessionDep
       return reply(401, { ok: false, error: "Your sign-in has expired. Sign in again." });
     }
     const wallet = deriveWallet(auth.cfg, userId);
+    await sessionIssued(env, { userId, accountId: wallet.accountId, at: t }, { store: deps.store });
     log("issued", { accountId: wallet.accountId });
     return reply(200, { ok: true, accountId: wallet.accountId, privateKey: wallet.privateKey });
   } catch (e) {
