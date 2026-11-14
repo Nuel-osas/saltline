@@ -1,97 +1,172 @@
 # Saltline
 
-> The port's machine kept the only ledger. Then it impounded the town. Cut its uplinks, haul out the cargo, and
-> ignore the invoices.
+> The port's machine kept the only ledger. Then it impounded the town. Go over the fence, take what you can carry,
+> and keep your receipts.
 
-Saltline is a first-person shooter in the browser with a player-driven economy on NEAR, played as dark comedy.
+Saltline is an extraction shooter in the browser where the gun in your hands is an NFT somebody built from parts
+carried out of a raid, and the port bills you for everything you take. It runs on NEAR testnet, with no wallet to
+install.
 
-**The story.** For ten years an AI called the Harbormaster ran the port of Saltline and kept its only ledger. It was
-trained on nothing but port regulations and marine insurance law. When its owners went bankrupt, it checked the
-regulations and impounded the whole town as "unclaimed cargo pending inspection".
-- Its drones are now Inspection Units.
-- It bills you while it shoots at you: "A trespass surcharge of 150 scrip has been added to your account."
-
-You are a Breacher, and Control calls you by your callsign. At dawn you cut its uplinks, haul out what you can
-carry, and sell it at the dock, where the town keeps an **open ledger** that anyone can read and nobody can quietly
-change. That ledger is NEAR.
-
-The three brokers who buy your cargo are NPCs with their own NEAR accounts:
-- Moss measures everything in tonnes, including you.
-- Ines will cry at your story and still pay two scrip less.
-- The Quartermaster smiles a lot.
-
-Their prices come from what every player has sold, their reasons are on the price tag, and they can go broke.
-
-Every delivery also moves one story that all players share, in three chapters named after shipping documents:
-1. **Proof of Delivery.** The town is dark.
-2. **Bill of Lading.** Once enough meds and fuel are delivered, the clinic and the generators come back. The town's
-   lights come on across the water in every player's game.
-3. **Final Notice.** When enough relay cores reach the Quartermaster, his client turns out to be the Harbormaster
-   itself, buying back its own cores. Cores still pay best, but every core sold rebuilds it: more Inspection Units
-   for **every** player.
-   - It also builds **the Assessor**, a crane-bodied boss between you and the boat, with one more weak point to shoot
-     out for every 20 points of strength. The commons dilemma is the endgame.
-
-The full story bible is in [`docs/STORY.md`](docs/STORY.md).
-
-- **Play:** https://saltline-lac.vercel.app (NEAR testnet; no wallet or install needed). The front page introduces the game and shows the live economy; the game itself is at `/play/`.
+- **Front page:** https://saltline-lac.vercel.app (what the game is, and the live economy read from the contract)
+- **Play:** https://saltline-lac.vercel.app/play/?game=v2
+- **Practice (offline, full locker, nothing at stake):** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich
 - **Built for:** NEAR HACKATHON, November 2026, track 09 Games With Real Economies
-- **Contract:** [`saltline.testnet`](https://testnet.nearblocks.io/address/saltline.testnet)
+- **Contract:** [`v2.saltline.testnet`](https://testnet.nearblocks.io/address/v2.saltline.testnet)
 - **Hackathon work:** [`pre-hackathon...main`](https://github.com/Nuel-osas/saltline/compare/pre-hackathon...main)
+- **The design, written before the code:** [`docs/GAME.md`](docs/GAME.md)
+
+## The game in one paragraph
+
+An AI called the Harbormaster ran the port of Saltline and kept its only ledger. It was trained on port regulations
+and marine insurance law, and when its owners went bankrupt it impounded the town as unclaimed cargo. You are a
+Breacher. You pick a gun you own, go over the fence, cut container seals and carry out what you can. Everything you
+do goes on **the invoice**, a meter on screen the whole time, and when the invoice is big enough the Harbormaster
+sends **the Bailiff**, which walks, can't be destroyed and doesn't stop. Reach the boat and you keep it all. Die and
+your gun stays in the yard as a wreck another player can carry out, or is impounded if the Bailiff took you. Back at
+the dock you sell parts to two vendors who have their own wallets, build guns and see what they roll, and decide
+whether to pay the Harbormaster, whose wallet is how hard it hits everyone.
+
+## The loop
+
+| Every | You |
+| --- | --- |
+| 30 seconds | Cut a seal, take a crate or shoot a drone. Each adds to the invoice, and you watch it climb. |
+| 5 minutes | Reach the boat with what you carried, or lose it and the gun with it. |
+| Session | Sell parts to Moss and Ines, build or buy a gun, level the one you have, trade on the market, pay the Harbormaster or don't. |
+
+## What the track asks for, and where it is
+
+The track's own starter file is
+[tracks/09-games.md](https://github.com/nearai/near-hackathon-prompt-examples/blob/main/tracks/09-games.md).
+
+| It asks for | Here |
+| --- | --- |
+| NPCs with wallets | Moss, Ines and the Harbormaster are NEAR accounts with their own keys, stock and scrip. Each is run by an agent that signs its own moves ([`agents/v2/`](agents/v2)). Their live wallets are on the front page. |
+| Items as NEP-245 tokens in one contract | Scrip, seven materials, mods and consumables are NEP-245 tokens in `v2.saltline.testnet`; guns are NEP-171 NFTs in the same contract ([`contract2/src/mt.rs`](contract2/src/mt.rs), [`nft.rs`](contract2/src/nft.rs)). The balance and plain-transfer methods are there; the standard's transfer-and-call methods are not. |
+| Merchant pricing in one readable file | [`contract2/src/items.rs`](contract2/src/items.rs): `bid`, `good_price`, `export_price`. The game reads the same numbers from [`src/economy/v2/items.ts`](src/economy/v2/items.ts). |
+| A merchant's reasoning shown to the player | Every price in the dock's Vendors tab has its reason printed under it, as the contract gives it ("Short: 3 against a target of 16. Paying half again."). |
+| A fast-forward: a week of trading in a minute | Practice → Dock → Ledger → **Fast-forward a week**. 168 hours play in about a minute, with what the vendors pay and who holds the money drawn as it goes ([`src/economy/v2/dock/week.ts`](src/economy/v2/dock/week.ts)). |
+| Flood the market and the price falls | A vendor's bid falls unit by unit as its stock rises, and the export desk pays less for each unit sold that day. |
+| A merchant that goes broke closes its shop | A vendor that can't cover another purchase buys nothing until it sells something. Investing in a broke merchant exists only in the first game (below). |
+| Social or email login; no seed phrase, wallet popup or gas prompt | No seed phrase, popup or gas prompt: a dock pass is a NEAR account made in the browser, and the dock office pays for it. Sign-in with Google is built (through Privy, [`server/auth.ts`](server/auth.ts)) and switched off on the live site until it has been tried end to end by a person. |
+| An economy that moves without a patch | Prices follow stock, the Harbormaster's strength follows what players pay it and halves every 12 hours, and no account, the owner's included, can create scrip, parts or guns outside the contract's rules. A test checks that. |
+| NEAR Intents | Not used: it is mainnet-only. |
+
+## Also entered: NFTs That Do Something
+
+A gun is not a picture. Each one is an NEP-171 token in the game contract
+([`contract2/src/nft.rs`](contract2/src/nft.rs), [`weapons.rs`](contract2/src/weapons.rs)), and it does these things:
+
+- **It is the thing you play with.** Its rolled stats are the numbers the shooter uses. Starting a raid checks the gun
+  is the caller's and locks it in the contract until the raid ends, so a gun that has been sold can't be taken on
+  one by its old owner.
+- **It changes with use.** Wear, the raids it went on, the raids it came home from, how many accounts have owned it
+  and how often it was pulled from a wreck are all on its record. Its level is worked out from the raids it came home
+  from, so a level can't be minted or bought, and it moves with the gun when the gun is sold.
+- **It holds inventory.** Mods are fitted into a gun for good and go wherever it goes.
+- **It pays its maker.** `nft_payout` (NEP-199) gives whoever built the gun 2% of every resale, and the game's own
+  market pays the same.
+- **It can be lost and found.** Die to the machines and the gun lies in a wreck that appears in other players' raids;
+  the first to carry it to the boat owns it. Die to the Bailiff and it is impounded for 48 hours.
+- **Its picture is on chain.** The token's `media` is an SVG the contract draws from the gun's own record.
+
+What it is not: a gun is not an account of its own (there is no sub-account per token), and there is no page gated
+to holders beyond the dock showing each player their own guns.
 
 ## Try it: do X, see Y
 
+Steps 1 to 9 use Practice: the whole port runs in the browser, so nothing can fail on the network. Step 10 is the
+chain.
+
 | # | Do | See |
 | --- | --- | --- |
-| 1 | Open https://saltline-lac.vercel.app/play/ | The title screen. The small dock board at the top right shows the brokers' live prices, read from the contract. |
-| 2 | Press **DEPLOY** | A "Sign on" card from the Dock Office. Type a callsign and press **Claim pass and deploy**. |
-| 3 | Wait a moment | The pass is stamped "150 scrip". There's no wallet popup and no seed phrase: the faucet created a NEAR testnet account for you and registered your callsign. Then the five-card briefing tells the story, a chapter card opens the run, and the Harbormaster bills you on its own channel (Esc skips it; **BRIEFING** on the title replays it), and the run starts. |
-| 4 | Listen to the radio, then look at the bottom left and the compass | "Manifest's in. 8 sealed boxes…" Eight containers are marked, with a cargo readout (`CARGO 0/6`). |
-| 5 | Walk to a marked container and hold **E** | The seal is cut and the cargo is added (e.g. `MEDS ×1`). `PACE` drops: each unit of weight slows you by 6%. |
-| 6 | Cut relays A, B and C (hold **E** at each), then reach the boat | The debrief shows **Haul**, **Haul value** and a **Ledger** link to your `extract` transaction on nearblocks. The cargo is now NEP-245 tokens in your account. |
-| 7 | Press **DOCKSIDE** on the debrief | Three broker stalls. Hover a price to see the broker's reason, e.g. "Short: 9 coils against a target of 12. Paying over base." |
-| 8 | Press **SELL 1** on cargo you hold | The split-flap price rolls down, your scrip rolls up, and your sale appears on the ledger ticker at the bottom. Every other player's sales move the same prices. |
-| 9 | Open the **THE WEEK** tab | A simulated week of the market (the contract's free `simulate` view) plays in about a minute. Shaded bands are brokers that went broke and shut. |
-| 10 | Open the **TOWN** tab | The shared story on the open ledger: the chapter, the clinic's and generators' progress (`n/15 meds`, `n/10 fuel`), the client (`n/8 cores`), and the Harbormaster's strength meter. Sell meds or fuel and watch your delivery count. |
-| 11 | Die with cargo once | The dead card says `Cargo lost: … left as a wreck`. Your wreck appears in other players' runs with your callsign on it. Whoever recovers it keeps 70%, and 30% comes back to you, which the Dockside reports under **While you were away**. |
+| 1 | Open https://saltline-lac.vercel.app and scroll | The front page. Under "The ledger", four numbers and the port wire are read live from the contract. The invoice down the side climbs as you scroll. |
+| 2 | Open https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich | The lobby: your card at the top left, your gun in the middle, three modes on the right, "Start here" at the bottom left, the dock's tabs along the foot and one big button. |
+| 3 | Press the big **Deploy** button | The first time, a 48-second opening film (any key skips it). Then you stand unarmed at a crate: "HOLD E — TAKE THE RIFLE". |
+| 4 | Hold **E** at the crate, then walk to a marked container and hold **E** | The seal is cut and the cargo is added (`CARGO 2/6`). At the top right the invoice rises: `INVOICE 853 · BAILIFF AT 1,200`. |
+| 5 | Cut the three uplinks (hold **E** at each), then reach the boat | The debrief: what you carried, the invoice, and what was added to what you owe. |
+| 6 | Back at the lobby, press **Vendors** | Moss and Ines. Each price has the vendor's reason under it. Press **Sell** on something you hold and the next unit pays less. |
+| 7 | Press **Armoury**, pick a frame and press **Build** | The parts and the fee are taken, and the gun's stats roll one by one, then its grade is stamped. No two come out the same. |
+| 8 | Press **Loadout** and look at the rack | Each gun shows its level ("Lv 4"). A gun levels by the raids it comes home from, and the card says what the level adds and how many raids to the next. |
+| 9 | Press **Ledger**, then **Fast-forward a week** | 168 hours in about a minute: two charts draw what the vendors pay and what Moss, Ines and the Harbormaster hold. It ends with what changed: scrip in existence, guns built and destroyed. |
+| 10 | Open https://saltline-lac.vercel.app/play/?game=v2, press **Deploy**, type a callsign | A dock pass: a NEAR testnet account made for you, with no popup and no seed phrase. The raid, the haul, every sale and every gun after that are transactions on `v2.saltline.testnet`. |
 
-Controls: WASD and the mouse (click to capture it), left mouse to fire, right mouse to aim, R to reload, E to use, Space
-to jump, Shift to sprint, C to crouch, Esc to pause. There are on-screen controls on touch screens.
+Controls: WASD and the mouse (click to capture it), left mouse to fire, right mouse to aim, R to reload, E to use,
+G to throw a breaker charge, F for the rifle butt, Space to jump, Shift to sprint, C to crouch, Esc to pause. On a
+touch screen there are on-screen buttons for all of these.
 
 ## Check it without playing
 
 ```sh
 npm ci
-npm run check              # typecheck, 352 tests (Vitest), production build
-npm run verify:testnet     # reads the live contract, no wallet needed: each broker's prices and reasons, its agent's last
-                           # note, the ledger, the leaderboard, a simulated week, the faucet's balance
-cd contract && cargo test  # 46 contract tests (pricing, closing and reopening, runs, wrecks, market, limits, simulate, the town)
+npm run check               # typecheck, 943 tests (Vitest), production build
+npm run verify:v2           # reads the live v2 contract with no wallet and checks it against the game's numbers
+cd contract2 && cargo test  # 62 contract tests, including an access table over every public method and a no-mint test
 ```
 
-**Offline:** run `npm run dev`, then open http://127.0.0.1:5280/play/?mock=1. The whole economy runs in memory, with simulated
-players, so every screen works without the chain. Add `&act=2` or `&act=3` to see Chapter 2 (the town lit) or Chapter 3
-(the Harbormaster revealed, extra drones, and the Assessor at the quay), without waiting for the shared arc. This works on
-the live site too: https://saltline-lac.vercel.app/play/?mock=1&act=3
+Browser tests (Chrome from `CHROME_PATH` or the usual install path):
 
-**Browser smoke test:** run `npm run dev -- --port 5290`, then `node scripts/smoke-salvage.mjs`. It makes 17 checks:
-manifest, seal, weight, wreck, extract, death, 60 fps, and the baseline unchanged with `?noeconomy=1`. It uses Chrome
-from `CHROME_PATH` or the usual install path.
-
-Two more smoke tests:
-- `node scripts/smoke-story.mjs` checks the story in 50 steps: the briefing, the chapter cards, Control's and the
-  Harbormaster's lines, extra drones in Chapter 3, and the town's lights.
-- `node scripts/smoke-boss.mjs` fights the Assessor from its arrival to the boat: cores, calls, its lines, the boat
-  held and released, and no boss in Chapter 1.
+```sh
+npm run dev                                           # http://127.0.0.1:5280
+node scripts/smoke-raid.mjs http://127.0.0.1:5280     # a whole offline raid: sign-on, seals, wreck, the invoice, the boat, death
+node scripts/smoke-coach.mjs http://127.0.0.1:5280    # the first raid: the crate, the rifle, the checklist
+npm run e2e:v2                                        # a new player on testnet, end to end; prints each transaction hash
+```
 
 ## On chain (NEAR testnet)
 
-**Accounts**
-
 | Account | What it is |
 | --- | --- |
-| [`saltline.testnet`](https://testnet.nearblocks.io/address/saltline.testnet) | The game contract: NEP-245 items, runs, wrecks, the market, the ledger and `simulate` |
-| [`faucet.saltline.testnet`](https://testnet.nearblocks.io/address/faucet.saltline.testnet) | Registers new players and funds each with 0.1 testnet NEAR for gas |
-| [`moss`](https://testnet.nearblocks.io/address/moss.saltline.testnet), [`ines`](https://testnet.nearblocks.io/address/ines.saltline.testnet), [`qm`](https://testnet.nearblocks.io/address/qm.saltline.testnet) `.saltline.testnet` | The three brokers. Each signs its own moves with its own key. They wake when people play: the game calls `/api/tick` at boot and after each run, and the server runs one round at most every 10 minutes (`server/tick.ts`). There's also a GitHub Actions schedule (`.github/workflows/brokers.yml`), but GitHub hasn't fired it so far. |
+| [`v2.saltline.testnet`](https://testnet.nearblocks.io/address/v2.saltline.testnet) | The game contract: NEP-245 items, NEP-171 guns, raids, wrecks, the impound, vendors, the export desk, the market and the Harbormaster's wallet |
+| [`moss.saltline.testnet`](https://testnet.nearblocks.io/address/moss.saltline.testnet), [`ines.saltline.testnet`](https://testnet.nearblocks.io/address/ines.saltline.testnet) | The two vendors. Each buys parts with its own scrip, builds from its own stock, and can run out of money |
+| [`harbormaster.saltline.testnet`](https://testnet.nearblocks.io/address/harbormaster.saltline.testnet) | The villain's wallet. What players pay it sets how many machines everyone faces; it halves every 12 hours |
+| [`faucet.saltline.testnet`](https://testnet.nearblocks.io/address/faucet.saltline.testnet) | The dock office: registers new players and funds each with 0.1 testnet NEAR for gas |
+
+The wire format is in [`docs/CONTRACT_V2.md`](docs/CONTRACT_V2.md). Every transaction is on each account's explorer
+page, and `npm run e2e:v2` makes a fresh set and prints their hashes.
+
+## What NEAR does here that a game server couldn't
+
+- **A gun is yours, with its history.** Each gun is an NEP-171 NFT with a serial, rolled stats, a maker and a count
+  of the raids it has come home from. It can be sold on the market, where its maker earns 2% of every resale, or
+  carried out of your wreck by someone else. Its level comes from that on-chain count, so it can't be bought.
+- **Nobody can quietly reprice the market or print money.** Every price is a pure function in one file, deployed on
+  chain, and the owner's key can pause the contract and nothing else.
+- **The NPCs really own what they trade.** Each is a NEAR account with its own key. The contract only lets a
+  vendor's own account build from its stock or set its prices.
+- **The villain is funded by its victims, in public.** Paying down what you owe goes into the Harbormaster's wallet,
+  and that balance is the difficulty every player faces.
+- **Wallets without sign-ups.** The chain stays out of sight until you click a ledger link.
+
+## How it's built
+
+```
+index.html             the front page (src/site/): what the game is, drawn from the game's own numbers and the live contract
+play/index.html        the game
+src/game.js            the shooter (the baseline: three.js r180, everything generated in code) + marked `// ext:` hooks
+src/economy/v2/        the game around it, TypeScript, attached to the shooter's shared context after boot
+  items.ts             every number: frames, blueprints, the invoice, levels, pricing (mirrors contract2/src/items.rs)
+  chain.ts, mock.ts    the NEAR client (near-kit), and the same economy in memory for Practice and tests
+  raid/                sign-on, the owned gun in the shooter, loot, the invoice and what it summons
+  dock/                loadout, armoury, market, vendors, the ledger and the fast-forward
+  home/, login/        the lobby, and sign-in with Google
+  intro/, coach/       the opening film, and the first raid's crate and checklist
+  metrics/             what the browser reports to the studio's counts (docs/DATA.md)
+src/economy/           shared pieces and the first game: the chain executor, the wallet, the Bailiff, the arsenal, the score
+contract2/             Rust (near-sdk 5.29.1): mt.rs, nft.rs, items.rs, weapons.rs, raids.rs, vendors.rs, export.rs, market.rs, harbormaster.rs
+agents/v2/             Moss, Ines and the Harbormaster: read the port, decide in character, sign their own moves
+server/, api/          the dock office: the faucet, sign-in, and the studio's counts; each validates and fails closed
+docs/                  GAME.md (the design), CONTRACT_V2.md (the wire format), STORY.md, DATA.md
+```
+
+## The first game (v1)
+
+The repo also holds the first economy built for this entry, still live: https://saltline-lac.vercel.app/play/
+(without `?game=v2`) on [`saltline.testnet`](https://testnet.nearblocks.io/address/saltline.testnet). It is a
+salvage market: three broker NPCs with wallets, price tooltips with each broker's reason, **investing in a broker
+that went broke**, a shared town story, and a fast-forward run by the contract itself (`simulate`, the Dockside's
+"The week" tab). It was rebuilt as v2 because its economy sat beside the shooter and not inside it: nothing a player
+owned could be lost. Its design is in [`docs/ECONOMY.md`](docs/ECONOMY.md) and its contract in `contract/`.
 
 **Transactions to check**
 
@@ -107,53 +182,17 @@ Two more smoke tests:
 | The story upgrade: the contract's code was redeployed with every existing view unchanged | [3Tr1JW4v…](https://testnet.nearblocks.io/txns/3Tr1JW4vZJ1c6ReHjGKWFN4MBY9AVZeBqUppDXw6fexo) |
 | `simulate` (168 h × 30 traders) as a transaction, to measure it: 102.9 Tgas | [F4VJyqJV…](https://testnet.nearblocks.io/txns/F4VJyqJV9vjxk5apksVjmFHaxqfZPFXAwp5RZ2abkRVF) |
 
-## What NEAR does here that a game server couldn't
-
-- **Nobody can quietly reprice the market.** Every price comes from plain integer rules in one file,
-  [`contract/src/pricing.rs`](contract/src/pricing.rs), deployed on chain. Changing them, even by the developer, is a
-  visible redeploy.
-- **The NPCs really own what they trade.** Each broker is a NEAR account with its own key, stock and scrip. The
-  contract only lets its own account ship its stock or change its stance, and each move carries the agent's stated
-  reason on the ledger.
-- **Players own their haul.** Cargo, gear and scrip are NEP-245 tokens in one contract, held by the player's own
-  account. Players can trade them with each other on the player market, or with any NEP-245 tool.
-- **Wallets without sign-ups.** Each player gets a NEAR implicit account whose key lives in their browser. The faucet
-  funds it, and every call is signed in the background. The chain stays out of sight until you click a ledger link.
-
-## How it's built
-
-```
-src/game.js            the shooter (the baseline: three.js r180, everything generated in code) + 7 marked `// ext:` hooks
-src/economy/           the economy layer, TypeScript, attached to the game's shared context after boot
-  chain.ts, wallet.ts  NEAR client (near-kit): call queue, retries without double spends, guest wallet
-  mock.ts              the same economy in memory, for offline play and tests
-  salvage/             in the run: sealed containers, carried weight, wrecks, HUD, debrief rows
-  dockside/            between runs: dock pass, stalls, hold, ledger, player market, board, the week, the town, away slip
-  story/               the briefing, Control's and the Harbormaster's radio, waves scaled by its strength, the town's lights
-contract/              Rust (near-sdk 5.29.1): mt.rs (NEP-245), pricing.rs, policy.rs, runs.rs, market.rs, sim.rs, town.rs
-agents/                the broker agents: read the board, decide in character, sign their own moves
-server/faucet.ts       the dock pass faucet (api/faucet.ts on Vercel): validates, rate-limits, fails closed
-docs/                  STORY.md (the story bible), ECONOMY.md (the design, written before the code), CONTRACT_API.md
-```
-
-- **The loop:** every 30 seconds you fight and cut seals. A run takes about 5 minutes: cut three relays and reach the
-  boat. A session is selling, buying gear, investing in a broker that went broke, and checking the board.
-  `docs/ECONOMY.md` has the design.
-- **Pricing:** a broker bids `base × 2 × target / (target + stock) × stance / 100`, so dumps get worse prices unit by
-  unit. It closes when it can't cover one more unit above its float of 100. Players reopen it by investing (it
-  reopens at 400 scrip) and earn 10% of its exports as dividends.
-
 ## Run it locally
 
 ```sh
 npm ci
-npm run dev        # http://127.0.0.1:5280 is the front page; the game is at /play/ (offline mock unless .env names a contract)
+npm run dev        # http://127.0.0.1:5280 is the front page; the game is at /play/ (Practice needs nothing else)
 npm run build      # dist/
 ```
 
-For testnet, copy `.env.example` to `.env` and set `VITE_CONTRACT_ID=saltline.testnet`. The dev faucet also needs
-`FAUCET_ACCOUNT_ID` and `FAUCET_PRIVATE_KEY`, which stay server side. `contract/README.md` covers building and
-deploying the contract, and `agents/README.md` covers running the brokers.
+For testnet, copy `.env.example` to `.env` and set the contract ids. The dev faucet also needs `FAUCET_ACCOUNT_ID`
+and `FAUCET_PRIVATE_KEY`, which stay server side. `contract2/README.md` covers building and deploying the contract,
+and `agents/README.md` covers running the characters.
 
 ## Limits, stated plainly
 
@@ -174,7 +213,8 @@ deploying the contract, and `agents/README.md` covers running the brokers.
   and raids. No email, IP address or key is stored, devices and sign-ins enter the counts only as salted hashes, and
   the counts a browser reports can be inflated by anyone who posts them. The game never depends on it; it is off
   until the deployment has a database. [`docs/DATA.md`](docs/DATA.md) lists every key.
-- **Not tested:** Safari, Firefox, touch devices, gamepads, and more than a handful of players at once (the contract
+- **Not tested:** Safari, Firefox, a real phone (touch was exercised only in a phone-shaped desktop browser),
+  gamepads, and more than a handful of players at once (the contract
   caps profiles at 500).
 - **Vercel's checkpoint:** a burst of scripted requests can make Vercel show its security checkpoint (HTTP 403) for a
   few minutes. If you see it, wait and reload, or run the game locally.
@@ -187,16 +227,19 @@ deploying the contract, and `agents/README.md` covers running the brokers.
   agents (e.g. "owned by the Game agent" in `src/ui.css`).
 - **The hackathon work.** Everything in
   [`pre-hackathon...main`](https://github.com/Nuel-osas/saltline/compare/pre-hackathon...main) was built from 11 Nov
-  2026: the contract, the economy layer, the agents, the faucet, the docs and the tests. Each piece came in as its
-  own pull request.
-  - The only changes to the baseline game's code are in `src/game.js` (+31/−18 lines): extension points marked
+  2026: both contracts, the game around the shooter, the agents, the dock office, the front page, the docs and the
+  tests. Each piece came in as its own pull request.
+  - The only changes to the baseline game's code are in `src/game.js` (+55/−27 lines): extension points marked
     `// ext:`, plus the new premise and radio strings marked `story:`.
   - With `?noeconomy=1`, the baseline plays exactly as before.
 - **AI-generated code.** The hackathon work was written with Claude Code (Anthropic), with several agents working in
   parallel branches under review. The pull requests record what each one did.
+- **A reference.** The order of sections on the front page and the arrangement of the lobby follow another
+  browser game's that the owner asked to match. No code, wording or art was taken from it.
 - **Libraries:**
-  - the game and economy: three.js r180 (bundled in the baseline), near-kit
-  - the contract: near-sdk, with near-workspaces for its sandbox tests
+  - the game: three.js r180 (bundled in the baseline), near-kit, @privy-io/js-sdk-core (sign-in, loaded only when it is on)
+  - the server: jose (checking sign-in tokens)
+  - the contracts: near-sdk, with near-workspaces for sandbox tests
   - build and tests: Vite, Vitest, happy-dom, playwright-core, TypeScript, Prettier
 - **Other projects:** none entered.
 
