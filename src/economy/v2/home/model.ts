@@ -95,3 +95,48 @@ export function startStep(f: Facts): Step | null {
 
 /** Which mode the lobby opens on: Practice in the offline game, the raid otherwise. */
 export const defaultMode = (offline: boolean): Mode => (offline ? "practice" : "raid");
+
+// ---------------------------------------------------------------------------------------------------------------
+// The port: the other players, read from the contract's own record.
+
+/** As much of a ledger event as the roster reads (types.ts LedgerEvent). */
+export interface PortEvent {
+  kind: string;
+  at: number;
+  account: string;
+  callsign?: string;
+  text: string;
+}
+
+export interface PortRoster {
+  /** Over the fence right now: a raid started and not yet ended. Longest in first. */
+  inYard: { callsign: string; minutes: number }[];
+  /** The latest to reach the boat, newest first, in the ledger's own words. */
+  back: { callsign: string; text: string; minutes: number }[];
+}
+
+/** A raid the contract hasn't heard the end of lapses after this long (contract2 raids.rs RAID_EXPIRY_SECONDS). */
+export const RAID_LAPSE_MS = 30 * 60_000;
+const ENDS = new Set(["extract", "wreck", "impound"]);
+
+/**
+ * Who is in the yard and who just came back, from the port's recent events. A breacher is in the yard when the last
+ * thing the ledger says of their raid is that it started, less than a raid's lifetime ago. `me` is left out of the
+ * yard list: the reader is looking at the lobby.
+ */
+export function portRoster(events: readonly PortEvent[], now: number, me?: string | null): PortRoster {
+  const last = new Map<string, PortEvent>();
+  for (const e of [...events].sort((a, b) => a.at - b.at)) if (e.kind === "raid_start" || ENDS.has(e.kind)) last.set(e.account, e);
+  const mins = (at: number) => Math.max(0, Math.floor((now - at) / 60_000));
+  const name = (e: PortEvent) => e.callsign || `${e.account.slice(0, 6)}…`;
+  const inYard = [...last.values()]
+    .filter((e) => e.kind === "raid_start" && e.account !== me && now - e.at < RAID_LAPSE_MS && now >= e.at - 60_000)
+    .sort((a, b) => a.at - b.at)
+    .map((e) => ({ callsign: name(e), minutes: mins(e.at) }));
+  const back = events
+    .filter((e) => e.kind === "extract")
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 3)
+    .map((e) => ({ callsign: name(e), text: e.text, minutes: mins(e.at) }));
+  return { inYard, back };
+}
