@@ -21,13 +21,15 @@ The README lists the ones that matter to a player. These are all of them.
 
 ## Accounts and keys
 
-- **The guest wallet's key lives in this browser's storage.** Clearing it loses the account. Testnet only.
+- **Without sign-in (a local run), the guest wallet's key lives in this browser's storage.** Clearing it loses the
+  account. Testnet only.
 - **With sign-in on, the studio holds the keys.** A player signs in with Google (through Privy). Their NEAR key is
   derived on the server from that sign-in and one server secret, which lets the same sign-in open the same account
   on any device and lets the faucet give one dock pass per sign-in. It also means whoever holds that secret could sign
   as any player: acceptable on testnet only; a launch would move the key to the login provider's own custody.
   Sign-in is off unless the deployment sets `VITE_PRIVY_APP_ID`, `PRIVY_APP_ID` and `WALLET_SECRET`
-  (see `.env.example`). It is off on the live site, so nobody has to sign in to try the game.
+  (see `.env.example`). It is on at https://saltline-lac.vercel.app since 14 Nov 2026; a local run without those
+  settings stays open, with the guest wallet below.
 - **The faucet's per-IP limits are kept in memory** on each serverless instance. The lasting guards are one
   registration per account and never funding an account that already exists.
 
