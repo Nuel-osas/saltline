@@ -118,6 +118,7 @@
 .hm-play { grid-area: play; align-self: end; display: flex; align-items: center; gap: 16px; min-height: 68px; padding: 10px 20px 8px; text-align: left; background: var(--signal); border: 0; border-bottom: 5px solid var(--rust); color: #0b0b0a !important; transition: transform .1s ease, border-width .1s ease, background .15s ease; }
 .hm-play:hover { background: var(--signal-hot); }
 .hm-play:active { transform: translateY(3px); border-bottom-width: 2px; }
+.hm-start-h { margin: 2px 0 0; font: 700 11px/1 var(--f-label); letter-spacing: .2em; text-transform: uppercase; color: var(--signal); }
 .hm-play-i, .hm-play-i svg { display: block; width: 24px; height: 24px; }
 .hm-play-t { display: grid; gap: 6px; min-width: 0; }
 .hm-play-t b { font: 800 30px/.9 var(--f-display); letter-spacing: .2em; text-transform: uppercase; white-space: nowrap; }
