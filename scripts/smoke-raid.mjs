@@ -276,7 +276,7 @@ try {
   });
   await page.waitForFunction(() => window.__G.game.state === "complete", null, { timeout: 20000 });
   const pendingRows = await page.evaluate(() => [...document.querySelectorAll('.menu [data-s="complete"] .rd-row')].map((r) => r.textContent));
-  check(pendingRows.length === 6 && pendingRows.some((r) => /settling/.test(r)), "the debrief shows the raid settling while the boat's report is on its way", JSON.stringify(pendingRows.slice(3)));
+  check(pendingRows.length >= 4 && pendingRows.some((r) => /settling/.test(r)), "the debrief shows the raid settling while the boat's report is on its way", JSON.stringify(pendingRows));
   await page.waitForFunction(() => window.__ev.some((e) => e.name === "raid:extracted"), null, { timeout: 150000 });
   const sent = await page.evaluate(() => window.__calls.find((c) => c.method === "extract")?.args ?? null);
   const r = sent?.[1];
@@ -290,16 +290,18 @@ try {
   const midRaid = /Tampering with a customs seal|Inspection Unit has been written off|units of evidence|Second notice/;
   check(bills[0]?.includes(`trespass surcharge of ${raid.invoiceStart} scrip`) && bills.slice(1).some((t) => midRaid.test(t)) && /Removal of goods noted\. An invoice for \d+ scrip/.test(bills[bills.length - 1] ?? ""), "the Harbormaster bills on its channel: the fence first, what was done, then the boat", JSON.stringify(bills.map((t) => t.slice(0, 44))));
   const rows = await page.evaluate(() => [...document.querySelectorAll('.menu [data-s="complete"] .rd-row')].map((x) => `${x.querySelector("dt").textContent}: ${x.querySelector("dd").textContent}`));
+  const lead = await page.evaluate(() => document.querySelector('.menu [data-s="complete"] .rd-lead')?.textContent ?? "");
+  // The debrief leads with the haul and what it is worth today; Practice shows no ledger id once the raid is logged.
   check(
-    rows.length === 6 &&
-      /^Haul: .*×\d/.test(rows[0]) &&
-      rows[1] === `Your gun: Stevedore ${gun.held.serial} · B · condition 95` &&
-      (wreck ? rows[2].startsWith(`Guns recovered: Pilot ${wreck.weapon.serial} · ${wreck.weapon.grade} · condition ${wreck.weapon.condition - 15}`) : /^Guns recovered/.test(rows[2])) &&
-      rows[3] === `Invoice: ${n(out?.invoice ?? -1)} scrip` &&
-      rows[4] === `Arrears now: ${n(out?.arrears ?? -1)} scrip` &&
-      /^Ledger: /.test(rows[5]),
-    "the debrief shows the haul, the gun and its wear, guns recovered, the invoice, arrears and the ledger",
-    JSON.stringify(rows),
+    /×\d/.test(lead) &&
+      /Worth (about [\d,]+ scrip|unknown)/.test(lead) &&
+      rows.length === 4 &&
+      rows[0] === `Your gun: Stevedore ${gun.held.serial} · B · condition 95` &&
+      (wreck ? rows[1].startsWith(`Guns recovered: Pilot ${wreck.weapon.serial} · ${wreck.weapon.grade} · condition ${wreck.weapon.condition - 15}`) : /^Guns recovered/.test(rows[1])) &&
+      rows[2] === `Invoice: ${n(out?.invoice ?? -1)} scrip` &&
+      rows[3] === `Arrears now: ${n(out?.arrears ?? -1)} scrip`,
+    "the debrief leads with the haul and its worth, then the gun and its wear, guns recovered, the invoice and arrears",
+    JSON.stringify({ lead, rows }),
   );
   check(await page.evaluate(() => window.__G.bailiff.list.length === 0 && window.__G.v2.raid === null && !document.querySelector(".rd-inv").classList.contains("on")), "after the boat the yard is cleared and the meter is off");
   await page.waitForTimeout(600);
@@ -358,10 +360,10 @@ try {
     const die = window.__calls.find((c) => c.method === "die");
     const started = window.__calls.find((c) => c.method === "startRaid");
     await new Promise((ok) => setTimeout(ok, 300));
-    return { age: die ? (die.t - started.t) / 1000 : null, by: die?.args[3], spot: die?.args[2], ev: window.__ev.find((e) => e.name === "raid:died")?.e, rows: [...document.querySelectorAll('.menu [data-s="dead"] .rd-row')].map((x) => `${x.querySelector("dt").textContent}: ${x.querySelector("dd").textContent}`), wrecks: (await G.v2.chain.wrecks()).filter((w) => w.weapon?.serial === window.__gun.serial).length };
+    return { age: die ? (die.t - started.t) / 1000 : null, by: die?.args[3], spot: die?.args[2], ev: window.__ev.find((e) => e.name === "raid:died")?.e, rows: [...document.querySelectorAll('.menu [data-s="dead"] .rd-row')].map((x) => `${x.querySelector("dt").textContent}: ${x.querySelector("dd").textContent}`), lead: document.querySelector('.menu [data-s="dead"] .rd-lead')?.textContent ?? "", wrecks: (await G.v2.chain.wrecks()).filter((w) => w.weapon?.serial === window.__gun.serial).length };
   });
   check(fell.age !== null && fell.age >= 8 * opened && fell.by === "machines" && fell.ev?.by === "machines" && fell.ev?.impounded === false, "the death is sent once the raid is old enough, as `machines`", JSON.stringify({ age: fell.age?.toFixed(1), need: 8 * opened, by: fell.by, ev: fell.ev }));
-  check(/^Your gun: LEFT IN A WRECK (by the shed|on the quay|by the gate|in the yard) · someone may carry it out$/.test(fell.rows[0] ?? "") && fell.wrecks === 1, "the dead card says the gun is in a wreck, and the mock holds that wreck", JSON.stringify(fell.rows));
+  check(/^Lost/i.test(fell.lead) && /in a wreck (by the shed|on the quay|by the gate|in the yard) for someone else to carry out/.test(fell.lead) && fell.wrecks === 1, "the dead card leads with the gun lost in a wreck and what to do next, and the mock holds that wreck", JSON.stringify({ lead: fell.lead, rows: fell.rows }));
   await page.close();
 
   // ================================================================================ 3. ?invoice=1100: the Bailiff
@@ -419,7 +421,8 @@ try {
   await page.waitForFunction(() => /Ledger/.test(document.querySelector('.menu [data-s="dead"] .rd-sec')?.textContent ?? "") && !/logging/.test(document.querySelector('.menu [data-s="dead"] .rd-sec')?.textContent ?? ""), null, { timeout: 8000 }).catch(() => {});
   const serial = await page.evaluate(() => window.__gun.serial);
   const deadRows = await page.evaluate(() => [...document.querySelectorAll('.menu [data-s="dead"] .rd-row')].map((x) => `${x.querySelector("dt").textContent}: ${x.querySelector("dd").textContent}`));
-  check(deadRows[0] === `Your gun: IMPOUNDED · Stevedore ${serial} · buy it back at the dock within 48 hours` && /^Invoice: [\d,]+ scrip$/.test(deadRows[1] ?? "") && /^Arrears now: [\d,]+ scrip$/.test(deadRows[2] ?? ""), "the dead card says the gun is impounded, with the invoice and the arrears", JSON.stringify(deadRows));
+  const deadLead = await page.evaluate(() => document.querySelector('.menu [data-s="dead"] .rd-lead')?.textContent ?? "");
+  check(deadLead.includes(`${serial} (impounded)`) && /Buy the gun back at the dock within 48 hours/.test(deadLead) && /^Invoice: [\d,]+ scrip$/.test(deadRows[0] ?? "") && /^Arrears now: [\d,]+ scrip$/.test(deadRows[1] ?? ""), "the dead card leads with the gun impounded and how to get it back, then the invoice and the arrears", JSON.stringify({ deadLead, deadRows }));
   const pound = await page.evaluate(async () => (await window.__G.v2.chain.impound(window.__G.v2.wallet.accountId())).map((i) => i.weapon.serial));
   check(pound.includes(serial), "the gun is in the mock's impound", JSON.stringify(pound));
   await page.waitForFunction(() => window.__G.game.state === "dead", null, { timeout: 10000 }).catch(() => {});
