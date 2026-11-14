@@ -1,8 +1,10 @@
 // The coach: a first raid taught by doing, one thing at a time, at the moment it matters (docs/GAME.md → The loop).
 //
-// - The rifle comes out of a crate. Every v2 raid starts with empty hands at the drop point: the rifle lies in an
-//   open crate two metres ahead, and holding E there (a target in the raid's own interaction slot, like a seal)
-//   brings it up into the player's hands. Until then nothing fires. On a retry after a death it is taken at the press.
+// - The rifle comes out of a crate, until the player has reached the boat once. Those raids start with empty hands
+//   at the drop point: the rifle lies in an open crate two metres ahead, and holding E there (a target in the raid's
+//   own interaction slot, like a seal) brings it up into the player's hands. Until then nothing fires. On a retry
+//   after a death it is taken at the press. Once a raid has reached the boat, every raid starts with the rifle in
+//   hand: the ceremony teaches once and then gets out of the way.
 // - The first raid's checklist: a small panel under the objective, one line lit at a time, each ticked when the
 //   player does the thing (checklist.ts). It leaves when the raid ends and never returns after a first raid reaches
 //   the boat, unless HOW TO PLAY on the title turns it back on.
@@ -226,9 +228,10 @@ export function createCoach(G: Game, opts: CoachOptions = {}): Coach {
       return Number.isFinite(y) && Math.abs(y) < 1.5 ? y : 0;
     });
     const instant = diedLast;
+    const veteran = memory.done; // they have reached the boat before: the rifle is in their hands from the start
     // The raid opens looking down at the crate (2 m ahead, at the player's feet), so the first thing in view is the
     // rifle, not the horizon over it. Only where the rifle still has to be taken by hand.
-    if (!instant) quiet(() => G.player && (G.player.pitch = -0.4));
+    if (!instant && !veteran) quiet(() => G.player && (G.player.pitch = -0.4));
     const list = memory.done ? null : new Checklist(memory.taught, (id) => (memory.taught.includes(id) || memory.taught.push(id), save()));
     list?.begin({ signed: state.mode === "signed", device: device() });
     run = { armed: false, instant, place, gun, undo: null, draw: null, bolt: false, played: 0, say: null, list, ended: false, last: null, poll: 0, grabs: [] };
@@ -243,6 +246,7 @@ export function createCoach(G: Game, opts: CoachOptions = {}): Coach {
       taken: () => guard("take", take),
     };
     run.undo = slot.addTarget(target);
+    if (veteran) handOver();
   }
 
   /** The raid is over (the boat, a death, the title): the panel leaves and nothing of the coach is left in the shooter. */
