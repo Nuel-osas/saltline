@@ -185,6 +185,13 @@ body { background: var(--ink); color: var(--bone); overflow: hidden; font-family
 .is-touch .h-health { bottom: auto; top: calc(128px + var(--sat)); }
 .is-touch .h-feed { top: calc(150px + var(--sat)); }
 .is-touch .comms { bottom: auto; top: calc(27% + var(--sat)); }
+/* ext: a phone held sideways is short: the radio line narrows and shrinks so it stays between the objective (left) and
+   the buttons (right) instead of running across both */
+@media (max-height: 520px) and (orientation: landscape) {
+  .is-touch .comms { width: min(46vw, 420px); }
+  .is-touch .comms-t { font-size: 14px; }
+  .is-touch .comms-who { font-size: 10px; margin-bottom: 4px; }
+}
 .is-touch .h-compass { width: min(300px, calc(100vw - var(--gl) - var(--gr) - 120px)); }
 
 /* =====================================================================  menus  */

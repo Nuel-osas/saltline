@@ -172,6 +172,23 @@
   .hm-xp { width: 90px; }
   .hm-icon[aria-label="Full screen"] { display: none; } /* a phone's browser has its own */
 }
+@media (max-width: 960px) and (max-height: 500px) and (orientation: landscape) {
+  /* A phone held sideways, the way the game is played: the gun, the modes and DEPLOY on one screen, without scrolling.
+     The port's list and the "Start here" box give way; DEPLOY's own caption says what it starts. */
+  .hm { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "top top" "hero modes" "tabs play"; gap: 6px 14px; overflow-y: auto; padding-top: calc(8px + var(--sat)); padding-bottom: calc(8px + var(--sab)); }
+  .hm-top { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .hm-card { padding: 4px 10px 4px 4px; }
+  .hm-port, .hm-start, .hm-eye { display: none; }
+  .hm-hero { align-self: center; }
+  .hm-hero-n { font-size: clamp(24px, 6vh, 34px); }
+  .hm-gun { width: min(100%, 250px); }
+  .hm-modes { align-self: center; }
+  .hm-tile { min-height: 0; }
+  .hm-tile-art, .hm-tag { display: none; } /* a tile this short has no room for its corner label */
+  .hm-tabs { align-self: end; }
+  .hm-tab { min-height: 46px; gap: 3px; }
+  .hm-play { min-height: 48px; padding: 6px 14px 4px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .hm-gun, .hm-play { transition: none; }
 }

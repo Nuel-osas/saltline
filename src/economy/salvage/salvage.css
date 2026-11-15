@@ -67,6 +67,15 @@
     top: calc(214px + var(--sat));
   }
 }
+@media (max-height: 520px) and (orientation: landscape) {
+  /* A phone held sideways: the stick rests in the bottom-left corner (ui.css), so the readout sits beside it, at the
+     foot of the screen between the stick and the fire buttons. */
+  .is-touch .sv-cargo {
+    top: auto;
+    bottom: calc(16px + var(--sab));
+    left: calc(150px + var(--sal));
+  }
+}
 @media (max-height: 520px) {
   .sv-cargo {
     bottom: calc(86px + var(--sab));
