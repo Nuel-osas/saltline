@@ -52016,6 +52016,29 @@ void main() {
     function ie() {
       ((w = -1), (H = O = 0), M && M.stick.classList.remove("on"));
     }
+    // ext: the stick and the look drag start from a touch on the canvas, or on any HUD layer drawn over it (the
+    // economy layer's panels sit over the left side, where a thumb lands), but never from a button, link or field.
+    // They follow the finger from the window, so a touch that began on a layer still steers, and only touches that
+    // are the stick's or the look's are kept from the browser (the lobby and the dock still scroll).
+    let tsStart = (P) => {
+        if (!r) return !1;
+        let hit = !1;
+        for (let V of P.changedTouches)
+          V.clientX < innerWidth * 0.45 && w < 0
+            ? ((hit = !0),
+              (w = V.identifier),
+              (S = V.clientX),
+              (z = V.clientY),
+              (H = O = 0),
+              M &&
+                ((M.stick.style.transform = `translate3d(${S}px,${z}px,0)`),
+                (M.nub.style.transform = "translate3d(0,0,0)"),
+                M.stick.classList.add("on")))
+            : q < 0 && ((hit = !0), (q = V.identifier), (U = V.clientX), (T = V.clientY));
+        return hit;
+      },
+      tsControl = (el) =>
+        !!(el && el.closest && el.closest("button, a, input, select, textarea, [role=button], [role=dialog]"));
     (addEventListener(
       "touchstart",
       () => {
@@ -52026,42 +52049,42 @@ void main() {
       e.addEventListener(
         "touchstart",
         (P) => {
-          if ((P.preventDefault(), !!r))
-            for (let V of P.changedTouches)
-              V.clientX < innerWidth * 0.45 && w < 0
-                ? ((w = V.identifier),
-                  (S = V.clientX),
-                  (z = V.clientY),
-                  (H = O = 0),
-                  M &&
-                    ((M.stick.style.transform = `translate3d(${S}px,${z}px,0)`),
-                    (M.nub.style.transform = "translate3d(0,0,0)"),
-                    M.stick.classList.add("on")))
-                : q < 0 && ((q = V.identifier), (U = V.clientX), (T = V.clientY));
+          (P.preventDefault(), tsStart(P));
         },
         { passive: !1 },
       ),
-      e.addEventListener(
+      addEventListener(
+        "touchstart",
+        (P) => {
+          P.target === e || tsControl(P.target) || (tsStart(P) && P.cancelable && P.preventDefault());
+        },
+        { passive: !1, capture: !0 },
+      ),
+      addEventListener(
         "touchmove",
         (P) => {
-          if ((P.preventDefault(), !!r))
-            for (let V of P.changedTouches)
-              if (V.identifier === w) {
-                let Y = V.clientX - S,
-                  L = V.clientY - z,
-                  Z = Math.hypot(Y, L);
-                (Z > If && ((Y *= If / Z), (L *= If / Z)),
-                  (H = Y / If),
-                  (O = -L / If),
-                  M && (M.nub.style.transform = `translate3d(${Y.toFixed(1)}px,${L.toFixed(1)}px,0)`));
-              } else V.identifier === q && (Q(V.clientX - U, V.clientY - T), (U = V.clientX), (T = V.clientY));
+          if (!r) return;
+          let mine = !1;
+          for (let V of P.changedTouches)
+            if (V.identifier === w) {
+              mine = !0;
+              let Y = V.clientX - S,
+                L = V.clientY - z,
+                Z = Math.hypot(Y, L);
+              (Z > If && ((Y *= If / Z), (L *= If / Z)),
+                (H = Y / If),
+                (O = -L / If),
+                M && (M.nub.style.transform = `translate3d(${Y.toFixed(1)}px,${L.toFixed(1)}px,0)`));
+            } else
+              V.identifier === q && ((mine = !0), Q(V.clientX - U, V.clientY - T), (U = V.clientX), (T = V.clientY));
+          mine && P.cancelable && P.preventDefault();
         },
         { passive: !1 },
       ));
     let F = (P) => {
       for (let V of P.changedTouches) V.identifier === w ? ie() : V.identifier === q && (q = -1);
     };
-    (e.addEventListener("touchend", F, { passive: !1 }), e.addEventListener("touchcancel", F, { passive: !1 }));
+    (addEventListener("touchend", F, { passive: !0 }), addEventListener("touchcancel", F, { passive: !0 }));
     let X = {
         0: "jump",
         1: "crouch",

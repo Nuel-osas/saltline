@@ -164,6 +164,10 @@ body { background: var(--ink); color: var(--bone); overflow: hidden; font-family
 .t-stick.on { opacity: 1; }
 .t-ring { position: absolute; left: -58px; top: -58px; width: 116px; height: 116px; border-radius: 50%; border: 1.5px solid rgba(232, 228, 218, .5); background: rgba(11, 13, 15, .18); }
 .t-nub { position: absolute; left: -24px; top: -24px; width: 48px; height: 48px; border-radius: 50%; background: rgba(232, 228, 218, .3); border: 1.5px solid rgba(232, 228, 218, .7); }
+/* ext: at rest the stick waits, faint, in its corner, so a player can see where the thumb goes; a touch anywhere on
+   the left of the screen still brings it to the thumb (the inline transform it gets then wins again once .on is set) */
+.touch.on .t-stick:not(.on) { opacity: .5; left: calc(84px + var(--sal)); top: auto; bottom: calc(64px + var(--sab)); scale: .82; transform: none !important; }
+.touch.on .t-stick:not(.on) .t-nub { transform: none !important; }
 .t-btn { position: absolute; pointer-events: auto; touch-action: none; border-radius: 50%; border: 1.5px solid rgba(232, 228, 218, .55); background: rgba(11, 13, 15, .38); color: var(--bone);
   font: 600 12px/1 var(--f-label); letter-spacing: .14em; padding: 0; margin: 0; -webkit-appearance: none; appearance: none; }
 .t-btn span { pointer-events: none; margin-right: -.14em; }
@@ -181,6 +185,13 @@ body { background: var(--ink); color: var(--bone); overflow: hidden; font-family
 .is-touch .h-health { bottom: auto; top: calc(128px + var(--sat)); }
 .is-touch .h-feed { top: calc(150px + var(--sat)); }
 .is-touch .comms { bottom: auto; top: calc(27% + var(--sat)); }
+/* ext: a phone held sideways is short: the radio line narrows and shrinks so it stays between the objective (left) and
+   the buttons (right) instead of running across both */
+@media (max-height: 520px) and (orientation: landscape) {
+  .is-touch .comms { width: min(46vw, 420px); }
+  .is-touch .comms-t { font-size: 14px; }
+  .is-touch .comms-who { font-size: 10px; margin-bottom: 4px; }
+}
 .is-touch .h-compass { width: min(300px, calc(100vw - var(--gl) - var(--gr) - 120px)); }
 
 /* =====================================================================  menus  */

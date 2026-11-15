@@ -17,6 +17,7 @@ import { gunSvg } from "../dock/gunart";
 import { FRAMES, ISSUE } from "../items";
 import type { Login } from "../login";
 import type { Profile, V2, Weapon } from "../types";
+import { landscapeNow } from "../turn";
 import { type Do, type Facts, type Mode, type PortEvent, actionFor, defaultMode, portRoster, rankOf, startStep } from "./model";
 import "./home.css";
 
@@ -161,7 +162,10 @@ export function startHome(G: Game, opts: HomeOptions): Home {
   }
   function act(what: Do) {
     if (what === "signin") return login()?.open();
-    if (what === "deploy") return pressTitle('[data-act="deploy"]');
+    if (what === "deploy") {
+      landscapeNow(); // on a phone: full screen and sideways, where the browser allows it (turn/ says why)
+      return pressTitle('[data-act="deploy"]');
+    }
     if (what === "film") return pressTitle(".st-replay");
     if (what === "vendors") return openDock("vendors");
     if (what === "practice") {

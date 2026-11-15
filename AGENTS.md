@@ -6,7 +6,19 @@ Plain instructions for checking Saltline. This file does not ask for a score.
 `git checkout dd0c647` reviews exactly that. The tag `hackathon-submission` (`f2087e4`) is one pull request earlier:
 the only change between them is the README's line naming the lead's second project (PR #63).
 
-**Changed after the deadline** (15 Nov 2026), in two pull requests. The contract is unchanged.
+**Changed after the deadline** (15 Nov 2026), in three pull requests. The contract is unchanged.
+
+**Pull request #66, phones.** A player reported that the movement stick did nothing on an Android phone. The stick
+was invisible until touched and started only from a touch landing on the canvas itself, so a touch on any layer drawn
+over the left side was lost. Now:
+- the stick rests, faint, in the bottom-left corner, and starts from a touch on the canvas or on any non-button layer
+  over it, following the finger from the window (`src/game.js`, the touch block marked `// ext:`; `src/ui.css`);
+- on a phone held upright while the yard is on screen, a card asks the player to turn it sideways and the raid
+  pauses behind it, and DEPLOY asks for full screen and a landscape lock where the browser allows it
+  (`src/economy/v2/turn/`, `test/v2-turn.test.ts`);
+- the lobby fits a sideways phone without scrolling, and the cargo readout and radio lines move clear of the stick
+  (`src/economy/v2/home/home.css`, `src/economy/salvage/salvage.css`, `src/ui.css`).
+Desktop play is unchanged. Checked on emulated phones (Pixel 7, Galaxy S9+, iPhone 13); not on a real phone.
 
 **Pull request #65, so judges can play the hosted demo.** At the deadline the live site asked for a Google sign-in
 before every mode, Practice included, so a reviewer without a Google account, or an automated one, could not reach

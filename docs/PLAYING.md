@@ -57,8 +57,9 @@ you, and a red marker shows how far away it is. Destroying one adds to the invoi
 hounds, rotors from gulls), ammunition or medicine.
 
 **Controls.** WASD and the mouse (click to capture it), left mouse to fire, right mouse to aim, R to reload, E to
-use, G for a breaker charge, F for the rifle butt, Shift to sprint, C to crouch, Esc to pause. On a phone there are
-on-screen buttons for all of these.
+use, G for a breaker charge, F for the rifle butt, Shift to sprint, C to crouch, Esc to pause. On a phone, hold it
+sideways: the stick rests in the bottom-left corner (touch anywhere on the left half to move), drag on the right half
+to look, and there are on-screen buttons for the rest.
 
 ## The invoice
 

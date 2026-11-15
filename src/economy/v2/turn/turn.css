@@ -1,0 +1,65 @@
+/* turn/: the card that asks for landscape on a phone held upright while the yard is on screen. Uses the game's tokens
+   (src/ui.css). Above the touch controls and the HUD, below the fatal-error strip. */
+.tn-card {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  background: rgba(6, 8, 10, 0.95);
+  color: var(--bone);
+  text-align: center;
+  pointer-events: auto;
+}
+.tn-card.on {
+  display: flex;
+}
+.tn-card b {
+  font: 800 30px/1.05 var(--f-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.tn-card p {
+  margin: 0;
+  font: 500 15px/1.4 var(--f-label);
+  color: var(--bone-dim);
+}
+.tn-phone {
+  position: relative;
+  width: 44px;
+  height: 76px;
+  margin-bottom: 14px;
+  border: 3px solid var(--signal);
+  border-radius: 8px;
+  animation: tn-turn 1.8s ease-in-out infinite;
+}
+.tn-phone i {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 10px;
+  height: 3px;
+  margin-left: -5px;
+  border-radius: 2px;
+  background: var(--signal);
+}
+@keyframes tn-turn {
+  0%,
+  30% {
+    transform: rotate(0deg);
+  }
+  60%,
+  100% {
+    transform: rotate(-90deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tn-phone {
+    animation: none;
+    transform: rotate(-90deg);
+  }
+}
