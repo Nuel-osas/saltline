@@ -56,8 +56,8 @@ export function buildV2(cfg: EconomyConfig, token?: () => Promise<string | null>
 
 export function startV2(G: Game): void {
   const cfg = resolveV2Config(import.meta.env as Record<string, unknown>, typeof location === "undefined" ? "" : location.search);
-  // Sign-in is on when the build names a Privy app (VITE_PRIVY_APP_ID). Everyone signs in before they play, Practice
-  // (the offline mock) included; there the sign-in only opens the door, because there is no wallet to fetch.
+  // Sign-in is on when the build names a Privy app (VITE_PRIVY_APP_ID), for the chain game only. Practice and Skirmish
+  // (the offline mock) never ask: they hold no account and keep nothing, so anyone can open the link and play.
   const privyAppId = typeof import.meta.env.VITE_PRIVY_APP_ID === "string" ? import.meta.env.VITE_PRIVY_APP_ID.trim() : "";
   let login: Login | null = null;
   const { v2, mock, guest } = buildV2(cfg, async () => login?.token() ?? null);
@@ -86,8 +86,8 @@ export function startV2(G: Game): void {
   guard("coach", () => startCoach(G)); // the rifle in its crate, the first raid's checklist, the once-ever moments (G.coach)
   guard("sight", () => startSight(G)); // the machines' signal lamps and threat markers, and the fair first raid (G.sight)
 
-  // Last, so its lock wraps the raid's own start: nobody deploys or opens the dock before signing on (G.login).
-  if (privyAppId) guard("login", () => void (login = startLogin(G, { appId: privyAppId, sheet: true, ...(guest ? { sessionUrl: sessionUrlFor(cfg.faucetUrl), wallet: guest } : {}) })));
+  // Last, so its lock wraps the raid's own start: on chain, nobody deploys or opens the dock before signing on (G.login).
+  if (privyAppId && !mock) guard("login", () => void (login = startLogin(G, { appId: privyAppId, sheet: true, ...(guest ? { sessionUrl: sessionUrlFor(cfg.faucetUrl), wallet: guest } : {}) })));
   // The start screen: a lobby over the title card (G.home). Its buttons press the title's own, so everything above
   // starts as it did.
   // Skirmish is the offline game with fighting on (?mock&pvp=1): its own yard, so nobody in Practice can be shot.

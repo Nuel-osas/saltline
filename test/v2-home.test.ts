@@ -26,10 +26,14 @@ describe("the one big button", () => {
     expect(actionFor("raid", facts({ signedIn: true, gun: "Longshore" }))).toEqual({ label: "Deploy", caption: "Raid · with the Longshore", do: "deploy" });
     expect(actionFor("raid", facts({ loginOn: false }))).toMatchObject({ label: "Deploy", do: "deploy" });
   });
-  it("is Sign in for every mode until the player has signed in, Practice and the opening included", () => {
-    expect(actionFor("practice", facts())).toEqual({ label: "Sign in", caption: "Practice · sign in first", do: "signin" });
+  it("asks for sign-in only for the chain game: a raid and the opening; Practice and Skirmish open for anyone", () => {
     expect(actionFor("film", facts())).toEqual({ label: "Sign in", caption: "The opening · sign in first", do: "signin" });
-    for (const mode of ["raid", "practice", "film"] as const) expect(actionFor(mode, facts({ offline: true })).do).toBe("signin");
+    expect(actionFor("practice", facts())).toMatchObject({ label: "Play practice", do: "practice" });
+    expect(actionFor("skirmish", facts())).toMatchObject({ label: "Play skirmish", do: "skirmish" });
+    // inside the offline game nothing asks, even where the build has sign-in on
+    expect(actionFor("practice", facts({ offline: true }))).toMatchObject({ label: "Deploy", do: "deploy" });
+    expect(actionFor("film", facts({ offline: true }))).toMatchObject({ label: "Watch", do: "film" });
+    expect(actionFor("raid", facts({ offline: true }))).toMatchObject({ label: "Go on chain", do: "online" });
   });
   it("signed in: opens Practice from the chain game, and plays it from inside Practice", () => {
     const inn = { signedIn: true };
@@ -43,7 +47,7 @@ describe("the one big button", () => {
 
   it("Skirmish is its own yard: the button goes there, deploys once there, and Practice leads back out", () => {
     const inn = { signedIn: true };
-    expect(actionFor("skirmish", facts())).toEqual({ label: "Sign in", caption: "Skirmish · sign in first", do: "signin" });
+    expect(actionFor("skirmish", facts())).toEqual({ label: "Play skirmish", caption: "Live · players can shoot you", do: "skirmish" });
     expect(actionFor("skirmish", facts(inn))).toEqual({ label: "Play skirmish", caption: "Live · players can shoot you", do: "skirmish" });
     expect(actionFor("skirmish", facts({ ...inn, offline: true }))).toMatchObject({ label: "Play skirmish", do: "skirmish" }); // in Practice: not this yard
     expect(actionFor("skirmish", facts({ ...inn, offline: true, skirmish: true, gun: "Issue rifle" }))).toEqual({ label: "Deploy", caption: "Skirmish · with the Issue rifle", do: "deploy" });
@@ -66,8 +70,8 @@ describe("start here", () => {
   it("says nothing when the record couldn't be read, rather than guess", () => {
     expect(startStep(facts({ signedIn: true, extractions: null }))).toBeNull();
   });
-  it("in Practice: sign in, then the practice raid, then go on chain", () => {
-    expect(startStep(facts({ offline: true, extractions: 0 }))).toMatchObject({ n: 1, do: "signin" });
+  it("in Practice: no sign-in, straight to the practice raid, then go on chain", () => {
+    expect(startStep(facts({ offline: true, extractions: 0 }))).toMatchObject({ n: 2, do: "deploy" });
     expect(startStep(facts({ offline: true, signedIn: true, extractions: 0 }))).toMatchObject({ n: 2, do: "deploy" });
     expect(startStep(facts({ offline: true, signedIn: true, extractions: 2 }))).toMatchObject({ n: 3, do: "online" });
   });
@@ -150,7 +154,7 @@ describe("the lobby", () => {
     expect(w.home.root.querySelectorAll(".hm-tab")).toHaveLength(4);
   });
 
-  it("signed out: a guest card, and every way in asks for a sign-in, Practice included", async () => {
+  it("signed out: a guest card, and every way into the chain game asks for a sign-in; Practice opens at once", async () => {
     const w = world();
     await settle();
     expect(w.text(".hm-card")).toContain("Guest");
@@ -162,13 +166,14 @@ describe("the lobby", () => {
     // "Start here" says to sign in, which the big button already does: it points at it, not a second button.
     expect(w.home.root.querySelector(".hm-start-b")).toBeNull();
     expect(w.text(".hm-start")).toContain("Press SIGN IN to go");
+    expect(w.opened).toEqual(["signin", "signin", "signin"]);
     w.home.root.querySelector<HTMLElement>('.hm-tile[data-mode="practice"]')!.click();
-    expect(w.text(".hm-play")).toContain("Practice · sign in first");
+    expect(w.text(".hm-play")).toContain("Play practice");
     w.home.root.querySelector<HTMLElement>(".hm-play")!.click();
-    expect(w.opened).toEqual(["signin", "signin", "signin", "signin"]);
+    expect(w.opened).toEqual(["signin", "signin", "signin"]); // no fourth: Practice didn't ask
     expect(w.pressed).toEqual([]);
-    expect(w.went).toEqual([]);
-    expect(w.store.has(PRACTISED_KEY)).toBe(false);
+    expect(w.went).toEqual(["/?game=v2&mock=1&stash=rich"]);
+    expect(w.store.get(PRACTISED_KEY)).toBe("1");
   });
 
   it("signed in: the record, the gun going over the fence, and Deploy presses the title's own button", async () => {
@@ -231,13 +236,13 @@ describe("the lobby", () => {
     expect(yard.went).toEqual(["/?game=v2&mock=1&stash=rich"]);
   });
 
-  it("inside Practice, a signed-out player still has to sign in before the raid starts", async () => {
+  it("inside Practice nothing asks for a sign-in, even on a build with sign-in on: Deploy starts the raid", async () => {
     const w = world({ offline: true, profile: { callsign: "BREACHER", extractions: 0, arrears: 0 } });
     await settle();
-    expect(w.text(".hm-play")).toContain("Sign in");
+    expect(w.text(".hm-play")).toContain("Deploy");
     w.home.root.querySelector<HTMLElement>(".hm-play")!.click();
-    expect(w.opened).toEqual(["signin"]);
-    expect(w.pressed).toEqual([]);
+    expect(w.opened).toEqual([]);
+    expect(w.pressed).toEqual(["deploy"]);
   });
 
   it("picking a mode changes the big button; the opening plays the film", async () => {
