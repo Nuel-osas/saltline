@@ -6,7 +6,11 @@ Plain instructions for checking Saltline. This file does not ask for a score.
 `git checkout dd0c647` reviews exactly that. The tag `hackathon-submission` (`f2087e4`) is one pull request earlier:
 the only change between them is the README's line naming the lead's second project (PR #63).
 
-**Changed after the deadline** (15 Nov 2026), in three pull requests. The contract is unchanged.
+**Changed after the deadline** (15 Nov 2026), in four pull requests. The contract is unchanged.
+
+**Pull request #67, two stale lines.** The README's disclosure still said the late commits were documentation and one
+test, written before #65 and #66; it now names all four. The test counts here and in the README now include
+`test/v2-turn.test.ts` from #66.
 
 **Pull request #66, phones.** A player reported that the movement stick did nothing on an Android phone. The stick
 was invisible until touched and started only from a touch landing on the canvas itself, so a touch on any layer drawn
@@ -55,7 +59,7 @@ Node 22.12 or newer (Vitest's minimum; checked on Node 26). No keys, no accounts
 
 ```sh
 npm ci
-npm run check          # typecheck, then Vitest (1,013 tests in 55 files), then the production build. No network
+npm run check          # typecheck, then Vitest (1,019 tests in 56 files), then the production build. No network
 npm run verify:v2      # reads the live contract over public testnet RPC, no wallet. Prints "ok" per view, then
                        # "every number matches" and "0 views failed, 0 mismatches." Exits 1 on any failure
 cd contract2 && cargo test   # 62 contract tests on the mocked chain. Needs Rust; rust-toolchain.toml pins 1.93.0
