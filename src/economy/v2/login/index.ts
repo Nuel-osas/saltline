@@ -1,5 +1,6 @@
 // v2's sign-in gate (G.login). On a build where sign-in is switched on (VITE_PRIVY_APP_ID), nobody deploys or opens
-// the dock before signing in, in the chain game and in Practice alike: the title shows a sign-on panel where Deploy was. Signing in fetches the
+// the dock of the chain game before signing in (Practice and Skirmish, the offline game, have no gate: v2/index.ts
+// starts this only on chain): the title shows a sign-on panel where Deploy was. Signing in fetches the
 // player's wallet from the dock office (session.ts) and puts it where the guest key was, so the same sign-in is the
 // same account on any device.
 //

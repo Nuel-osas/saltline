@@ -56,12 +56,12 @@ export interface Action {
 
 /**
  * The one big button, for the mode picked. Its label is always the next step, as on a shooter's lobby. Where sign-in
- * is on, that step is Sign in for every mode until the player has: nobody plays before signing in, Practice included.
+ * is on, a raid on chain needs it first, and so does the opening, which plays on the chain game's title. Practice and
+ * Skirmish never do: they are the offline game, with no account and nothing kept, so anyone can open them and play.
  */
 export function actionFor(mode: Mode, f: Facts): Action {
-  if (f.loginOn && !f.signedIn) {
-    const what = mode === "raid" ? "Raid" : mode === "practice" ? "Practice" : mode === "skirmish" ? "Skirmish" : "The opening";
-    return { label: "Sign in", caption: `${what} · sign in first`, do: "signin" };
+  if (f.loginOn && !f.signedIn && !f.offline && (mode === "raid" || mode === "film")) {
+    return { label: "Sign in", caption: `${mode === "raid" ? "Raid" : "The opening"} · sign in first`, do: "signin" };
   }
   if (mode === "film") return { label: "Watch", caption: "The opening · 48 seconds", do: "film" };
   // Practice and Skirmish are the same offline game in two yards: alone, or with fighting on. Each is its own page
@@ -90,7 +90,7 @@ export interface Step {
  * 1 sign in · 2 a practice raid · 3 the first real raid · 4 the dock.
  */
 export function startStep(f: Facts): Step | null {
-  if (f.loginOn && !f.signedIn) return { n: 1, text: "Sign in with Google to play.", button: "Sign in", do: "signin" };
+  if (f.loginOn && !f.signedIn && !f.offline) return { n: 1, text: "Sign in with Google to play.", button: "Sign in", do: "signin" };
   if (f.offline) {
     if ((f.extractions ?? 0) < 1) return { n: 2, text: "Take the rifle over the fence. Nothing here is at stake.", button: "Deploy", do: "deploy" };
     return { n: 3, text: "You got out. Now do it for real: go on chain.", button: "Go on chain", do: "online" };
