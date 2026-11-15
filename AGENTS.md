@@ -6,8 +6,17 @@ Plain instructions for checking Saltline. This file does not ask for a score.
 `git checkout dd0c647` reviews exactly that. The tag `hackathon-submission` (`f2087e4`) is one pull request earlier:
 the only change between them is the README's line naming the lead's second project (PR #63).
 
-**Changed after the deadline** (15 Nov 2026), in one pull request, with no change to the game, the contract or the
-site:
+**Changed after the deadline** (15 Nov 2026), in two pull requests. The contract is unchanged.
+
+**Pull request #65, so judges can play the hosted demo.** At the deadline the live site asked for a Google sign-in
+before every mode, Practice included, so a reviewer without a Google account, or an automated one, could not reach
+the game. Practice and Skirmish are the offline game (no account, nothing kept, nothing on chain), and they now open
+without sign-in. The chain game still asks for it. The change is one condition in `src/economy/v2/index.ts` (the
+sign-in gate starts only on chain), the matching rule in `src/economy/v2/home/model.ts` (the lobby asks for sign-in
+only for a raid on chain and the opening film), their tests in `test/v2-home.test.ts`, and the README's Play line.
+Nothing else in the game changed.
+
+**Pull request #64, documentation and one test script**, with no change to the game, the contract or the site:
 
 - This file and `CLAUDE.md`, added.
 - `README.md`: a plain first line in place of a story epigraph; the no-mint line qualified by the full-access key;
@@ -60,8 +69,8 @@ The game is a 3D shooter, so most of it can only be seen in a browser.
   invoice, the boat, a death) in 61 checks and ends with "all checks passed";
   `node scripts/smoke-coach.mjs http://127.0.0.1:5280` checks the first raid and what changes after it (49 checks).
   Each takes two to three minutes.
-- **Hosted:** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich is the same Practice, behind a Google
-  sign-in. Without `mock=1` it is the testnet game.
+- **Hosted:** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich is the same Practice, with no sign-in.
+  Without `mock=1` it is the testnet game, which asks for a Google sign-in.
 - **Video:** the 72-second demo is linked from the submission's X post.
 
 ## Check the claims on chain

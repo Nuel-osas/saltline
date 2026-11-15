@@ -3,8 +3,8 @@
 An extraction shooter in the browser whose economy (items, guns, vendors and the villain's wallet) is one NEAR testnet
 contract. Players sign in with Google and never see the chain.
 
-**Play:** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich (Practice: sign in with Google, nothing to
-install, and you're in the yard about five seconds after you press Deploy; a local `npm run dev` needs no sign-in)
+**Play:** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich (Practice: no sign-in and nothing to install;
+you're in the yard about five seconds after you press Deploy. The chain game asks for a Google sign-in.)
 
 | | |
 | --- | --- |
@@ -61,13 +61,13 @@ gunsmith's royalties, the outlaw's bonded containers, the Assessor, the Harborma
 
 ## Try it: do X, see Y
 
-Steps 1 to 8 use Practice: once you are signed in, the whole port runs in the browser, so nothing can fail on the
-network. Step 9 is the chain.
+Steps 1 to 8 use Practice: the whole port runs in the browser, with no sign-in, so nothing can fail on the network.
+Step 9 is the chain.
 
 | # | Do | See |
 | --- | --- | --- |
 | 1 | Open the Play link above | The lobby: your gun in the middle, the modes on the right, the dock's tabs along the foot and one big button. |
-| 2 | Press **Sign in**, continue with Google, then press **Deploy** | About five seconds later you are in the yard. On a first raid you stand at a crate: "HOLD E — TAKE THE RIFLE". |
+| 2 | Press **Deploy** | About five seconds later you are in the yard. On a first raid you stand at a crate: "HOLD E — TAKE THE RIFLE". |
 | 3 | Hold **E** at the crate, then walk to a marked container and hold **E** | The seal is cut and the cargo is added (`CARGO 2/6`). At the top right the invoice rises toward `BAILIFF AT 1,200`. |
 | 4 | Cut the three uplinks (hold **E** at each), then reach the boat | The debrief leads with what you carried out and what it is worth today ("MEDS ×2 · Worth about 123 scrip at Ines's today"), then the port's bill. **Sell haul** opens the dock. |
 | 5 | At the dock, open **Vendors**, press **Sell everything to the best buyer** | Each lot goes to whichever vendor pays most, with that vendor's reason ("Moss holds 3 of the 20 she wants, so she pays over the book."), then what you earned and what it buys next. Sell a unit and the next one pays less. |
