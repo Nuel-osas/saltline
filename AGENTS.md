@@ -2,11 +2,22 @@
 
 Plain instructions for checking Saltline. This file does not ask for a score.
 
-**When this file was added.** This file and `CLAUDE.md` were added on 15 Nov 2026, after submissions closed. They
-are documentation only and change no code. What was submitted is `main` at **`dd0c647`** (14 Nov 2026, 22:26 UTC),
-the last commit before the deadline; `git checkout dd0c647` reviews exactly that. The tag `hackathon-submission`
-(`f2087e4`) is one pull request earlier: the only change between them is the README's line naming the lead's second
-project (PR #63).
+**What was submitted.** `main` at **`dd0c647`** (14 Nov 2026, 22:26 UTC), the last commit before the deadline;
+`git checkout dd0c647` reviews exactly that. The tag `hackathon-submission` (`f2087e4`) is one pull request earlier:
+the only change between them is the README's line naming the lead's second project (PR #63).
+
+**Changed after the deadline** (15 Nov 2026), in one pull request, with no change to the game, the contract or the
+site:
+
+- This file and `CLAUDE.md`, added.
+- `README.md`: a plain first line in place of a story epigraph; the no-mint line qualified by the full-access key;
+  that `npm run e2e:v2` needs the faucet's key; which folders are the first economy (v1); the disclosure's diff link
+  pinned to `dd0c647`, with a table of what was in the baseline and what was built in the window.
+- `scripts/smoke-coach.mjs`: two checks still expected a returning player to take the rifle from the crate. On
+  14 Nov 11:21 UTC (`ba9715a`, before the deadline) the game changed so that once a player has reached the boat,
+  every raid starts with the rifle in hand. The browser test was not updated with it, so it failed 2 of 50 checks.
+  The checks now expect the game's behaviour, and the rifle taken at the press after a death, before the boat is
+  ever reached, stays covered by `test/v2-coach.test.ts`.
 
 ## What this is
 
@@ -23,11 +34,14 @@ Node 22.12 or newer (Vitest's minimum; checked on Node 26). No keys, no accounts
 
 ```sh
 npm ci
-npm run check          # typecheck, 1,013 Vitest tests, production build. No network. Ends with "Tests 1013 passed" and "built in"
+npm run check          # typecheck, then Vitest (1,013 tests in 55 files), then the production build. No network
 npm run verify:v2      # reads the live contract over public testnet RPC, no wallet. Prints "ok" per view, then
                        # "every number matches" and "0 views failed, 0 mismatches." Exits 1 on any failure
-cd contract2 && cargo test   # 62 contract tests. Needs Rust; near-workspaces downloads the NEAR sandbox on first run
+cd contract2 && cargo test   # 62 contract tests on the mocked chain. Needs Rust; rust-toolchain.toml pins 1.93.0
 ```
+
+On a warm machine all four take about a minute and a half, most of it compiling the contract. `npm run e2e:v2` is
+not keyless: it registers a new player through the faucet, so it needs `FAUCET_ACCOUNT_ID` and `FAUCET_PRIVATE_KEY`.
 
 The two contract tests that carry the ownership claims, in `contract2/src/tests.rs`:
 
@@ -43,8 +57,9 @@ The game is a 3D shooter, so most of it can only be seen in a browser.
   the whole economy in memory, a full locker).
 - **Headless, with Chrome** (from `CHROME_PATH` or the usual install path) and `npm run dev` running:
   `node scripts/smoke-raid.mjs http://127.0.0.1:5280` plays a whole offline raid (sign-on, seals, a wreck, the
-  invoice, the boat, a death) and ends with "all checks passed"; `node scripts/smoke-coach.mjs http://127.0.0.1:5280`
-  checks the first raid.
+  invoice, the boat, a death) in 61 checks and ends with "all checks passed";
+  `node scripts/smoke-coach.mjs http://127.0.0.1:5280` checks the first raid and what changes after it (49 checks).
+  Each takes two to three minutes.
 - **Hosted:** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich is the same Practice, behind a Google
   sign-in. Without `mock=1` it is the testnet game.
 - **Video:** the 72-second demo is linked from the submission's X post.
@@ -73,6 +88,22 @@ The contract's state can be read the same way with `query` / `call_function`: fo
 | Social login, no wallet | `server/auth.ts` (checks the Google sign-in, derives the account), `src/economy/v2/login/` |
 | A week of trading in a minute | Practice → Ledger → Fast-forward a week; `src/economy/v2/dock/week.ts` |
 
+## Tie the live contract to this source
+
+The contract was built with `cargo near build non-reproducible-wasm` (cargo-near 0.22.0, Rust 1.93.0 from
+`contract2/rust-toolchain.toml`). Its source has not changed since `5146777` (13 Nov 2026). Rebuilt from that source
+on the machine that deployed it, the wasm is 510,519 bytes with sha256
+`d94ef73cf601d7b85b46402037136d2e5d52e6f92d653f13d25094a8d410f3a1`, which is base58
+`FdHJsbnLUq2wrrGZdqaUuDoBMSkoF4X8RLQzWd3vHEnC`, the `code_hash` the chain reports for `v2.saltline.testnet`:
+
+```sh
+curl -s https://rpc.testnet.near.org -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"query",
+  "params":{"request_type":"view_account","finality":"final","account_id":"v2.saltline.testnet"}}'   # result.code_hash
+cd contract2 && cargo near build non-reproducible-wasm && shasum -a 256 target/near/saltline2.wasm
+```
+
+It is a non-reproducible build, so on another machine or toolchain the bytes, and the hash, can differ.
+
 ## What was built in the window
 
 - `pre-hackathon` (`cccde37`, imported 10 Nov 2026) is the shooter as it existed before: three.js, everything
@@ -81,7 +112,11 @@ The contract's state can be read the same way with `query` / `call_function`: fo
   removed, as extension points marked `// ext:` and new story strings marked `story:`. Everything else in
   `git diff --shortstat pre-hackathon dd0c647` (325 files) is new: both contracts, the economy around the shooter,
   the vendors, the dock office, the front page, the docs and the tests.
-- `?noeconomy=1` on the play page runs the baseline game as it was.
+- `?noeconomy=1` on the play page runs the baseline game as it was. The README's "Hackathon disclosure" has a table of
+  what was in the baseline and what was built in the window.
+- The repo also holds the first economy built for this entry (v1, replaced, still live on `saltline.testnet`):
+  `contract/`, `agents/brokers.ts`, `agents/characters.ts`, and `docs/ECONOMY.md`, `CAMPAIGN.md`, `CONTRACT_API.md`,
+  `DATA.md`. The entry is v2: `contract2/`, `src/economy/v2/`, `agents/v2/`. `docs/V1.md` says what v1 was.
 - The work was written with Claude Code, in pull requests that record what each one did.
 
 ## What is and is not claimed

@@ -1,7 +1,7 @@
 # Saltline
 
-> The port's machine kept the only ledger. Then it impounded the town. Go over the fence, take what you can carry,
-> and keep your receipts.
+An extraction shooter in the browser whose economy (items, guns, vendors and the villain's wallet) is one NEAR testnet
+contract. Players sign in with Google and never see the chain.
 
 **Play:** https://saltline-lac.vercel.app/play/?game=v2&mock=1&stash=rich (Practice: sign in with Google, nothing to
 install, and you're in the yard about five seconds after you press Deploy; a local `npm run dev` needs no sign-in)
@@ -96,7 +96,7 @@ From the track's starter file,
 | Flood the market and the price falls | A vendor's bid falls unit by unit as its stock rises; the export desk pays less for each unit sold that day. |
 | A merchant that goes broke stops buying | A vendor that can't cover a purchase buys nothing until it sells something. |
 | Social login; no seed phrase, wallet popup or gas prompt | Sign in with Google (through Privy). The server checks the sign-in and derives the player's NEAR account from it ([`server/auth.ts`](server/auth.ts)), and the dock office pays for the account's gas. |
-| An economy that moves without a patch | Prices follow stock; the Harbormaster's strength follows what players pay it and halves every 12 hours; no account, the owner's included, can create scrip, parts or guns outside the contract's rules (a contract test checks every public method). |
+| An economy that moves without a patch | Prices follow stock; the Harbormaster's strength follows what players pay it and halves every 12 hours; no account, the owner's included, can create scrip, parts or guns outside the contract's rules (a contract test checks every public method). That holds for the deployed code; on testnet the team could still replace the code with the contract account's full-access key (see [Limits](#limits)). |
 
 ## NFTs That Do Something: the guns
 
@@ -156,12 +156,16 @@ npm run verify:v2           # reads the live contract with no wallet and checks 
 cd contract2 && cargo test  # 62 contract tests, including an access table over every public method and a no-mint test
 ```
 
+`cargo test` needs Rust; `contract2/rust-toolchain.toml` pins 1.93.0, which rustup installs on first use. The live
+contract's code hash matches a build of this source: [`AGENTS.md`](AGENTS.md) has the command.
+
 In a browser (Chrome from `CHROME_PATH` or the usual install path), with `npm run dev` running:
 
 ```sh
 node scripts/smoke-raid.mjs http://127.0.0.1:5280     # a whole offline raid: sign-on, seals, wreck, the invoice, the boat, death
 node scripts/smoke-coach.mjs http://127.0.0.1:5280    # the first raid: the crate, the rifle, the checklist
-npm run e2e:v2                                        # a new player on testnet, end to end; prints each transaction hash
+npm run e2e:v2                                        # a new player on testnet, end to end; prints each transaction hash.
+                                                      # Needs the faucet's key (FAUCET_ACCOUNT_ID, FAUCET_PRIVATE_KEY in .env)
 ```
 
 ## On chain (NEAR testnet)
@@ -197,6 +201,10 @@ server/, api/          the dock office: the faucet, sign-in and the studio's cou
 docs/                  PLAYING.md (how to play), GAME.md (the design), CONTRACT_V2.md (the wire format), PROOF.md, STORY.md, LIMITS.md, V1.md
 ```
 
+The first economy (v1, replaced, still live on `saltline.testnet`) is also in the repo: `contract/`,
+`agents/brokers.ts` and `agents/characters.ts`, and `docs/ECONOMY.md`, `CAMPAIGN.md`, `CONTRACT_API.md` and `DATA.md`. Everything above is v2, the game
+this entry is about; [`docs/V1.md`](docs/V1.md) says what v1 was.
+
 ## Run it locally
 
 ```sh
@@ -231,12 +239,18 @@ The ones that matter to a player; [`docs/LIMITS.md`](docs/LIMITS.md) has all of 
   [`pre-hackathon`](https://github.com/Nuel-osas/saltline/tree/pre-hackathon) (`cccde37`). Its files credit AI
   agents (e.g. "owned by the Game agent" in `src/ui.css`).
 - **The hackathon work.** Everything in
-  [`pre-hackathon...main`](https://github.com/Nuel-osas/saltline/compare/pre-hackathon...main) was built from 11 Nov
-  2026: both contracts, the game around the shooter, the agents, the dock office, the front page, the docs and the
-  tests, each piece as its own pull request. The baseline's own code changed only in `src/game.js`: extension points
-  marked `// ext:` and the new premise and radio strings marked `story:`. With `?noeconomy=1` the baseline plays as
-  before. The first economy built for this entry (v1) is still live; [`docs/V1.md`](docs/V1.md) says what it was and
-  why it was replaced.
+  [`pre-hackathon...dd0c647`](https://github.com/Nuel-osas/saltline/compare/pre-hackathon...dd0c647) was built from
+  11 Nov 2026: both contracts, the game around the shooter, the agents, the dock office, the front page, the docs and
+  the tests, each piece as its own pull request. `dd0c647` is the last commit before the deadline; the tag
+  `hackathon-submission` (`f2087e4`) is one pull request earlier (the line naming the other project, below). Commits
+  after the deadline are documentation and one out-of-date test, listed in [`AGENTS.md`](AGENTS.md). The baseline's
+  own code changed only in `src/game.js`: extension points marked `// ext:` and the new premise and radio strings
+  marked `story:`. With `?noeconomy=1` the baseline plays as before. The first economy built for this entry (v1) is
+  still live; [`docs/V1.md`](docs/V1.md) says what it was and why it was replaced.
+
+  | Already in the baseline | Built in the window |
+  | --- | --- |
+  | The shooter: the container yard, movement and gunplay, the hounds and gulls, cutting three uplinks, the boat, and every model and sound generated in code | Everything that carries value: the invoice and what it summons (second notice, the Bailiff, the Assessor); loot in your pack and its weight; guns as owned NFTs with rolled stats, levels and records; wrecks other players can carry out; the impound; the dock (vendors, armoury, market, ledger, fast-forward); the Harbormaster's wallet; both contracts; the vendor agents; sign-in; the lobby, the first-raid coach, the threat markers and Skirmish; the front page, the docs and the tests |
 - **AI-generated code.** The hackathon work was written with Claude Code (Anthropic), several agents working in
   parallel branches under review. The pull requests record what each one did.
 - **A reference.** The lobby's arrangement was modelled on another browser game's lobby, at the owner's request. No
