@@ -284,19 +284,16 @@ try {
   await page.waitForFunction(() => window.__ev.some((e) => e.name === "raid:extracted"), null, { timeout: 150000 });
   await sample(page);
 
-  // ---- a second raid: the crate, no checklist ----
+  // ---- a second raid: they have reached the boat, so the rifle is in their hands from the start, with no checklist ----
   check((await deploy(page)) === "signed", "a second raid is signed");
   const s2 = await coach(page);
   const h3 = await hands(page);
-  check(!s2.coached && s2.step === null && h3.unarmed && !h3.visible && !s2.instant, "the second raid starts at the crate with no checklist", JSON.stringify({ coached: s2.coached, unarmed: h3.unarmed, instant: s2.instant }));
-  await faceCrate(page);
-  await page.evaluate(() => (window.__hold = true));
-  await page.waitForFunction(() => window.__G.coach.state.armed, null, { timeout: 4000, polling: 16 }).catch(() => {});
-  await page.evaluate(() => (window.__hold = false));
+  check(!s2.coached && s2.step === null && h3.armed && !h3.unarmed && !s2.instant, "the second raid starts with the rifle in hand and no checklist", JSON.stringify({ coached: s2.coached, armed: h3.armed, unarmed: h3.unarmed, instant: s2.instant }));
   await page.waitForTimeout(1500);
-  check((await hands(page)).armed && !(await panel(page)).on && (await page.evaluate(() => document.querySelector('.menu [data-s="complete"] .co-dock') === null)), "the rifle is taken the same way, and no line comes up");
+  check(!(await panel(page)).on && (await page.evaluate(() => document.querySelector('.menu [data-s="complete"] .co-dock') === null)), "no line comes up");
   const second = Date.now();
-  // ---- a death: its card's line, once; the retry takes the rifle at the press ----
+  // ---- a death: its card's line, once; the retry starts armed too. Taking the rifle at the press after a death, before
+  // the boat has ever been reached, is covered by test/v2-coach.test.ts ----
   await page.evaluate(() => ((window.__G.player.invulnerable = false), window.__G.player.damage(9999)));
   await page.waitForFunction(() => !!document.querySelector('.menu [data-s="dead"] .co-card'), null, { timeout: 5000 }).catch(() => {});
   const card = await page.evaluate(() => document.querySelector('.menu [data-s="dead"] .co-card')?.textContent ?? "");
@@ -308,15 +305,7 @@ try {
   await page.waitForTimeout(Math.max(0, 32000 - (Date.now() - second)));
   await deploy(page);
   const s3 = await coach(page);
-  check(s3.instant && !s3.armed && (await page.evaluate(() => document.querySelector('.menu [data-s="dead"] .co-card') === null)), "the retry starts at the crate again, and the card's line is gone", JSON.stringify({ instant: s3.instant, armed: s3.armed }));
-  await faceCrate(page);
-  await page.waitForFunction(() => /take the rifle/i.test(window.__prompt()), null, { timeout: 4000 }).catch(() => {});
-  const t1 = Date.now();
-  await page.evaluate(() => (window.__hold = true));
-  await page.waitForFunction(() => window.__G.coach.state.armed, null, { timeout: 4000, polling: 16 }).catch(() => {});
-  const tap = Date.now() - t1;
-  await page.evaluate(() => (window.__hold = false));
-  check(tap < 250, "after a death the rifle is taken at the press", `${tap} ms`);
+  check(s3.armed && (await page.evaluate(() => document.querySelector('.menu [data-s="dead"] .co-card') === null)), "the retry starts with the rifle in hand, and the card's line is gone", JSON.stringify({ instant: s3.instant, armed: s3.armed }));
   await page.evaluate(() => ((window.__G.player.invulnerable = false), window.__G.player.damage(9999)));
   await page.waitForTimeout(600);
   check(await page.evaluate(() => document.querySelector('.menu [data-s="dead"] .co-card') === null), "a second death's card has no line");
