@@ -77,8 +77,9 @@ Step 9 is the chain.
 | 9 | Open https://saltline-lac.vercel.app/play/?game=v2, sign in with Google, press **Deploy**, type a callsign | A dock pass: a NEAR testnet account made from your sign-in, so it follows you to any device, with no popup or seed phrase. The raid, the haul, every sale and every gun after that are transactions on `v2.saltline.testnet`. |
 
 Controls: WASD and the mouse (click to capture it), left mouse to fire, right mouse to aim, R to reload, E to use,
-G for a breaker charge, F for the rifle butt, Shift to sprint, C to crouch, Esc to pause. Touch screens get
-on-screen buttons. **Skirmish** in the lobby is the practice yard with other players in it: armed, firing, and able
+G for a breaker charge, F for the rifle butt, Shift to sprint, C to crouch, Esc to pause. On a phone, hold it
+sideways: the stick rests in the bottom-left corner (touch anywhere on the left half to move), drag on the right half
+to look, and the rest are on-screen buttons. **Skirmish** in the lobby is the practice yard with other players in it: armed, firing, and able
 to drop you. Add `&room=yourname` to its address for a private yard with friends.
 
 ## What the games track asks for, and where it is
