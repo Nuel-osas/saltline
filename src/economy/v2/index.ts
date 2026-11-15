@@ -19,6 +19,7 @@ import { MOCK2_WARMUP_SECONDS, type MockChain2, createMockChain2, createMockWall
 import { startRaid } from "./raid";
 import { squadOn, startSquad } from "./squad";
 import { startSight } from "./sight";
+import { startTurn } from "./turn";
 import { startTicksV2 } from "./tick";
 import type { V2 } from "./types";
 import { type GuestWallet2, createGuestWallet2 } from "./wallet";
@@ -85,6 +86,7 @@ export function startV2(G: Game): void {
   guard("dock", () => Promise.resolve(mountDock(G)).then((d) => void (dock = d ?? null))); // the hub: loadout, armoury, market, vendors, the ledger
   guard("coach", () => startCoach(G)); // the rifle in its crate, the first raid's checklist, the once-ever moments (G.coach)
   guard("sight", () => startSight(G)); // the machines' signal lamps and threat markers, and the fair first raid (G.sight)
+  guard("turn", () => startTurn(G)); // on a phone held upright in the yard, the card that asks for landscape (G.turn)
 
   // Last, so its lock wraps the raid's own start: on chain, nobody deploys or opens the dock before signing on (G.login).
   if (privyAppId && !mock) guard("login", () => void (login = startLogin(G, { appId: privyAppId, sheet: true, ...(guest ? { sessionUrl: sessionUrlFor(cfg.faucetUrl), wallet: guest } : {}) })));
