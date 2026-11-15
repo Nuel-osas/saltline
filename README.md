@@ -152,7 +152,7 @@ of a wreck doesn't count an extraction on its record.
 
 ```sh
 npm ci
-npm run check               # typecheck, 1,013 tests (Vitest), production build
+npm run check               # typecheck, 1,019 tests (Vitest), production build
 npm run verify:v2           # reads the live contract with no wallet and checks it against the game's numbers
 cd contract2 && cargo test  # 62 contract tests, including an access table over every public method and a no-mint test
 ```
@@ -244,9 +244,10 @@ The ones that matter to a player; [`docs/LIMITS.md`](docs/LIMITS.md) has all of 
   11 Nov 2026: both contracts, the game around the shooter, the agents, the dock office, the front page, the docs and
   the tests, each piece as its own pull request. `dd0c647` is the last commit before the deadline; the tag
   `hackathon-submission` (`f2087e4`) is one pull request earlier (the line naming the other project, below). Commits
-  after the deadline are documentation and one out-of-date test, listed in [`AGENTS.md`](AGENTS.md). The baseline's
-  own code changed only in `src/game.js`: extension points marked `// ext:` and the new premise and radio strings
-  marked `story:`. With `?noeconomy=1` the baseline plays as before. The first economy built for this entry (v1) is
+  after the deadline (15 Nov) are listed in [`AGENTS.md`](AGENTS.md): documentation and one out-of-date test (#64),
+  Practice and Skirmish opening without sign-in (#65), the phone controls (#66) and this line (#67). The contract
+  did not change. Up to `dd0c647` the baseline's own code changed only in `src/game.js`: extension points marked
+  `// ext:` and the new premise and radio strings marked `story:`. With `?noeconomy=1` the baseline plays as before. The first economy built for this entry (v1) is
   still live; [`docs/V1.md`](docs/V1.md) says what it was and why it was replaced.
 
   | Already in the baseline | Built in the window |
