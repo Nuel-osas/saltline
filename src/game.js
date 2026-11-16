@@ -1,3 +1,4 @@
+import { LEVEL, runLayout } from "./level/layout.ts"; // ext: the yard, the gate and their play data as data (src/level/yard.json)
 (() => {
   var _M = Object.defineProperty;
   var br = (i, e) => {
@@ -41508,357 +41509,35 @@ float metalnessFactor = metalness * slORM.b;
     ts = uR / 2,
     R1 = 0.535,
     mt = (i, e, t) => new W(i, e, t);
-  function hR(i) {
-    let e = i.place,
-      t = i.stack;
-    (t(-19.45, -5.12, [
-      [20, "green"],
-      [20, "grey"],
-      [20, "orange"],
-    ]),
-      t(-13.3, -5.12, [[20, "white", { reefer: !0, flip: !0 }]]),
-      t(3.7, -5.12, [
-        [20, "blue", { doors: 0.8, flip: !0 }],
-        [20, "white"],
-      ]),
-      t(13.53, -5.12, [
-        [20, "teal"],
-        [20, "grey"],
-      ]),
-      t(-19.45, 2.08, [[20, "blue"]]),
-      t(-13.35, 2.08, [[20, "red"]]),
-      t(0.8, 2.08, [
-        [40, "orange"],
-        [40, "teal"],
-        [20, "blue", { dx: 3 }],
-      ]),
-      t(12.3, 2.08, [
-        [20, "red"],
-        [20, "yellow"],
-      ]),
-      t(-21.1, 9.92, [[20, "yellow"]], 0, 0.3),
-      t(
-        -13.6,
-        9.92,
-        [
-          [20, "green"],
-          [20, "blue"],
-          [20, "orange"],
-        ],
-        0,
-        0.3,
-      ),
-      t(
-        -21.6,
-        12.42,
-        [
-          [20, "red"],
-          [20, "white"],
-          [20, "teal"],
-        ],
-        0,
-        0.3,
-      ),
-      t(-15.4, 12.42, [[20, "grey", { doors: 0.6 }]], 0, 0.3),
-      t(4.43, 12.42, [[20, "blue"]], 0, 0),
-      t(13.53, 12.42, [[20, "green"]], 0, 0),
-      i.stairs(-0.1, 12.42, 0, 0, { seed: 9 }),
-      i.catwalk(8.98, 12.42, 0, 2.54, { seed: 10 }));
-    for (let s of [7.6, 10.36]) for (let o of [11.86, 12.98]) i.rod("steel_galv", [s, 0, o], [s, 2.5, o], 0.035);
-    (e("sandbags", 15.95, 12.42, ts, { seed: 61 }, 2.59),
-      e("crate_wood", 14.3, 11.75, 0.1, { seed: 62 }, 2.59),
-      e("sandbags", 2.3, 11.75, 0, { seed: 63 }, 2.59),
-      t(-16.4, 20.12, [
-        [40, "grey"],
-        [40, "green"],
-      ]),
-      t(-2.25, 20.12, [[20, "red"]]),
-      t(3.85, 20.12, [
-        [20, "white"],
-        [20, "blue"],
-      ]),
-      t(13.53, 20.12, [
-        [20, "orange"],
-        [20, "teal"],
-        [20, "red"],
-      ]),
-      t(-16.4, 22.62, [
-        ["hc", "teal"],
-        [40, "yellow"],
-        [40, "blue"],
-      ]),
-      t(0.8, 22.62, [
-        [40, "green"],
-        ["hc", "orange"],
-      ]),
-      t(13.53, 22.62, [[20, "grey", { doors: 0.4 }]]),
-      t(
-        -22.6,
-        -19.2,
-        [
-          [40, "red"],
-          [40, "white"],
-        ],
-        ts,
-      ),
-      t(-30.2, -18.4, [[20, "yellow", { doors: 0.5 }]], 0.35, 0),
-      t(-31.2, 24.7, [
-        [40, "teal"],
-        [40, "orange"],
-      ]));
-    for (let [s, o] of [
-      [-23.4, 0.5],
-      [-23.4, 21.4],
-      [17, -8.7],
-      [17, 18.6],
-      [-20.6, -11.6],
-    ])
-      e("light_mast", s, o, 0, { seed: Math.round(s * 3 + o) });
-    let n = (s, o, r, a = 0.018) => {
-      let l = [];
-      for (let c = 0; c <= 8; c++) {
-        let u = c / 8;
-        l.push([s[0] + (o[0] - s[0]) * u, s[1] + (o[1] - s[1]) * u - r * 4 * u * (1 - u), s[2] + (o[2] - s[2]) * u]);
-      }
-      i.tube("rubber", l, a, { radial: 5, tension: 0.5 });
+  // ext: the level kit a section of src/level/yard.json is replayed through (src/level/layout.ts): ob's builders and the composite props above
+  function lk(i) {
+    return {
+      place: i.place,
+      stack: i.stack,
+      stairs: i.stairs,
+      catwalk: i.catwalk,
+      col: i.col,
+      box: i.box,
+      slab: i.slab,
+      cyl: i.cyl,
+      rod: i.rod,
+      tube: i.tube,
+      decal: i.decal,
+      label: i.label,
+      stillage: (...e) => Ka(i, ...e),
+      scrapBin: (...e) => Qa(i, ...e),
+      rebar: (...e) => Ef(i, ...e),
+      chock: (...e) => e0(i, ...e),
+      laneSign: (...e) => Sf(i, ...e),
+      floorCable: (...e) => Lr(i, ...e),
+      junctionBox: (...e) => lv(i, ...e),
     };
-    (n([-23.4, 12.4, 0.5], [-20.6, 12.4, -11.6], 1.3),
-      n([-20.6, 11.8, -11.6], [-16.2, 7.25, -11.4], 0.9),
-      n([-23.4, 12, 0.5], [-27.6, 12.2, -0.9], 0.5),
-      n([17, 12.4, -8.7], [12.3, 7.3, -11.3], 1),
-      Ef(i, -20.9, 8.3, 0.02),
-      e0(i, -18.6, 3.75, 1.7),
-      e0(i, 0.4, 13.3, 0.3),
-      e("barrel", -19.6, 3.85, 0, { seed: 1, color: "blue" }),
-      e("barrel", -18.9, 3.95, 0.7, { seed: 2, color: "blue" }),
-      e("pallet_stack", -17.4, 4, 0.08, { seed: 3 }),
-      e("crate_stack", -14.3, 8.05, 0.04, { seed: 4 }),
-      e("ibc_tote", -12.95, 7.95, -0.05, { seed: 5 }));
-    {
-      let a = Math.cos(-0.22),
-        l = -Math.sin(-0.22);
-      e("forklift", -8.6, 4.5, -0.22, { seed: 6, forksUp: 0.3 });
-      let c = -8.6 + a * 1.42,
-        u = 4.5 + l * 1.42;
-      (e("pallet", c, u, -0.22, { seed: 7 }, R1, { noCol: !0 }),
-        e("crate_wood", c, u, -0.22 + 0.05, { seed: 8 }, R1 + 0.144, { noCol: !0 }),
-        i.col(c - 0.62, R1 - 0.1, u - 0.62, c + 0.62, R1 + 1.15, u + 0.62, "wood"),
-        e0(i, -8.6 - 1, 4.5 + 0.78, 0.2),
-        e0(i, -11.9, 3.6, 2.4));
-    }
-    (e("jersey_barrier", -2.9, 5.3, 0.12, { seed: 11 }),
-      e("jersey_barrier", 5.6, 5, -0.1, { seed: 12 }),
-      e("sandbags", -1.7, 9.7, 0.5, { seed: 13 }),
-      e("ibc_tote", 5.9, 8.9, 0.1, { seed: 14 }),
-      e("ibc_tote", 5.95, 10.05, -0.05, { seed: 15 }),
-      e("barrel", 4.9, 9.7, 0, { seed: 16, color: "red" }),
-      e("crate_stack", -3.9, 10.5, 0.1, { seed: 17 }),
-      e("crate_wood", -3.8, 9.35, -0.2, { seed: 18 }),
-      e("pallet_stack", -4.4, 11.8, 0.02, { seed: 19 }),
-      e("cable_reel", 4.2, 10.5, 0.3, { seed: 20 }),
-      e("tarp_cargo", 12.9, 10, 0.04, { seed: 21 }),
-      e("jersey_barrier", 11.6, 3.95, 0.03, { seed: 81 }),
-      e("ibc_tote", 15.2, 10.2, 0.1, { seed: 82 }));
-    for (let [s, o] of [
-      [0.2, 6.3],
-      [2.9, 6.4],
-      [2.9, 8.8],
-      [0.1, 8.7],
-    ])
-      e("traffic_cone", s, o, 0, { seed: Math.round(s * 9 + o * 5) });
-    (Qa(i, -9.55, 9.3, 0.04),
-      Ef(i, -7.6, 11.9, ts + 0.06),
-      Qa(i, 9.9, 12.9, ts, "paint_blue"),
-      e("sign_post", -4.8, 3.72, ts, { seed: 22, sign: "hazard_voltage" }),
-      lv(i, 0.9, 3.62, 0),
-      Lr(
-        i,
-        [
-          [0.9, 3.9],
-          [1.2, 5.2],
-          [0.8, 6.2],
-          [1.5, 7.1],
-        ],
-        0.03,
-      ),
-      e("tarp_cargo", -13.5, -3.1, 0.05, { seed: 23 }),
-      e("pallet_stack", -20.6, -0.1, 0.2, { seed: 24 }),
-      e("tire_stack", -9.6, 0.2, 0, { seed: 25 }),
-      e("barrel", 4.5, 0.35, 0, { seed: 26, color: "yellow" }),
-      e("barrel", 5.2, 0.3, 0.4, { seed: 27 }),
-      e("jersey_barrier", 12.2, 0.4, 0.03, { seed: 28 }),
-      e("crate_wood", 11.2, -3.3, 0.3, { seed: 29 }),
-      e("cardboard_boxes", -2, 0.3, 0.2, { seed: 30 }),
-      Ka(i, -4.2, -3.2, 0.03, "paint_orange", 3),
-      e("jersey_barrier", -0.9, -7.5, 0.1, { seed: 31 }),
-      e("sandbags", -6.7, -7.8, -0.1, { seed: 32 }),
-      e("dumpster", -12.3, -7.05, 0, { seed: 33 }),
-      e("gas_cylinders", 9.6, -10.45, 0, { seed: 34 }),
-      e("pallet_stack", 1.2, -9.9, 0.1, { seed: 35 }),
-      e("barrel", 2.2, -10.3, 0, { seed: 36, color: "green" }),
-      e("cable_reel", -18.2, -8, 0.2, { seed: 37 }),
-      e("traffic_cone", -6.5, -9.9, 0, { seed: 38 }),
-      e("traffic_cone", -0.5, -9.9, 0, { seed: 39 }),
-      Lr(
-        i,
-        [
-          [4.6, -10.9, 0.5],
-          [4.7, -10.6, 0.05],
-          [4.2, -9.2],
-          [1, -8.4],
-          [-2.6, -9.1],
-          [-4.6, -6.4],
-          [-5.9, -5.9],
-        ],
-        0.024,
-      ),
-      e("pipe_stack", -16, 14.4, 0, { seed: 41 }),
-      e("crate_stack", -10.95, 18.25, 0.06, { seed: 42 }),
-      e("barrel", -3, 18.35, 0, { seed: 43, color: "blue" }),
-      e("dumpster", 4.2, 14.55, 0.02, { seed: 44 }),
-      e("tire_stack", 10.95, 18.3, 0, { seed: 45 }),
-      e("ibc_tote", 12, 18.25, 0, { seed: 46 }),
-      e("pallet_stack", -12.3, 18.2, 0.1, { seed: 47 }),
-      e("tarp_cargo", -20.5, 18.05, 0.03, { seed: 48 }),
-      e("jersey_barrier", 0.6, 15.5, 0.12, { seed: 49 }),
-      e("tire_stack", -8, 26.9, 0, { seed: 51 }),
-      e("pallet_stack", 8.7, 27, 0.3, { seed: 52 }),
-      e("crate_wood", -2, 27, 0.2, { seed: 53 }),
-      e("barrel", 11.2, 27.1, 0, { seed: 54 }),
-      e("cardboard_boxes", -21, 26.9, 0.4, { seed: 55 }),
-      Qa(i, 16, 26.9, 0.1),
-      e("pipe_stack", -30.5, -27, 0.03, { seed: 56 }),
-      e("pipe_stack", -30.2, -25.4, -0.02, { seed: 57 }),
-      e("dumpster", -17, -14, ts, { seed: 58 }),
-      e("tarp_cargo", -27.5, -11.6, 0.3, { seed: 59 }),
-      e("tarp_cargo", -29.9, -11, -0.2, { seed: 60 }),
-      e("cable_reel", -34.6, -22.5, 1, { seed: 64 }),
-      e("tire_stack", -25.4, -26.9, 0, { seed: 65 }),
-      e("gas_cylinders", -16.9, -20.4, ts, { seed: 66 }),
-      e("crate_stack", -34.8, -13.5, 0.2, { seed: 67 }),
-      e("barrel", -33.6, -13, 0, { seed: 68 }),
-      Ka(i, -36.6, -26, ts, "paint_blue", 4),
-      e("generator", -34.2, 14.2, 0.15, { seed: 71 }),
-      e("floodlight_stand", -31.4, 12.7, 0.55, { seed: 72 }),
-      Lr(
-        i,
-        [
-          [-33.2, 14],
-          [-32.4, 13.2],
-          [-31.6, 12.9],
-        ],
-        0.02,
-      ),
-      e("tire_stack", -36.6, 17.2, 0, { seed: 73 }),
-      e("tire_stack", -36.5, 18.3, 0.6, { seed: 74 }),
-      e("dumpster", -36.4, 21, ts, { seed: 75 }),
-      e("pallet_stack", -27.8, 16.6, 0.4, { seed: 76 }),
-      e("jerry_can", -33, 15.2, 0.4, { seed: 77 }),
-      e("jerry_can", -33.3, 15.35, 1.9, { seed: 78 }),
-      e("crate_wood", -28.6, 20.6, 0.1, { seed: 79 }),
-      e("ibc_tote", -26.6, 21.2, 0, { seed: 80 }),
-      Sf(i, -22.9, -3.62, "LANE 1", "x-"),
-      Sf(i, -22.95, 3.62, "LANE 2", "x-"),
-      Sf(i, -25, 14, "LANE 3", "x-"),
-      Sf(i, 16.9, 9.5, "LANE 2", "x+"),
-      i.label("BERTH 4 WORKSHOP", 0.55, 4.2, 4.3, no.Z1 + 0.064, "z+", {
-        color: "white",
-        font: "stencil",
-        distress: 0.45,
-      }),
-      i.decal("berth4", 3.2, -12, 3.4, no.Z1 + 0.064, "z+"),
-      i.decal("rust_run", 1, 9, 3.2, no.Z1 + 0.064, "z+"),
-      i.decal("grime_streak", 1.2, -14, 3.9, no.Z1 + 0.064, "z+"));
+  }
+  function hR(i) {
+    runLayout(LEVEL.sections.yard, lk(i), "yard"); // ext: the container yard, its props and the workshop wall
   }
   function fR(i) {
-    let e = i.place,
-      t = -38,
-      n = 30,
-      s = -30,
-      o = 28,
-      r = 2,
-      a = 8;
-    function l(c, u, h, f, p) {
-      let d = Math.hypot(h - c, f - u),
-        v = Math.max(1, Math.round(d / 3.35)),
-        g = d / (v * 3),
-        x = Math.abs(h - c) > Math.abs(f - u);
-      for (let y = 0; y < v; y++) {
-        let b = (y + 0.5) / v,
-          m = e(
-            "fence_panel",
-            c + (h - c) * b,
-            u + (f - u) * b,
-            x ? 0 : ts,
-            { seed: p + y, posts: y === v - 1 ? "both" : "left" },
-            0,
-            { noCol: !0 },
-          );
-        m.scale.x = g;
-      }
-      (i.col(
-        Math.min(c, h) - 0.05,
-        0,
-        Math.min(u, f) - 0.05,
-        Math.max(c, h) + 0.05,
-        2.4,
-        Math.max(u, f) + 0.05,
-        "metal",
-      ),
-        i.col(Math.min(c, h) - 0.3, 0, Math.min(u, f) - 0.3, Math.max(c, h) + 0.3, 7, Math.max(u, f) + 0.3, "metal", {
-          playerOnly: !0,
-        }));
-    }
-    (l(t, s, n, s, 100), l(t, o, n, o, 200), l(t, s, t, r, 300), l(t, a, t, o, 400));
-    for (let c of [r - 0.1, a + 0.1])
-      (i.box("steel_dark", 0.22, 3.4, 0.22, t, 1.7, c, { bevel: 0.02 }),
-        i.box("hazard_stripes", 0.26, 1.2, 0.26, t, 0.6, c, { bevel: 0.02 }),
-        i.col(t - 0.13, 0, c - 0.13, t + 0.13, 3.4, c + 0.13, "metal"));
-    {
-      let c = a + 3.3,
-        u = t + 0.28;
-      i.box("chainlink", 0.012, 2.1, 6, u, 1.25, c);
-      for (let h of [c - 3, c, c + 3]) i.box("steel_galv", 0.06, 2.2, 0.06, u, 1.25, h);
-      for (let h of [0.18, 2.32, 1.25]) i.box("steel_galv", 0.06, 0.06, 6.06, u, h, c);
-      (i.rod("steel_galv", [u, 0.2, c - 3], [u, 2.3, c], 0.018),
-        i.rod("steel_galv", [u, 0.2, c + 3], [u, 2.3, c], 0.018),
-        i.slab("steel_dark", u - 0.05, 0, r - 0.3, u + 0.05, 0.03, c + 3.2, { cast: !1 }));
-      for (let h of [c - 2.4, c + 2.4]) i.cyl("rubber", 0.09, 0.05, u, 0.1, h, { axis: "x", seg: 10 });
-    }
-    (i.col(t - 0.4, 0, r, t - 0.1, 7, a, "metal", { playerOnly: !0 }),
-      e("guard_booth", -35.2, 0.35, 0, { seed: 1 }),
-      e("gate_arm", -36.3, 5, ts, { seed: 2 }));
-    for (let [c, u] of [
-      [-37, 1.75],
-      [-34.4, 2.3],
-      [-37, 8.3],
-      [-35.6, 8.9],
-      [-34.4, 9.9],
-      [-33.5, -1.1],
-    ])
-      e("bollard_post", c, u, 0, { seed: Math.round(c * 11 + u * 7) });
-    (e("jersey_barrier", -34.7, 3.75, ts + 0.08, { seed: 3 }),
-      e("jersey_barrier", -33.3, 8.3, ts - 0.06, { seed: 4 }),
-      e("jersey_barrier", -30.6, 10.4, 0.03, { seed: 5 }),
-      e("jersey_barrier", -27.3, 1.45, 0.05, { seed: 6 }),
-      e("jersey_barrier", -32.2, 1.45, -0.04, { seed: 7 }),
-      e("sign_post", -33.2, 9.6, ts, { seed: 8, sign: "no_entry" }),
-      e("sign_post", -25.3, 1.1, ts, { seed: 9, sign: "berth4" }),
-      e("sign_post", -36.6, -1.6, ts, { seed: 10, sign: "hazard_general" }));
-    for (let [c, u] of [
-      [-34.6, 5.6],
-      [-28.3, 2],
-      [-33.2, 6.5],
-      [-26.6, 9.8],
-      [-31.8, 9.9],
-    ])
-      e("traffic_cone", c, u, 0, { seed: Math.round(c * 5 + u * 3) });
-    (e("light_mast", -27.6, -0.9, 0, { seed: 11 }),
-      e("light_mast", -36.3, 12.4, 0, { seed: 12 }),
-      e("barrel", -33.9, 2, 0, { seed: 13, color: "yellow" }),
-      e("pallet_stack", -36.4, 10.3, 0.2, { seed: 14 }),
-      i.decal("no_entry", 0.7, t + 0.34, 1.5, a + 3.3, "x+"),
-      i.decal("arrow", 2.2, -30.5, 0.006, 6, "y+", 0));
+    runLayout(LEVEL.sections.gate, lk(i), "gate"); // ext: the gate, the perimeter fence and the gatehouse props
   }
   async function C1(i) {
     let e = new wt();
@@ -41945,7 +41624,8 @@ float metalnessFactor = metalness * slORM.b;
         p += (H.index ? H.index.count : H.attributes.position.count) / 3;
       }
     });
-    let d = { pos: mt(-32, 0, 6), yaw: -ts },
+    let P = LEVEL.play, // ext: start, spawns, zones, camera path and cover from src/level/yard.json
+      d = { pos: mt(...P.playerStart.pos), yaw: P.playerStart.yaw },
       v = [
         { id: "relay_a", label: "Relay A \u2014 Yard", zone: "yard", pos: mt(1.5, 0, 7.5), object: o },
         {
@@ -41963,130 +41643,11 @@ float metalnessFactor = metalness * slORM.b;
           object: a,
         },
       ],
-      g = (z, H, O) => ({ pos: mt(z, 0, H), zone: O, type: "ground" }),
-      x = (z, H, O, q) => ({ pos: mt(z, H, O), zone: q, type: "air" }),
-      y = [
-        g(-19, -1.4, "yard"),
-        g(3.5, -1.6, "yard"),
-        g(14.2, 16.4, "yard"),
-        g(-3.2, 16.6, "yard"),
-        g(-16, 26, "yard"),
-        g(6, 26, "yard"),
-        g(4.2, -5.12, "yard"),
-        g(-7.8, 21.4, "yard"),
-        g(-11.3, 12.5, "yard"),
-        g(17.5, 22.2, "yard"),
-        x(10, 11, 23.5, "yard"),
-        x(2, 11, 21.5, "yard"),
-        x(13, 9, 11, "yard"),
-        x(-4, 12.5, -4.5, "yard"),
-        x(9, 10, 1.5, "yard"),
-        x(-10, 12, 24.5, "yard"),
-        g(-12.4, -24.8, "shed"),
-        g(9.6, -25.3, "shed"),
-        g(-13.4, -19.6, "shed"),
-        g(4.6, -13.8, "shed"),
-        g(-21, -27.2, "shed"),
-        g(-18.6, -22, "shed"),
-        g(13.6, -24, "shed"),
-        g(-26.6, -15, "shed"),
-        x(-8, 5.4, -20.5, "shed"),
-        x(5, 5.2, -18, "shed"),
-        x(-20, 10.5, -20, "shed"),
-        x(14.5, 10, -22, "shed"),
-        x(-2, 12.5, -8.5, "shed"),
-        g(27.7, -24.2, "quay"),
-        g(18.3, -25.4, "quay"),
-        g(27.2, -12.6, "quay"),
-        g(20.2, 14, "quay"),
-        g(23.4, 23.2, "quay"),
-        g(18, 24.4, "quay"),
-        g(27.4, 11.6, "quay"),
-        x(36, 9, 4, "quay"),
-        x(38, 11, -6, "quay"),
-        x(35, 8.5, 16, "quay"),
-        x(24, 12.5, 10.5, "quay"),
-        x(33.5, 10, 24.5, "quay"),
-        x(22, 13, -14, "quay"),
-      ],
-      b = [
-        { name: "gate", min: [-40, -30], max: [-24, 30] },
-        { name: "yard", min: [-24, -10], max: [16, 30] },
-        { name: "shed", min: [-24, -30], max: [16, -10] },
-        { name: "quay", min: [16, -30], max: [40, 30] },
-      ],
+      y = P.spawns.map((z) => ({ pos: mt(...z.pos), zone: z.zone, type: z.type })),
+      b = structuredClone(P.zones),
       m = [{ min: mt(no.X0, 0, no.Z0), max: mt(no.X1, no.RIDGE, no.Z1) }],
-      A = [
-        { pos: [-34, 1.6, 6.2], look: [-12, 2.6, 6.6] },
-        { pos: [-20, 1.3, 5.6], look: [0, 2.2, 7] },
-        { pos: [-6.2, 2.1, 7.9], look: [2, 1.6, 7.6] },
-        { pos: [-6.6, 2.5, 0.4], look: [-4, 2.6, -12] },
-        { pos: [-4.4, 1.9, -8.6], look: [-2.4, 2.8, -19.5] },
-        { pos: [-3.2, 2.2, -15], look: [-2, 2.2, -20.5] },
-        { pos: [4.2, 2.6, -19.6], look: [12, 3.2, -19.5] },
-        { pos: [15, 2, -19.5], look: [24, 3.5, -6] },
-        { pos: [20.2, 1.7, -9], look: [23, 1.6, 0] },
-        { pos: [25.9, 1.8, 1.5], look: [27.5, 1.2, 12] },
-        { pos: [27.3, 1.8, 12], look: [29.6, 0.4, 20] },
-        { pos: [28.4, 1.9, 17.2], look: [31.5, -0.8, 21] },
-      ],
-      _ = [
-        mt(-33.9, 0, 3.8),
-        mt(-27.3, 0, 2.3),
-        mt(-19.2, 0, 4.7),
-        mt(-17.4, 0, 4.9),
-        mt(-12.5, 0, 7.2),
-        mt(-9.3, 0, 6.4),
-        mt(-6.3, 0, 7.3),
-        mt(-2.9, 0, 6.1),
-        mt(-2.9, 0, 4.5),
-        mt(5.6, 0, 5.8),
-        mt(5.6, 0, 4.2),
-        mt(-2.2, 0, 10.4),
-        mt(5, 0, 8.9),
-        mt(-4.8, 0, 10.6),
-        mt(7.5, 0, 7.7),
-        mt(9.2, 0, 4.4),
-        mt(-1, 0, 13.6),
-        mt(-13.5, 0, -1.5),
-        mt(-9.6, 0, -0.7),
-        mt(7.8, 0, -1.5),
-        mt(-4.2, 0, -2.2),
-        mt(-0.9, 0, -6.7),
-        mt(-6.7, 0, -7),
-        mt(1.2, 0, -8.9),
-        mt(-8.1, 0, 15.4),
-        mt(0.6, 0, 16.9),
-        mt(4.2, 0, 15.7),
-        mt(-16, 0, 15.6),
-        mt(12, 0, 17.2),
-        mt(2.9, 0, -17),
-        mt(4.2, 0, -15.3),
-        mt(6.9, 0, -20.6),
-        mt(-7.6, 0, -17.4),
-        mt(-8.3, 0, -14.3),
-        mt(9.6, 0, -21.9),
-        mt(-13.2, 0, -14.4),
-        mt(-11.6, 0, -18.6),
-        mt(0, 0, -25.8),
-        mt(-12.4, 0, -25.8),
-        mt(21.4, 0, -4.7),
-        mt(25.3, 0, 3.9),
-        mt(25.7, 0, -4.4),
-        mt(20.2, 0, -15.4),
-        mt(26.4, 0, -15.4),
-        mt(20.6, 0, 14.4),
-        mt(26.8, 0, 14.4),
-        mt(20.6, 0, 21.2),
-        mt(27.4, 0, 22.4),
-        mt(19.6, 0, -21.4),
-        mt(27, 0, -16.2),
-        mt(25.6, 0, 6),
-        mt(13.5, 2.59, 12.4),
-        mt(4.4, 2.59, 12.4),
-        mt(12.9, 0, 8.8),
-        mt(11.6, 0, 4.9),
-      ],
+      A = structuredClone(P.cinematicPath),
+      _ = P.coverPoints.map((z) => mt(...z)),
       M = i.physics.nav,
       E = (z) => {
         if (!(!M || !M.isWalkable || z.y > 0.2 || M.isWalkable(z.x, z.z)))
@@ -42117,7 +41678,7 @@ float metalnessFactor = metalness * slORM.b;
       coverPoints: _,
       skylights: n.skylights,
       shedLights: n.lights,
-      vantage: { stairsFoot: mt(-2.2, 0, 12.4), roof: mt(13.5, 2.59, 12.4) },
+      vantage: { stairsFoot: mt(...P.vantage.stairsFoot), roof: mt(...P.vantage.roof) },
       stats: {
         labelsAtlased: h.count,
         containers: t.placed.filter((z) => z.name.startsWith("container")).length,
