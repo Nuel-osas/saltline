@@ -80,6 +80,21 @@ export function extentOf(boxes: readonly Box[], also: { min: [number, number]; m
   return { x0: cap(x0 - m), z0: cap(z0 - m), x1: cap(x1 + m), z1: cap(z1 + m) };
 }
 
+/**
+ * Where the disc hangs and how big it is, in pixels from the HUD's top: under the lowest of what sits above it (the
+ * objective, and the first raid's checklist while it shows), above the highest of what sits below it on the left (the
+ * cargo readout, the vitals, a phone's stick), shrunk to fit between them but never below `min`.
+ */
+export function discPlace(o: { above: (number | null)[]; below: (number | null)[]; natural: number; fallbackTop: number; gap?: number; min?: number }): { top: number; size: number } {
+  const gap = o.gap ?? 14;
+  const min = o.min ?? 84;
+  const tops = o.above.filter((v): v is number => v !== null && Number.isFinite(v));
+  const top = tops.length ? Math.max(...tops) + gap : o.fallbackTop;
+  const floors = o.below.filter((v): v is number => v !== null && Number.isFinite(v) && v > top);
+  const room = floors.length ? Math.min(...floors) - gap - top : Infinity;
+  return { top: Math.round(top), size: Math.round(Math.max(min, Math.min(o.natural, room))) };
+}
+
 export type MarkKind = "relay" | "boat" | "boat-shut" | "seal" | "bonded" | "wreck" | "threat" | "threat-air";
 
 export interface Mark {

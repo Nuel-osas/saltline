@@ -1,7 +1,7 @@
 // The minimap's arithmetic (src/economy/v2/minimap/rules.ts): the disc turns with the player, far marks wait at its
 // edge, only what the player could stand on or run into is drawn, and only machines that have seen the player show.
 import { describe, expect, it } from "vitest";
-import { MINI, clampToRing, drawnBoxes, extentOf, marks, tierOf, toDisc, type MarkInput } from "../src/economy/v2/minimap/rules";
+import { MINI, clampToRing, discPlace, drawnBoxes, extentOf, marks, tierOf, toDisc, type MarkInput } from "../src/economy/v2/minimap/rules";
 
 const near = (a: { x: number; y: number }, b: { x: number; y: number }) => {
   expect(a.x).toBeCloseTo(b.x, 9);
@@ -54,6 +54,23 @@ describe("what is drawn of the yard", () => {
     const e = extentOf([{ min: { x: -10, y: 0, z: -5 }, max: { x: 20, y: 2, z: 8 } }], [{ min: [-40, -30], max: [40, 30] }]);
     expect(e).toEqual({ x0: -40 - MINI.margin, z0: -30 - MINI.margin, x1: 40 + MINI.margin, z1: 30 + MINI.margin });
     expect(extentOf([])).toBeNull();
+  });
+});
+
+describe("where the disc hangs", () => {
+  it("under the objective, or under the first raid's checklist while that shows", () => {
+    expect(discPlace({ above: [75, null], below: [550], natural: 166, fallbackTop: 92 })).toEqual({ top: 89, size: 166 });
+    expect(discPlace({ above: [75, 190], below: [550], natural: 166, fallbackTop: 92 })).toEqual({ top: 204, size: 166 });
+  });
+
+  it("shrinks to fit above the cargo or a phone's stick, but not below its minimum", () => {
+    // A sideways phone: the checklist ends at 150, the stick rests from 278.
+    expect(discPlace({ above: [75, 150], below: [278], natural: 104, fallbackTop: 92 })).toEqual({ top: 164, size: 100 });
+    expect(discPlace({ above: [75, 230], below: [278], natural: 104, fallbackTop: 92 }).size).toBe(84);
+  });
+
+  it("falls back to its own top with nothing above it, and ignores what is above it on the screen", () => {
+    expect(discPlace({ above: [null], below: [40, null], natural: 120, fallbackTop: 92 })).toEqual({ top: 92, size: 120 });
   });
 });
 

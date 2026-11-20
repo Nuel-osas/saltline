@@ -8,10 +8,10 @@
 // nothing the player hasn't already been told.
 //
 // It reads the game and changes nothing in it: the level's boxes, zones and boat, the player's position and yaw, the
-// machines, the raid's targets and the game's objective events. It draws only while a raid is being played, steps
-// aside while the first raid's checklist hangs under the objective, and ?minimap=0 leaves it out. State is on G.minimap.
+// machines, the raid's targets and the game's objective events. It draws only while a raid is being played, hangs
+// below the first raid's checklist while that shows, and ?minimap=0 leaves it out. State is on G.minimap.
 import "./minimap.css";
-import { MINI, clampToRing, drawnBoxes, extentOf, marks, tierOf, toDisc, type Box, type Mark, type View } from "./rules";
+import { MINI, clampToRing, discPlace, drawnBoxes, extentOf, marks, tierOf, toDisc, type Box, type Mark, type View } from "./rules";
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the game context is the untyped bundle's G */
 type Game = any;
@@ -171,13 +171,41 @@ export function startMinimap(G: Game): Minimap | null {
     canvas.width = Math.max(1, Math.round(s * d));
     canvas.height = Math.max(1, Math.round(s * d));
   }
-  /** Hang the disc under the objective block, wherever its text ends. */
+  /**
+   * Hang the disc under the objective, and under the first raid's checklist while it shows, kept clear of the cargo
+   * readout, the vitals and a phone's resting stick below it (shrunk to fit if it has to be).
+   */
+  let floorStick: number | null = null;
   function place() {
-    const obj = hudRoot!.querySelector<HTMLElement>(".h-obj");
     const root = hudRoot!.getBoundingClientRect();
-    const r = obj && obj.classList.contains("has") ? obj.getBoundingClientRect() : null;
-    const top = r && r.height > 0 ? r.bottom - root.top + 14 : null;
-    box.style.top = top === null ? "" : `${Math.round(top)}px`;
+    const rel = (el: Element | null, edge: "top" | "bottom") => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return r.height > 0 && r.width > 0 ? r[edge] - root.top : null;
+    };
+    box.style.width = box.style.height = "";
+    const natural = box.offsetWidth;
+    const left = box.getBoundingClientRect().left;
+    const overlaps = (el: Element | null) => {
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      return r.right > left && r.left < left + natural;
+    };
+    const obj = hudRoot!.querySelector(".h-obj.has");
+    const panel = hudRoot!.querySelector(".co-panel.on");
+    // The stick moves to the thumb while it is held: keep where it rests.
+    const ring = document.querySelector(".touch.on .t-stick:not(.on) .t-ring");
+    if (ring) floorStick = overlaps(ring) ? rel(ring, "top") : null;
+    else if (!document.querySelector(".touch.on")) floorStick = null;
+    const below = [".sv-cargo.on", ".h-health.on"].map((s) => hudRoot!.querySelector(s)).filter(overlaps).map((el) => rel(el, "top"));
+    const { top, size: s } = discPlace({
+      above: [rel(obj, "bottom"), rel(panel, "bottom")],
+      below: [...below, floorStick],
+      natural,
+      fallbackTop: 92,
+    });
+    box.style.top = `${top}px`;
+    if (s !== natural) box.style.width = box.style.height = `${s}px`;
   }
 
   // ---- drawing -----------------------------------------------------------------------------------------------------
