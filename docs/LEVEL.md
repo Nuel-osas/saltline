@@ -108,6 +108,10 @@ look at per shot) and `vantage` (the foot of the stairs up to the container roof
   collision box, walkable cell, floor surface and mesh, hashed. Run it before and after and `diff` the files. A change
   meant to change nothing (like moving the yard into this file) leaves it identical; a new area shows exactly what it
   added.
+- `node scripts/level-map.mjs http://127.0.0.1:5280 <dir>` with `npm run dev` running: the yard seen straight down
+  (`top.jpg`, 25 px a metre, the shed roof and the quay crane cut away) and `map.json`: every prop with its footprint
+  and the step that placed it (`yard[12]`, or `code` for the shed, the quay and the boat), every collision box, the
+  machines' walkable grid, the zones, spawns, cover points and relays. Use it to plan where a new area goes.
 
 ## What a bigger map needs
 
