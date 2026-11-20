@@ -56,6 +56,11 @@ Then:
 you, and a red marker shows how far away it is. Destroying one adds to the invoice and can drop a part (servos from
 hounds, rotors from gulls), ammunition or medicine.
 
+**The map.** The disc under the objective is the yard around you, 30 m to its edge, turning so that ahead is always
+up. It shows the uplinks still to cut (A B C, waiting at the edge when far), the boat (bright once it is coming),
+sealed cargo and wrecks nearby, and in red the machines that have seen you. On your first raid it hangs below the
+checklist.
+
 **Controls.** WASD and the mouse (click to capture it), left mouse to fire, right mouse to aim, R to reload, E to
 use, G for a breaker charge, F for the rifle butt, Shift to sprint, C to crouch, Esc to pause. On a phone, hold it
 sideways: the stick rests in the bottom-left corner (touch anywhere on the left half to move), drag on the right half
