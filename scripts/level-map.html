@@ -1,0 +1,710 @@
+<!doctype html>
+<!-- The viewer for scripts/level-map.mjs, which writes it out as map.html beside top.jpg with map.json built in, so
+     it opens straight from the folder (double-click; no server). Fonts come from Google Fonts when online and fall
+     back to system faces offline. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Saltline Yard Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500&family=Barlow+Condensed:wght@500;600&family=Big+Shoulders+Display:wght@800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a plan table. The yard fills the left; a narrow log on the right reads out whatever is under the cursor.
+     The palette and faces are Saltline's own (the site's landing.css): ink, bone, signal amber, rust, steel, alarm. */
+  :root {
+    --ink: #0b0d0f;
+    --ink-2: #14181b;
+    --ink-3: #1b2024;
+    --bone: #e8e4da;
+    --bone-dim: rgba(232, 228, 218, 0.68);
+    --bone-faint: rgba(232, 228, 218, 0.24);
+    --line: rgba(232, 228, 218, 0.16);
+    --signal: #ffb347;
+    --signal-hot: #ffc977;
+    --steel: #8d9aa3;
+    --alarm: #ff5a40;
+    --walk: #6fd39b;
+    --f-display: "Big Shoulders Display", Impact, "Arial Narrow", sans-serif;
+    --f-label: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+    --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  img { max-width: 100%; }
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--bone);
+    font: 14px/1.45 var(--f-body);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+  }
+  .app { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 14px; height: 100%; padding-block: 16px; box-sizing: border-box; }
+
+  header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 10px 24px; }
+  .eyebrow { font: 600 12px/1 var(--f-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--signal); }
+  h1 { font: 800 clamp(30px, 4vw, 44px)/0.95 var(--f-display); letter-spacing: 0.01em; text-transform: uppercase; margin: 6px 0 6px; text-wrap: balance; }
+  .lede { margin: 0; color: var(--bone-dim); max-width: 64ch; }
+  .tally { display: flex; flex-wrap: wrap; gap: 6px 18px; font: 500 12px/1.3 var(--f-mono); color: var(--bone-dim); }
+  .tally b { color: var(--bone); font-weight: 500; }
+
+  .work { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; min-height: 0; }
+  .stage {
+    position: relative; min-height: 0; overflow: hidden; touch-action: none; cursor: crosshair;
+    background: #0e1113; border: 1px solid var(--line); border-radius: 2px; outline: none;
+  }
+  .stage:focus-visible { border-color: var(--signal); }
+  .stage.dragging { cursor: grabbing; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .status { position: absolute; inset: 0; display: grid; place-items: center; font: 500 13px var(--f-mono); color: var(--bone-dim); text-align: center; padding: 16px; }
+  .zoom { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .zoom button, .btn {
+    font: 600 13px/1 var(--f-label); letter-spacing: 0.08em; text-transform: uppercase; color: var(--bone);
+    background: rgba(11, 13, 15, 0.82); border: 1px solid var(--bone-faint); border-radius: 2px; cursor: pointer;
+  }
+  .zoom button { width: 34px; height: 34px; font-size: 18px; letter-spacing: 0; }
+  .zoom button.fit { font-size: 11px; letter-spacing: 0.06em; }
+  .zoom button:hover, .btn:hover { border-color: var(--signal); color: var(--signal-hot); }
+  .zoom button:focus-visible, .btn:focus-visible, input:focus-visible + .sw { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+  aside { display: flex; flex-direction: column; gap: 18px; overflow: auto; min-height: 0; padding-right: 2px; }
+  section h2 { font: 600 12px/1 var(--f-label); letter-spacing: 0.14em; text-transform: uppercase; color: var(--bone-dim); margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+
+  .readout { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 13px; }
+  .readout dt { color: var(--bone-dim); font: 500 12px/1.5 var(--f-label); letter-spacing: 0.06em; text-transform: uppercase; }
+  .readout dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .mono { font-family: var(--f-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .src-data { color: var(--signal); }
+  .src-code { color: var(--steel); }
+
+  .layers { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+  .layers label { display: grid; grid-template-columns: 16px 22px minmax(0, 1fr); align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+  .layers input { margin: 0; accent-color: var(--signal); width: 15px; height: 15px; }
+  .layers small { display: block; color: var(--bone-dim); font-size: 12px; line-height: 1.3; }
+  .sw { width: 22px; height: 14px; display: grid; place-items: center; }
+
+  .places, .pins { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+  .places button {
+    width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; text-align: left;
+    background: none; border: 0; border-bottom: 1px solid transparent; color: var(--bone); padding: 4px 0; cursor: pointer; font: inherit;
+  }
+  .places button:hover { color: var(--signal-hot); }
+  .places button:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+  .pins li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 3px 0; }
+  .pins .tag { font: 600 12px/1 var(--f-label); color: var(--ink); background: var(--signal-hot); border-radius: 2px; text-align: center; padding: 3px 0; }
+  .pins .btn { padding: 5px 7px; font-size: 11px; }
+  .pins .dist { grid-column: 2 / -1; color: var(--bone-dim); font-size: 12px; margin-top: -2px; }
+  .hint { color: var(--bone-dim); font-size: 12.5px; margin: 6px 0 0; }
+  .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .row .btn { padding: 7px 10px; font-size: 12px; }
+  .note { color: var(--bone-dim); font-size: 12.5px; margin: 0; }
+  .note code { font: 12px var(--f-mono); color: var(--bone); overflow-wrap: anywhere; }
+
+  @media (max-width: 860px) {
+    html, body { height: auto; }
+    .app { height: auto; }
+    .work { grid-template-columns: minmax(0, 1fr); }
+    .stage { aspect-ratio: 88 / 68; max-width: 100%; }
+    aside { overflow: visible; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <div class="eyebrow">Saltline · level plan</div>
+      <h1>Yard map</h1>
+      <p class="lede">The yard from straight above, drawn by the game itself. The shed's roof is cut away so its floor shows. Hover anywhere to see what is there and which line of <span class="mono">src/level/yard.json</span> placed it. Click to drop a pin.</p>
+    </div>
+    <div class="tally" id="tally" aria-live="polite"></div>
+  </header>
+
+  <div class="work">
+    <div class="stage" id="stage" tabindex="0" aria-label="Map of the yard. Drag to move, scroll or pinch to zoom, click to drop a pin. Arrow keys move, plus and minus zoom.">
+      <canvas id="map"></canvas>
+      <div class="status" id="status">Loading the yard…</div>
+      <div class="zoom">
+        <button type="button" id="zin" aria-label="Zoom in">+</button>
+        <button type="button" id="zout" aria-label="Zoom out">−</button>
+        <button type="button" id="zfit" class="fit" aria-label="Fit the whole yard">FIT</button>
+      </div>
+    </div>
+
+    <aside>
+      <section>
+        <h2>Under the cursor</h2>
+        <dl class="readout">
+          <dt>Position</dt><dd class="mono" id="r-pos">–</dd>
+          <dt>Zone</dt><dd id="r-zone">–</dd>
+          <dt>Top surface</dt><dd id="r-top">–</dd>
+          <dt>Machines</dt><dd id="r-walk">–</dd>
+          <dt>Thing</dt><dd id="r-thing">–</dd>
+          <dt>Placed by</dt><dd class="mono" id="r-src">–</dd>
+        </dl>
+      </section>
+
+      <section>
+        <h2>Layers</h2>
+        <ul class="layers" id="layers"></ul>
+      </section>
+
+      <section>
+        <h2>Key places</h2>
+        <ul class="places" id="places"></ul>
+      </section>
+
+      <section>
+        <h2>Pins</h2>
+        <ul class="pins" id="pins"></ul>
+        <p class="hint" id="pin-hint">Click the map to drop a pin. Copy gives its position as <span class="mono">"x": …, "z": …</span>, ready for a step. Two pins show the distance between them.</p>
+        <div class="row"><button type="button" class="btn" id="pin-clear" hidden>Clear pins</button></div>
+      </section>
+
+      <section>
+        <h2>About this picture</h2>
+        <p class="note">80 × 60 m inside the dashed line: x runs left to right (−40 at the gate, 40 out at sea), z top to bottom (−30 behind the shed, 30 at the far fence). One square of the grid is 5 m. The shed roof is cut above 6 m and the quay crane above 9 m. Redraw it after changing the level with <code>node scripts/level-map.mjs http://127.0.0.1:5280 out/</code>.</p>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script type="application/json" id="map-data">/*MAP_DATA*/</script>
+<script>
+(() => {
+  "use strict";
+  const C = {
+    bone: "#e8e4da", boneDim: "rgba(232,228,218,0.68)", faint: "rgba(232,228,218,0.24)", ink: "#0b0d0f",
+    signal: "#ffb347", hot: "#ffc977", steel: "#8d9aa3", alarm: "#ff5a40", walk: "rgba(111,211,155,0.34)",
+    tiers: ["#2f5d7c", "#4f8fb8", "#86bfe3", "#d2ecfb"],
+  };
+  const TIER_LABEL = ["below 1.3 m", "1.3–3 m", "3–6 m", "above 6 m"];
+  const tierOf = (top) => (top <= 1.3 ? 0 : top <= 3 ? 1 : top <= 6 ? 2 : 3);
+
+  const LAYERS = [
+    { id: "picture", label: "Picture", note: "the game's own render", on: true, sw: "pic" },
+    { id: "grid", label: "Grid", note: "5 m squares, labelled every 10 m", on: true, sw: "grid" },
+    { id: "zones", label: "Zones", note: "gate, yard, shed, quay", on: true, sw: "zone" },
+    { id: "places", label: "Relays, boat, start", note: "A B C relays, the boat out, where you start", on: true, sw: "relay" },
+    { id: "spawns", label: "Machine spawns", note: "dot on the ground, diamond in the air", on: true, sw: "spawn" },
+    { id: "props", label: "Prop outlines", note: "amber from yard.json, grey still in code", on: false, sw: "props" },
+    { id: "boxes", label: "Collision boxes", note: "by height: " + TIER_LABEL.join(", "), on: false, sw: "boxes" },
+    { id: "walk", label: "Where machines walk", note: "the ground machines' path grid, 0.5 m", on: false, sw: "walk" },
+    { id: "cover", label: "Cover points", note: "where machines take cover", on: false, sw: "cover" },
+    { id: "camera", label: "Opening camera", note: "the film's 12 shots, in order", on: false, sw: "camera" },
+  ];
+  const show = Object.fromEntries(LAYERS.map((l) => [l.id, l.on]));
+
+  const stage = document.getElementById("stage");
+  const canvas = document.getElementById("map");
+  const ctx = canvas.getContext("2d");
+  const statusEl = document.getElementById("status");
+  const $ = (id) => document.getElementById(id);
+
+  let M = null, img = null, walkCanvas = null;
+  let W = 0, H = 0, dpr = 1, fitS = 10;
+  const view = { cx: 0, cz: 0, s: 10 };
+  let hover = null; // { x, z, prop, marker }
+  let pins = [];
+  try { pins = JSON.parse(localStorage.getItem("saltline-map-pins") || "[]").filter((p) => Number.isFinite(p.x) && Number.isFinite(p.z)).slice(0, 20); } catch { pins = []; }
+  const savePins = () => { try { localStorage.setItem("saltline-map-pins", JSON.stringify(pins)); } catch {} };
+
+  const KIND = {
+    container20: "Container, 20 ft", container40: "Container, 40 ft", container40hc: "Container, 40 ft high cube",
+    relay_node: "Relay", reefer_unit: "Reefer unit (fridge on a container)", ibc_tote: "IBC tote", stairs_metal: "Metal stairs",
+  };
+  const kindName = (k) => KIND[k] || (k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " "));
+  const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
+  const f2 = (v) => (Math.round(v * 100) / 100).toFixed(2);
+
+  // ---- coordinates ----
+  const w2s = (x, z) => [(x - view.cx) * view.s + W / 2, (z - view.cz) * view.s + H / 2];
+  const s2w = (px, py) => [(px - W / 2) / view.s + view.cx, (py - H / 2) / view.s + view.cz];
+  const clampS = (s) => Math.min(80, Math.max(fitS * 0.8, s));
+  function fit() {
+    fitS = Math.min(W / 88, H / 68);
+    view.s = fitS; view.cx = 0; view.cz = 0;
+  }
+  function zoomAt(px, py, f) {
+    const [bx, bz] = s2w(px, py);
+    view.s = clampS(view.s * f);
+    const [ax, az] = s2w(px, py);
+    view.cx += bx - ax; view.cz += bz - az;
+    keepInside();
+  }
+  function keepInside() {
+    view.cx = Math.min(44, Math.max(-44, view.cx));
+    view.cz = Math.min(34, Math.max(-34, view.cz));
+  }
+
+  // ---- geometry ----
+  function corners(p) {
+    const hw = p.w / 2, hd = p.d / 2, c = Math.cos(p.yaw), s = Math.sin(p.yaw);
+    return [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([lx, lz]) => [p.x + lx * c + lz * s, p.z - lx * s + lz * c]);
+  }
+  function inProp(p, x, z) {
+    const dx = x - p.x, dz = z - p.z, c = Math.cos(p.yaw), s = Math.sin(p.yaw);
+    const lx = dx * c - dz * s, lz = dx * s + dz * c;
+    return Math.abs(lx) <= p.w / 2 && Math.abs(lz) <= p.d / 2;
+  }
+  const solid = (b) => !b.playerOnly && !b.bulletOnly;
+  const inBox = (b, x, z) => x >= b.min[0] && x <= b.max[0] && z >= b.min[2] && z <= b.max[2];
+  function walkable(x, z) {
+    const w = M.walk, i = Math.floor((x - w.origin[0]) / w.cell), j = Math.floor((z - w.origin[1]) / w.cell);
+    if (i < 0 || j < 0 || i >= w.cols || j >= w.rows) return null;
+    return w.cells[j * w.cols + i] === "1";
+  }
+
+  // ---- markers in screen space ----
+  function markers() {
+    const out = [];
+    if (show.places) {
+      for (const r of M.relays) out.push({ kind: "relay", x: r.pos[0], z: r.pos[2], label: r.id.slice(-1).toUpperCase(), title: r.label, zone: r.zone });
+      out.push({ kind: "boat", x: M.extraction.pos[0], z: M.extraction.pos[2], title: "The boat out (extraction), " + M.extraction.radius + " m circle" });
+      out.push({ kind: "start", x: M.playerStart.pos[0], z: M.playerStart.pos[2], yaw: M.playerStart.yaw, title: "Player start" });
+      out.push({ kind: "vantage", x: M.vantage.stairsFoot[0], z: M.vantage.stairsFoot[2], title: "Foot of the stairs to the container roof" });
+    }
+    if (show.spawns) for (const s of M.spawns) out.push({ kind: s.type === "air" ? "air" : "ground", x: s.pos[0], z: s.pos[2], y: s.pos[1], title: (s.type === "air" ? "Flying machine spawn, " + f1(s.pos[1]) + " m up" : "Ground machine spawn"), zone: s.zone });
+    if (show.cover) for (const c of M.coverPoints) out.push({ kind: "cover", x: c[0], z: c[2], title: "Cover point" });
+    if (show.camera) M.cinematicPath.forEach((c, i) => out.push({ kind: "shot", x: c.pos[0], z: c.pos[2], n: i + 1, look: c.look, title: "Opening shot " + (i + 1) + ", camera " + f1(c.pos[1]) + " m up" }));
+    pins.forEach((p, i) => out.push({ kind: "pin", x: p.x, z: p.z, n: i + 1, title: "Pin " + (i + 1) }));
+    return out;
+  }
+
+  // ---- drawing ----
+  function draw() {
+    if (!M) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#0e1113";
+    ctx.fillRect(0, 0, W, H);
+
+    // World units from here.
+    const k = view.s;
+    ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * (W / 2 - view.cx * k), dpr * (H / 2 - view.cz * k));
+    const px = 1 / k; // one screen pixel in metres
+    const analytic = show.boxes || show.walk || show.props;
+    if (show.picture && img) {
+      ctx.globalAlpha = analytic ? 0.42 : 1;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(img, M.view.x[0], M.view.z[0], M.view.x[1] - M.view.x[0], M.view.z[1] - M.view.z[0]);
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.fillStyle = "#1b2024";
+      ctx.fillRect(-44, -34, 74, 68);
+      ctx.fillStyle = "#101d26";
+      ctx.fillRect(30, -34, 14, 68);
+    }
+
+    if (show.walk && walkCanvas) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(walkCanvas, M.walk.origin[0], M.walk.origin[1], M.walk.cols * M.walk.cell, M.walk.rows * M.walk.cell);
+      ctx.imageSmoothingEnabled = true;
+    }
+
+    if (show.boxes) {
+      for (const b of M.boxesSorted) {
+        const t = tierOf(b.max[1]);
+        if (b.playerOnly || b.bulletOnly) {
+          ctx.setLineDash([4 * px, 3 * px]);
+          ctx.strokeStyle = C.bone; ctx.lineWidth = 1.2 * px;
+          ctx.strokeRect(b.min[0], b.min[2], b.max[0] - b.min[0], b.max[2] - b.min[2]);
+          ctx.setLineDash([]);
+          continue;
+        }
+        ctx.fillStyle = C.tiers[t];
+        ctx.globalAlpha = 0.72;
+        ctx.fillRect(b.min[0], b.min[2], b.max[0] - b.min[0], b.max[2] - b.min[2]);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = "rgba(11,13,15,0.7)"; ctx.lineWidth = 1 * px;
+        ctx.strokeRect(b.min[0], b.min[2], b.max[0] - b.min[0], b.max[2] - b.min[2]);
+      }
+    }
+
+    if (show.props) {
+      for (const p of M.placed) {
+        if (!p.w) continue;
+        const cs = corners(p);
+        ctx.beginPath(); cs.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z))); ctx.closePath();
+        ctx.strokeStyle = p.step === "code" ? C.steel : C.signal;
+        ctx.lineWidth = 1.4 * px;
+        ctx.stroke();
+      }
+    }
+
+    if (hover && hover.prop) {
+      const cs = corners(hover.prop);
+      ctx.beginPath(); cs.forEach(([x, z], i) => (i ? ctx.lineTo(x, z) : ctx.moveTo(x, z))); ctx.closePath();
+      ctx.fillStyle = "rgba(255,201,119,0.22)"; ctx.fill();
+      ctx.strokeStyle = C.hot; ctx.lineWidth = 2 * px; ctx.stroke();
+    }
+
+    // The world's edge and the quay edge.
+    ctx.setLineDash([8 * px, 5 * px]);
+    ctx.strokeStyle = C.bone; ctx.lineWidth = 1.5 * px;
+    ctx.strokeRect(M.world.x[0], M.world.z[0], M.world.x[1] - M.world.x[0], M.world.z[1] - M.world.z[0]);
+    ctx.setLineDash([]);
+
+    if (show.zones) {
+      ctx.setLineDash([3 * px, 4 * px]);
+      ctx.strokeStyle = "rgba(232,228,218,0.55)"; ctx.lineWidth = 1 * px;
+      for (const zn of M.zones) ctx.strokeRect(zn.min[0], zn.min[1], zn.max[0] - zn.min[0], zn.max[1] - zn.min[1]);
+      ctx.setLineDash([]);
+    }
+
+    // Screen units from here.
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    if (show.grid) drawGrid();
+
+    if (show.zones) {
+      ctx.font = "600 13px 'Barlow Condensed', 'Arial Narrow', sans-serif";
+      if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
+      ctx.textBaseline = "top";
+      for (const zn of M.zones) {
+        const [sx, sy] = w2s(zn.min[0], zn.min[1]);
+        const label = zn.name.toUpperCase();
+        const tx = Math.max(sx + 6, 6), ty = Math.max(sy + 6, show.grid ? 22 : 6);
+        const tw = ctx.measureText(label).width;
+        ctx.fillStyle = "rgba(11,13,15,0.78)"; ctx.fillRect(tx - 4, ty - 3, tw + 8, 19);
+        ctx.fillStyle = C.bone; ctx.fillText(label, tx, ty);
+      }
+      if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+    }
+
+    const ms = markers();
+    if (show.camera) {
+      ctx.strokeStyle = "rgba(232,228,218,0.6)"; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      M.cinematicPath.forEach((c, i) => { const [x, y] = w2s(c.pos[0], c.pos[2]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    for (const m of ms) drawMarker(m);
+    drawScale();
+  }
+
+  function drawGrid() {
+    const [x0, z0] = s2w(0, 0), [x1, z1] = s2w(W, H);
+    const step = view.s > 22 ? 1 : 5;
+    ctx.lineWidth = 1;
+    for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) {
+      const [sx] = w2s(x, 0);
+      ctx.strokeStyle = x % 10 === 0 ? "rgba(232,228,218,0.22)" : x % 5 === 0 ? "rgba(232,228,218,0.11)" : "rgba(232,228,218,0.06)";
+      ctx.beginPath(); ctx.moveTo(Math.round(sx) + 0.5, 0); ctx.lineTo(Math.round(sx) + 0.5, H); ctx.stroke();
+    }
+    for (let z = Math.ceil(z0 / step) * step; z <= z1; z += step) {
+      const [, sy] = w2s(0, z);
+      ctx.strokeStyle = z % 10 === 0 ? "rgba(232,228,218,0.22)" : z % 5 === 0 ? "rgba(232,228,218,0.11)" : "rgba(232,228,218,0.06)";
+      ctx.beginPath(); ctx.moveTo(0, Math.round(sy) + 0.5); ctx.lineTo(W, Math.round(sy) + 0.5); ctx.stroke();
+    }
+    // Edge labels: x along the top, z down the left.
+    ctx.fillStyle = "rgba(11,13,15,0.78)";
+    ctx.fillRect(0, 0, W, 16); ctx.fillRect(0, 16, 30, H - 16);
+    ctx.font = "500 10.5px 'IBM Plex Mono', ui-monospace, monospace";
+    ctx.fillStyle = C.boneDim; ctx.textBaseline = "middle";
+    const lab = view.s > 14 ? 5 : view.s < 5 ? 20 : 10;
+    ctx.textAlign = "center";
+    for (let x = Math.ceil(x0 / lab) * lab; x <= x1; x += lab) { const [sx] = w2s(x, 0); if (sx > 34) ctx.fillText((view.s > 8 ? "x " : "") + x, sx, 8.5); }
+    ctx.textAlign = "right";
+    for (let z = Math.ceil(z0 / lab) * lab; z <= z1; z += lab) { const [, sy] = w2s(0, z); if (sy > 24) ctx.fillText(String(z), 27, sy); }
+    ctx.textAlign = "left";
+    ctx.fillStyle = C.faint; ctx.fillText("z", 4, 8.5);
+  }
+
+  function drawMarker(m) {
+    const [x, y] = w2s(m.x, m.z);
+    if (x < -20 || y < -20 || x > W + 20 || y > H + 20) return;
+    const hot = hover && hover.marker === m;
+    ctx.lineWidth = 1.5;
+    if (m.kind === "ground" || m.kind === "air") {
+      ctx.fillStyle = C.alarm; ctx.strokeStyle = C.ink;
+      ctx.beginPath();
+      if (m.kind === "ground") ctx.arc(x, y, hot ? 6 : 4.5, 0, Math.PI * 2);
+      else { const r = hot ? 7 : 5.5; ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); }
+      if (m.kind === "air") { ctx.fillStyle = "rgba(11,13,15,0.6)"; ctx.fill(); ctx.strokeStyle = C.alarm; ctx.lineWidth = 2; ctx.stroke(); }
+      else { ctx.fill(); ctx.stroke(); }
+    } else if (m.kind === "cover") {
+      ctx.fillStyle = C.bone; ctx.strokeStyle = C.ink;
+      ctx.beginPath(); ctx.rect(x - 2.5, y - 2.5, 5, 5); ctx.fill(); ctx.stroke();
+    } else if (m.kind === "relay") {
+      const r = hot ? 12 : 10;
+      ctx.fillStyle = C.signal; ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = C.ink; ctx.font = "600 12px 'Barlow Condensed', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(m.label, x, y + 0.5); ctx.textAlign = "left";
+    } else if (m.kind === "boat") {
+      const r = Math.max(6, M.extraction.radius * view.s);
+      ctx.strokeStyle = C.bone; ctx.lineWidth = hot ? 2.5 : 1.8; ctx.setLineDash([4, 3]);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+      label("BOAT OUT", x + r + 5, y);
+    } else if (m.kind === "start") {
+      const a = m.yaw; // yaw 0 faces −z in three.js; draw the triangle pointing that way
+      const fx = -Math.sin(a), fz = -Math.cos(a), r = hot ? 11 : 9;
+      ctx.fillStyle = C.bone; ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + fx * r, y + fz * r);
+      ctx.lineTo(x - fx * r * 0.6 - fz * r * 0.7, y - fz * r * 0.6 + fx * r * 0.7);
+      ctx.lineTo(x - fx * r * 0.6 + fz * r * 0.7, y - fz * r * 0.6 - fx * r * 0.7);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      label("START", x - 22, y + 14);
+    } else if (m.kind === "vantage") {
+      ctx.strokeStyle = C.bone; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.arc(x, y, hot ? 6 : 4.5, 0, Math.PI * 2); ctx.stroke();
+    } else if (m.kind === "shot") {
+      const [lx, ly] = w2s(m.look[0], m.look[2]);
+      ctx.strokeStyle = "rgba(232,228,218,0.35)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(lx, ly); ctx.stroke();
+      ctx.fillStyle = C.ink; ctx.strokeStyle = C.bone; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = C.bone; ctx.font = "500 10px 'IBM Plex Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(String(m.n), x, y + 0.5); ctx.textAlign = "left";
+    } else if (m.kind === "pin") {
+      ctx.fillStyle = C.hot; ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y - 14, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 5, y - 8); ctx.lineTo(x + 5, y - 8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = C.ink; ctx.font = "600 12px 'Barlow Condensed', sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(String(m.n), x, y - 13.5); ctx.textAlign = "left";
+    }
+  }
+  function label(text, x, y) {
+    ctx.font = "600 11px 'Barlow Condensed', sans-serif";
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "1.5px";
+    const w = ctx.measureText(text).width;
+    ctx.fillStyle = "rgba(11,13,15,0.78)"; ctx.fillRect(x - 3, y - 8, w + 6, 16);
+    ctx.fillStyle = C.bone; ctx.textBaseline = "middle"; ctx.fillText(text, x, y + 0.5);
+    if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+  }
+  function drawScale() {
+    const target = 110 / view.s;
+    const len = [1, 2, 5, 10, 20, 50].reduce((a, b) => (Math.abs(b - target) < Math.abs(a - target) ? b : a));
+    const w = len * view.s, x = 42, y = H - 18;
+    ctx.fillStyle = "rgba(11,13,15,0.78)"; ctx.fillRect(x - 8, y - 18, w + 16, 28);
+    ctx.strokeStyle = C.bone; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, y - 5); ctx.lineTo(x, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w, y - 5); ctx.stroke();
+    ctx.fillStyle = C.bone; ctx.font = "500 10.5px 'IBM Plex Mono', monospace"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+    ctx.fillText(len + " m", x + w / 2, y - 3); ctx.textAlign = "left";
+  }
+
+  // ---- reading out ----
+  function pick(px, py) {
+    const [x, z] = s2w(px, py);
+    let marker = null, best = 13;
+    for (const m of markers()) {
+      const [mx, my] = w2s(m.x, m.z);
+      const d = Math.hypot(mx - px, (m.kind === "pin" ? my - 14 : my) - py);
+      if (d < best) { best = d; marker = m; }
+    }
+    let prop = null;
+    for (const p of M.placed) {
+      if (!p.w || !inProp(p, x, z)) continue;
+      if (!prop || p.y + p.h > prop.y + prop.h || (p.y + p.h === prop.y + prop.h && p.w * p.d < prop.w * prop.d)) prop = p;
+    }
+    return { x, z, marker, prop };
+  }
+  function readout() {
+    const set = (id, t, cls) => { const el = $(id); el.textContent = t; el.className = (id === "r-pos" || id === "r-src" ? "mono " : "") + (cls || ""); };
+    if (!hover) { ["r-pos", "r-zone", "r-top", "r-walk", "r-thing", "r-src"].forEach((id) => set(id, "–")); return; }
+    const { x, z, marker, prop } = hover;
+    set("r-pos", `x ${f1(x)}   z ${f1(z)}`);
+    const inside = x >= M.world.x[0] && x <= M.world.x[1] && z >= M.world.z[0] && z <= M.world.z[1];
+    const zn = M.zones.find((q) => x >= q.min[0] && x <= q.max[0] && z >= q.min[1] && z <= q.max[1]);
+    set("r-zone", inside ? (zn ? zn.name.charAt(0).toUpperCase() + zn.name.slice(1) : "–") : "Outside the world today");
+    // The surface you could stand on: climb boxes upward from the ground while each one starts within a step (0.42 m)
+    // of the height reached. A box that starts higher (the shed roof, a crane beam) is overhead.
+    const here = M.boxes.filter((b) => solid(b) && inBox(b, x, z)).sort((a, b) => a.min[1] - b.min[1]);
+    let top = 0, over = null;
+    for (const b of here) {
+      if (b.min[1] <= top + 0.42) top = Math.max(top, b.max[1]);
+      else if (over === null || b.min[1] < over) over = b.min[1];
+    }
+    const ground = x > M.world.quayX ? "Sea, −1.6 m" : "Ground, 0 m";
+    set("r-top", (top > 0.05 ? `${f2(top)} m` : ground) + (over !== null ? ` · overhead from ${f1(over)} m` : ""));
+    const w = walkable(x, z);
+    set("r-walk", w === null ? "–" : w ? "Can walk here" : "Can't walk here");
+    if (marker && marker.kind !== "pin") {
+      set("r-thing", marker.title);
+      set("r-src", marker.zone ? "zone " + marker.zone : "play data in yard.json");
+    } else if (prop) {
+      set("r-thing", `${kindName(prop.kind)}, top at ${f2(prop.y + prop.h)} m`);
+      if (prop.step === "code") set("r-src", "code in game.js (" + (zn ? zn.name : "level") + ")", "src-code");
+      else set("r-src", "yard.json → " + prop.step, "src-data");
+    } else { set("r-thing", marker ? marker.title : "Open ground"); set("r-src", "–"); }
+  }
+
+  // ---- panels ----
+  function swatch(kind) {
+    const s = { pic: `<rect x="1" y="1" width="20" height="12" fill="#4a4f52" stroke="${C.faint}"/>`,
+      grid: `<path d="M1 7h20M8 1v12M15 1v12" stroke="${C.boneDim}" stroke-width="1"/>`,
+      zone: `<rect x="1.5" y="1.5" width="19" height="11" fill="none" stroke="${C.bone}" stroke-dasharray="2 2"/>`,
+      relay: `<path d="M11 1l6 6-6 6-6-6z" fill="${C.signal}" stroke="${C.ink}"/>`,
+      spawn: `<circle cx="6" cy="7" r="3.5" fill="${C.alarm}"/><path d="M16 2.5l4.5 4.5-4.5 4.5-4.5-4.5z" fill="none" stroke="${C.alarm}" stroke-width="1.6"/>`,
+      props: `<rect x="1.5" y="2" width="8" height="10" fill="none" stroke="${C.signal}" stroke-width="1.5"/><rect x="12.5" y="2" width="8" height="10" fill="none" stroke="${C.steel}" stroke-width="1.5"/>`,
+      boxes: C.tiers.map((c, i) => `<rect x="${1 + i * 5}" y="2" width="5" height="10" fill="${c}"/>`).join(""),
+      walk: `<rect x="1" y="2" width="20" height="10" fill="${C.walk}" stroke="rgba(111,211,155,0.8)"/>`,
+      cover: `<rect x="8.5" y="4.5" width="5" height="5" fill="${C.bone}"/>`,
+      camera: `<path d="M2 11l8-7 10 4" fill="none" stroke="${C.bone}" stroke-dasharray="3 2"/><circle cx="10" cy="4" r="2.5" fill="${C.ink}" stroke="${C.bone}"/>` }[kind];
+    return `<svg class="sw" viewBox="0 0 22 14" width="22" height="14" aria-hidden="true">${s}</svg>`;
+  }
+  function buildLayers() {
+    $("layers").innerHTML = LAYERS.map((l) => `<li><label><input type="checkbox" id="layer-${l.id}" ${show[l.id] ? "checked" : ""}>${swatch(l.sw)}<span>${l.label}<small>${l.note}</small></span></label></li>`).join("");
+    for (const l of LAYERS) $("layer-" + l.id).addEventListener("change", (e) => { show[l.id] = e.target.checked; draw(); });
+  }
+  function buildPlaces() {
+    const list = [
+      { name: "Player start", x: M.playerStart.pos[0], z: M.playerStart.pos[2] },
+      ...M.relays.map((r) => ({ name: r.label.replace(" — ", ", "), x: r.pos[0], z: r.pos[2] })),
+      { name: "Boat out", x: M.extraction.pos[0], z: M.extraction.pos[2] },
+      { name: "Stairs to the container roof", x: M.vantage.stairsFoot[0], z: M.vantage.stairsFoot[2] },
+    ];
+    $("places").innerHTML = list.map((p, i) => `<li><button type="button" data-i="${i}"><span>${p.name}</span><span class="mono">${f1(p.x)}, ${f1(p.z)}</span></button></li>`).join("");
+    $("places").addEventListener("click", (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      const p = list[+b.dataset.i];
+      view.cx = p.x; view.cz = p.z; view.s = clampS(Math.max(view.s, 22));
+      hover = { ...pick(...w2s(p.x, p.z)) }; readout(); draw();
+    });
+  }
+  function buildPins() {
+    $("pins").innerHTML = pins.map((p, i) => {
+      const prev = pins[i - 1];
+      const d = prev ? `<span class="dist">${f1(Math.hypot(p.x - prev.x, p.z - prev.z))} m from pin ${i}</span>` : "";
+      return `<li><span class="tag">${i + 1}</span><span class="mono">x ${f1(p.x)}, z ${f1(p.z)}</span><button type="button" class="btn" data-copy="${i}">Copy</button><button type="button" class="btn" data-del="${i}" aria-label="Remove pin ${i + 1}">×</button>${d}</li>`;
+    }).join("");
+    $("pin-clear").hidden = pins.length === 0;
+  }
+  $("pins").addEventListener("click", async (e) => {
+    const c = e.target.closest("[data-copy]"), d = e.target.closest("[data-del]");
+    if (d) { pins.splice(+d.dataset.del, 1); savePins(); buildPins(); draw(); return; }
+    if (!c) return;
+    const p = pins[+c.dataset.copy];
+    const text = `"x": ${f1(p.x)}, "z": ${f1(p.z)}`;
+    try { await navigator.clipboard.writeText(text); c.textContent = "Copied"; }
+    catch { const r = document.createRange(); r.selectNodeContents(c.previousElementSibling); const s = getSelection(); s.removeAllRanges(); s.addRange(r); c.textContent = "Selected"; }
+    setTimeout(() => (c.textContent = "Copy"), 1400);
+  });
+  $("pin-clear").addEventListener("click", () => { pins = []; savePins(); buildPins(); draw(); });
+
+  // ---- input ----
+  const pointers = new Map();
+  let drag = null, pinch = null;
+  const local = (e) => { const r = stage.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  stage.addEventListener("pointerdown", (e) => {
+    if (!M || e.target.closest("button")) return;
+    stage.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, local(e));
+    if (pointers.size === 1) drag = { start: local(e), last: local(e), moved: false };
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]) };
+      drag = null;
+    }
+  });
+  stage.addEventListener("pointermove", (e) => {
+    if (!M) return;
+    const p = local(e);
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
+    if (pinch && pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, d / pinch.d);
+      pinch.d = d; draw(); return;
+    }
+    if (drag) {
+      if (!drag.moved && Math.hypot(p[0] - drag.start[0], p[1] - drag.start[1]) > 4) { drag.moved = true; stage.classList.add("dragging"); }
+      if (drag.moved) {
+        view.cx -= (p[0] - drag.last[0]) / view.s; view.cz -= (p[1] - drag.last[1]) / view.s;
+        keepInside(); drag.last = p; draw(); return;
+      }
+    }
+    if (e.pointerType === "mouse") { hover = pick(p[0], p[1]); readout(); draw(); }
+  });
+  const end = (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pinch) { if (pointers.size < 2) pinch = null; drag = null; return; }
+    if (drag && !drag.moved && e.type === "pointerup") {
+      const p = local(e);
+      hover = pick(p[0], p[1]);
+      if (pins.length < 20) { pins.push({ x: Math.round(hover.x * 10) / 10, z: Math.round(hover.z * 10) / 10 }); savePins(); buildPins(); }
+      readout(); draw();
+    }
+    drag = null; stage.classList.remove("dragging");
+  };
+  stage.addEventListener("pointerup", end);
+  stage.addEventListener("pointercancel", end);
+  stage.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse" && !pointers.size) { hover = null; readout(); draw(); } });
+  stage.addEventListener("wheel", (e) => {
+    if (!M) return;
+    e.preventDefault();
+    const [px, py] = local(e);
+    zoomAt(px, py, Math.exp(-e.deltaY * (e.deltaMode === 1 ? 0.05 : 0.0016)));
+    hover = pick(px, py); readout(); draw();
+  }, { passive: false });
+  stage.addEventListener("keydown", (e) => {
+    if (!M) return;
+    const step = 60 / view.s;
+    const k = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[e.key];
+    if (k) { view.cx += k[0]; view.cz += k[1]; keepInside(); }
+    else if (e.key === "+" || e.key === "=") zoomAt(W / 2, H / 2, 1.4);
+    else if (e.key === "-" || e.key === "_") zoomAt(W / 2, H / 2, 1 / 1.4);
+    else if (e.key === "0") fit();
+    else return;
+    e.preventDefault(); draw();
+  });
+  $("zin").addEventListener("click", () => { zoomAt(W / 2, H / 2, 1.5); draw(); });
+  $("zout").addEventListener("click", () => { zoomAt(W / 2, H / 2, 1 / 1.5); draw(); });
+  $("zfit").addEventListener("click", () => { fit(); draw(); });
+
+  let fitted = false;
+  new ResizeObserver(() => {
+    const r = stage.getBoundingClientRect();
+    W = Math.max(1, r.width); H = Math.max(1, r.height); dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    const old = fitS;
+    fitS = Math.min(W / 88, H / 68);
+    if (!fitted && M) { fit(); fitted = true; }
+    else if (old) view.s = clampS(view.s * (fitS / old));
+    draw();
+  }).observe(stage);
+
+  // ---- load ----
+  function loadImage(src) {
+    return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error(src)); i.src = src; });
+  }
+  // The data is built into the page when level-map.mjs writes it; fetching map.json is the fallback when served.
+  function loadData() {
+    const raw = document.getElementById("map-data").textContent.trim();
+    if (raw && !raw.startsWith("/*")) return Promise.resolve(JSON.parse(raw));
+    return fetch("map.json").then((r) => { if (!r.ok) throw new Error("map.json " + r.status); return r.json(); });
+  }
+  Promise.all([loadData(), loadImage("top.jpg")])
+    .then(([data, picture]) => {
+      M = data; img = picture;
+      // Overhead boxes (starting above the roof cut: the shed roof, crane beams) are left off, as in the picture.
+      M.boxesSorted = M.boxes.filter((b) => b.max[1] > 0.15 && b.min[1] < M.roofCut).sort((a, b) => a.max[1] - b.max[1]);
+      walkCanvas = document.createElement("canvas");
+      walkCanvas.width = M.walk.cols; walkCanvas.height = M.walk.rows;
+      const wc = walkCanvas.getContext("2d"), id = wc.createImageData(M.walk.cols, M.walk.rows);
+      for (let n = 0; n < M.walk.cells.length; n++) if (M.walk.cells[n] === "1") id.data.set([111, 211, 155, 92], n * 4);
+      wc.putImageData(id, 0, 0);
+      const fromData = M.placed.filter((p) => p.step !== "code").length;
+      $("tally").innerHTML = [
+        [M.placed.length, "props"], [fromData, "placed from yard.json"], [M.boxes.length, "collision boxes"],
+        [M.spawns.length, "machine spawns"], [M.coverPoints.length, "cover points"],
+      ].map(([n, t]) => `<span><b>${n.toLocaleString("en")}</b> ${t}</span>`).join("");
+      buildLayers(); buildPlaces(); buildPins();
+      statusEl.hidden = true;
+      fit(); fitted = true; draw();
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+    })
+    .catch((err) => { statusEl.textContent = "The map's files didn't load (" + err.message + "). Reload the page to try again."; });
+  buildLayers();
+})();
+</script>
+</body>
+</html>

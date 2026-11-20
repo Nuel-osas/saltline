@@ -1,13 +1,15 @@
 // Draw the level from above, to plan new areas on.
 // usage: node scripts/level-map.mjs <base-url> <out-dir>     (a dev server: npm run dev)
 //
-// Loads the baseline game (?noeconomy=1, the level and the shooter only), stops its frame loop and writes two files:
+// Loads the baseline game (?noeconomy=1, the level and the shooter only), stops its frame loop and writes three files:
 //   top.jpg    the yard seen straight down through an orthographic camera, 25 px a metre, with no fog and the shed's
 //              roof cut away above 6 m so its floor shows, and the quay crane cut above 9 m. x runs left to right, z top to bottom.
 //   map.json   what is on that picture, in metres: every placed prop (with its footprint and the step in
 //              src/level/yard.json that placed it, or "code" for the shed, quay and boat), every collision box, where
 //              ground machines can walk (a 0.5 m grid), the zones, spawns, cover points, relays, the boat, the
 //              player start and the opening's camera path.
+//   map.html   a viewer for the two (scripts/level-map.html with map.json built in): open it from the folder. Zoom,
+//              layers, what is under the cursor and the step that placed it, pins with copyable coordinates.
 // Run it again after changing the level; nothing is cached.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -214,6 +216,11 @@ const map = { view: VIEW, roofCut: ROOF_CUT, craneCut: CRANE_CUT, world: { x: [-
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "top.jpg"), jpeg);
 writeFileSync(join(outDir, "map.json"), JSON.stringify(map));
+// The viewer, with the data built in so it opens from the folder with no server. "<" is escaped so nothing in the
+// data can close the script tag it sits in.
+const viewer = readFileSync(new URL("./level-map.html", import.meta.url), "utf8");
+if (!viewer.includes("/*MAP_DATA*/")) throw new Error("level-map: scripts/level-map.html has lost its /*MAP_DATA*/ slot");
+writeFileSync(join(outDir, "map.html"), viewer.replace("/*MAP_DATA*/", () => JSON.stringify(map).replace(/</g, "\\u003c")));
 console.log(
   JSON.stringify({
     picture: `${(VIEW.x[1] - VIEW.x[0]) * VIEW.ppm}x${(VIEW.z[1] - VIEW.z[0]) * VIEW.ppm}`,
